@@ -1,0 +1,309 @@
+# Edy on Bike — Implementation Plan
+
+A Chrome Dino-style side-scroller browser game featuring a stick-figure boy (with helmet) on a BMX bike. Built with Next.js, TypeScript, Tailwind, and HTML5 Canvas.
+
+> [!NOTE]
+> All game assets (player, obstacles, background) will be **programmatically drawn** on Canvas using simple geometric shapes in a **muted color palette** — no external image files needed.
+
+---
+
+## Design Decisions
+
+- **Player**: Generic stick-figure boy wearing a helmet on a BMX bike
+- **Color palette**: Muted / desaturated tones throughout
+- **Sound**: Web Audio API for SFX; procedural background music deferred to Phase 5
+- **Leaderboard**: Deferred to Phase 6 (Vercel KV with in-memory local fallback)
+- **Mobile support**: Deferred to Phase 7
+- **Obstacle types** (final): Rock, Small Tree, Shopping Trolley, Car, Person on Bike
+- **Priority**: Local development first; Vercel deployment later
+
+---
+
+## Project Structure
+
+```
+edy-on-bike/
+├── app/
+│   ├── layout.tsx          # Root layout, fonts, metadata
+│   ├── page.tsx            # Main game page
+│   └── api/
+│       └── leaderboard/
+│           └── route.ts    # GET/POST leaderboard API (Phase 6)
+├── components/
+│   ├── GameCanvas.tsx      # Canvas wrapper + game lifecycle
+│   ├── StartScreen.tsx     # Title screen overlay
+│   ├── GameOverScreen.tsx  # Game over + score display
+│   ├── HUD.tsx             # Live score display
+│   └── OrientationGuard.tsx # Mobile landscape enforcement (Phase 7)
+├── game/
+│   ├── Engine.ts           # Game loop, state machine
+│   ├── Player.ts           # BMX boy, jump physics
+│   ├── Obstacle.ts         # Obstacle types + spawner
+│   ├── Background.ts       # Parallax suburban layers
+│   ├── Collision.ts        # AABB collision detection
+│   ├── Renderer.ts         # All Canvas drawing functions
+│   ├── SoundManager.ts     # Web Audio API sound effects
+│   ├── constants.ts        # Game tuning values
+│   └── types.ts            # Shared TypeScript types
+├── lib/
+│   └── leaderboard.ts      # KV store abstraction (Phase 6)
+├── public/
+│   └── (empty — all assets are procedural)
+└── tailwind.config.ts
+```
+
+---
+
+## Phase 1 — Project Setup & Player on Screen
+
+**Goal**: Next.js project running locally with a canvas showing the BMX rider on a static background.
+
+### Steps
+
+1. **Scaffold Next.js project**
+   - `npx create-next-app@latest` (App Router, TypeScript, Tailwind, ESLint)
+   - No extra dependencies needed yet
+
+2. **Create `game/types.ts`**
+   - `GameState` enum: `IDLE | RUNNING | GAME_OVER`
+   - `ObstacleType` enum: `ROCK | SMALL_TREE | SHOPPING_TROLLEY | CAR | PERSON_ON_BIKE`
+   - Interfaces: `PlayerState`, `ObstacleInstance`, `BackgroundLayer`
+
+3. **Create `game/constants.ts`**
+   | Constant | Value | Notes |
+   |----------|-------|-------|
+   | `CANVAS_WIDTH` | 800 | Logical game width |
+   | `CANVAS_HEIGHT` | 300 | Logical game height |
+   | `GROUND_Y` | 250 | Ground line position |
+   | `GRAVITY` | 0.6 | Jump physics |
+   | `JUMP_FORCE` | -12 | Initial jump velocity |
+   | `INITIAL_SPEED` | 5 | px/frame at 60fps |
+   | `SPEED_INCREASE` | 0.05 | 5% every interval |
+   | `SPEED_INTERVAL` | 15000 | ms between speed-ups |
+   | `SCORE_PER_PX` | 20 | 20px = 1 point |
+   | `MIN_OBSTACLE_GAP` | 300 | Min px between obstacles |
+
+4. **Create `game/Renderer.ts`** (partial — player + background only)
+   - `drawPlayer(ctx, player)` — BMX bike (two circles for wheels, frame lines, handlebars, seat) + stick-figure rider with **helmet** (arc on head)
+   - `drawBackground(ctx, layers)` — parallax layers with muted colors
+
+5. **Create `game/Player.ts`**
+   - Player state: position, velocity, dimensions, jumpCount
+   - No physics yet — just static positioning at ground level
+
+6. **Create `game/Background.ts`**
+   - 3 parallax layers (static for now, scrolling comes in Phase 2):
+     1. **Sky + clouds** — muted gradient sky, soft cloud shapes
+     2. **Houses/trees silhouettes** — muted rectangular houses with triangle roofs
+     3. **Ground/road** — flat ground line with dashed road markings
+
+7. **Create `components/GameCanvas.tsx`**
+   - `useRef` for canvas, `useEffect` to draw player + background once
+   - Responsive canvas scaling (maintains 800x300 aspect ratio)
+
+8. **Create `app/page.tsx` + `app/layout.tsx`**
+   - Layout: dark muted background, Inter font, metadata
+   - Page: renders `GameCanvas` as a client component
+
+### Verification
+- `npm run dev` → open `localhost:3000` → see canvas with muted suburban background and BMX rider standing on the ground
+
+---
+
+## Phase 2 — Game Loop, Movement & Jump Physics
+
+**Goal**: Player can jump (single + double jump) and the world scrolls. Speed increases over time.
+
+### Steps
+
+1. **Create `game/Engine.ts`**
+   - `requestAnimationFrame` loop with delta-time normalization
+   - State machine: `IDLE → RUNNING → GAME_OVER → IDLE`
+   - Speed progression timer (5% increase every 15s)
+   - Exposes callbacks: `onScoreUpdate`, `onGameOver`
+
+2. **Update `game/Player.ts`** — add physics
+   - Velocity-based jump with gravity
+   - Double jump: track `jumpCount` (max 2), reset on landing
+   - Second jump applies `JUMP_FORCE * 0.85`
+   - Wheel rotation animation synced to game speed, slight body bob
+
+3. **Update `game/Background.ts`** — add scrolling
+   - Each layer scrolls at a different speed ratio relative to game speed
+   - Seamless wrapping when layers scroll off-screen
+
+4. **Update `components/GameCanvas.tsx`**
+   - Initialize Engine on mount
+   - Keyboard handler: spacebar to start game / jump
+   - Wire up game loop to canvas redraw
+
+### Verification
+- Press Space → game starts, background scrolls, player can single-jump and double-jump
+- Speed visibly increases over time
+- Score increments as the world scrolls
+
+---
+
+## Phase 3 — Obstacles & Collision
+
+**Goal**: Obstacles spawn, scroll toward the player, and colliding with one ends the game.
+
+### Steps
+
+1. **Create `game/Obstacle.ts`**
+   - Progressive difficulty system:
+     - 0–30s: `ROCK`, `SMALL_TREE` (small, single jump clears)
+     - 30–60s: Add `SHOPPING_TROLLEY` (medium, needs good timing)
+     - 60s+: Add `CAR`, `PERSON_ON_BIKE` (tall/wide, may need double jump)
+   - Each type has: `width`, `height`, `drawFunction`, `minSpeed` threshold
+   - Spawner: random interval within min/max gap, weighted by difficulty tier
+
+2. **Update `game/Renderer.ts`** — add obstacle drawing
+   - `drawObstacle(ctx, obstacle)` — dispatches to type-specific draw functions
+   - All obstacles drawn in muted color palette
+
+3. **Create `game/Collision.ts`**
+   - AABB with slight inner padding for forgiving hitboxes
+   - Returns `boolean` for player-vs-obstacle
+
+4. **Update `game/Engine.ts`**
+   - Integrate obstacle spawning, movement, off-screen cleanup
+   - Run collision check each frame
+   - Trigger `GAME_OVER` state on collision
+
+### Verification
+- Obstacles appear and scroll left
+- Early game: only rocks and small trees; later: trolleys, cars, bikes
+- Colliding with an obstacle stops the game
+- Near-misses feel fair (forgiving hitboxes)
+
+---
+
+## Phase 4 — UI Overlays (Start, HUD, Game Over)
+
+**Goal**: Complete game flow with start screen, live score, and game over screen with retry.
+
+### Steps
+
+1. **Create `components/StartScreen.tsx`**
+   - Game title "Edy on Bike"
+   - "Press SPACE to start"
+   - Brief controls: "SPACE = Jump / Double Jump"
+
+2. **Create `components/HUD.tsx`**
+   - Score counter (top-right) with running animation
+   - Current speed multiplier indicator
+
+3. **Create `components/GameOverScreen.tsx`**
+   - "GAME OVER" text + final score
+   - "Play Again" button (Space also restarts)
+   - (Leaderboard submission deferred to Phase 6)
+
+4. **Update `components/GameCanvas.tsx`**
+   - Manage `GameState` in React state
+   - Show/hide overlays based on state
+   - Wire "Play Again" to engine restart
+
+### Verification
+- Full game loop: Start Screen → press Space → gameplay with live score → crash → Game Over → press Space or click Play Again → restart
+- Score displays correctly and resets on new game
+
+---
+
+## Phase 5 — Sound Effects
+
+**Goal**: Jump and crash sound effects via Web Audio API. Background music placeholder (mute button ready).
+
+### Steps
+
+1. **Create `game/SoundManager.ts`**
+   - Web Audio API, AudioContext created on first user interaction
+   - `playJump()` — short ascending oscillator tone
+   - `playCrash()` — noise burst + low thump
+   - `startMusic()` / `stopMusic()` — stub for now (procedural music added later)
+   - Mute toggle support
+
+2. **Update `game/Engine.ts`**
+   - Call `playJump()` on jump, `playCrash()` on collision
+
+3. **Update `components/HUD.tsx`**
+   - Add mute/unmute button
+
+### Verification
+- Jump produces a short sound
+- Crash produces a distinct sound
+- Mute button silences all audio
+- No errors if audio context isn't available
+
+---
+
+## Phase 6 — Leaderboard
+
+**Goal**: Persistent high scores via Vercel KV (in-memory fallback for local dev).
+
+### Steps
+
+1. **Install `@vercel/kv`**
+
+2. **Create `lib/leaderboard.ts`**
+   - `getTopScores(limit)` / `addScore(name, score)`
+   - In-memory sorted array fallback when `KV_REST_API_URL` is not set
+
+3. **Create `app/api/leaderboard/route.ts`**
+   - `GET` — top 20 scores, sorted descending
+   - `POST` — `{ name, score }`, validates, stores
+   - Rate limiting: max 1 submission per 5s per IP
+
+4. **Update `components/GameOverScreen.tsx`**
+   - Add name input (pre-filled from localStorage)
+   - "Submit Score" button → POST to API
+   - Inline top-10 leaderboard display
+
+### Verification
+- Submit a score → see it in leaderboard
+- Leaderboard persists across page reloads (in-memory resets on server restart, KV persists on Vercel)
+- Rate limiting prevents spam
+
+---
+
+## Phase 7 — Mobile Support & Polish
+
+**Goal**: Touch controls, orientation guard, and final polish.
+
+### Steps
+
+1. **Create `components/OrientationGuard.tsx`**
+   - Detects portrait orientation via `window.matchMedia` + `screen.orientation`
+   - Full-screen overlay: "Please rotate your device" with icon
+   - Auto-dismisses in landscape
+
+2. **Update `components/GameCanvas.tsx`**
+   - Touch event handlers: tap to jump
+   - Ensure canvas scales well on mobile viewports
+
+3. **Update `app/page.tsx`**
+   - Add `OrientationGuard` wrapper
+
+4. **Polish pass**
+   - Procedural background music (oscillator-based melody loop)
+   - Visual tweaks and animation refinements
+   - Performance optimization if needed
+
+### Verification
+- Mobile: portrait shows rotation prompt, landscape plays the game
+- Tap-to-jump works on touchscreens
+- Background music plays and mute button controls it
+
+---
+
+## Quick Reference
+
+| Phase | Summary | Key Files |
+|-------|---------|-----------|
+| 1 | Setup + player on screen | scaffold, types, constants, Renderer, Player, Background, GameCanvas, page, layout |
+| 2 | Game loop + jump physics | Engine, Player (physics), Background (scroll), GameCanvas (keyboard) |
+| 3 | Obstacles + collision | Obstacle, Collision, Renderer (obstacles), Engine (integration) |
+| 4 | UI overlays | StartScreen, HUD, GameOverScreen, GameCanvas (state) |
+| 5 | Sound effects | SoundManager, Engine (sound calls), HUD (mute) |
+| 6 | Leaderboard | leaderboard.ts, route.ts, GameOverScreen (submission) |
+| 7 | Mobile + polish | OrientationGuard, touch events, music, polish |

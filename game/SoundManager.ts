@@ -132,6 +132,18 @@ export class SoundManager {
     }
   }
 
+  pauseMusic(): void {
+    if (this.musicAudio && !this.musicAudio.paused) {
+      this.musicAudio.pause();
+    }
+  }
+
+  resumeMusic(): void {
+    if (this.musicPlaying && !this.musicMuted && this.musicAudio && this.musicAudio.paused) {
+      this.musicAudio.play().catch(() => {});
+    }
+  }
+
   playBackflipSuccess(): void {
     if (this.sfxMuted) return;
     const ctx = this.getCtx();

@@ -101,7 +101,7 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
 
       {showFullscreenPrompt && (
         <button
-          onPointerUp={handleFullscreenTap}
+          onClick={handleFullscreenTap}
           style={{
             position: "fixed",
             bottom: "1.5rem",

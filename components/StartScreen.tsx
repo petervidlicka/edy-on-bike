@@ -41,11 +41,15 @@ export default function StartScreen() {
           color: "#1e293b",
           fontSize: "1rem",
           fontWeight: 700,
-          border: "2px solid rgba(30,41,59,0.45)",
-          borderRadius: "8px",
-          padding: "0.5rem 1.75rem",
+          background: "rgba(255,255,255,0.22)",
+          backdropFilter: "blur(24px) saturate(200%)",
+          WebkitBackdropFilter: "blur(24px) saturate(200%)",
+          border: "1.5px solid rgba(255,255,255,0.55)",
+          borderRadius: "18px",
+          padding: "0.65rem 2.25rem",
           letterSpacing: "0.06em",
           textAlign: "center",
+          boxShadow: "0 2px 20px rgba(0,0,0,0.08), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
         }}
       >
         PRESS SPACE TO START

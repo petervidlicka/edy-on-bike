@@ -100,24 +100,21 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
     if (e.key === " ") e.stopPropagation();
   };
 
-  const sharedBtnStyle: React.CSSProperties = {
-    padding: "0.5rem 1.4rem",
-    borderRadius: "8px",
-    border: "2px solid rgba(30,41,59,0.35)",
+  const glassBtn: React.CSSProperties = {
+    padding: "0.55rem 1.5rem",
+    borderRadius: "20px",
+    border: "1.5px solid rgba(255,255,255,0.55)",
     fontSize: "0.9rem",
     fontWeight: 700,
     fontFamily: "var(--font-nunito), Arial, sans-serif",
     letterSpacing: "0.04em",
     cursor: "pointer",
     pointerEvents: "auto",
-  };
-
-  const hint: React.CSSProperties = {
-    color: "rgba(30,41,59,0.45)",
-    fontSize: "0.72rem",
-    fontWeight: 600,
-    letterSpacing: "0.04em",
-    margin: "0.25rem 0 0",
+    background: "rgba(255,255,255,0.25)",
+    backdropFilter: "blur(24px) saturate(200%)",
+    WebkitBackdropFilter: "blur(24px) saturate(200%)",
+    color: "#1e293b",
+    boxShadow: "0 2px 16px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
   };
 
   return (
@@ -198,21 +195,46 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
                 onClick={handleSaveScore}
                 disabled={submitting}
                 style={{
-                  ...sharedBtnStyle,
-                  background: submitting ? "#cbd5e1" : "#6a8a9a",
-                  color: "#fff",
+                  ...glassBtn,
+                  background: submitting
+                    ? "rgba(200,210,220,0.35)"
+                    : "rgba(106,138,154,0.38)",
+                  color: submitting ? "#94a3b8" : "#fff",
                   cursor: submitting ? "default" : "pointer",
+                  border: "1.5px solid rgba(255,255,255,0.45)",
+                  textShadow: submitting ? "none" : "0 1px 2px rgba(0,0,0,0.15)",
                 }}
               >
                 {submitting ? "Saving…" : "Save score"}
               </button>
             </div>
             {error && (
-              <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0, fontWeight: 600 }}>{error}</p>
+              <div style={{
+                background: "rgba(254,226,226,0.85)",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                border: "1px solid rgba(220,38,38,0.25)",
+                borderRadius: "12px",
+                padding: "0.3rem 0.85rem",
+              }}>
+                <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0, fontWeight: 600 }}>{error}</p>
+              </div>
             )}
           </div>
 
-          <p style={hint}>or press Space to save &amp; continue</p>
+          <button
+            onClick={handleSaveScore}
+            style={{
+              ...glassBtn,
+              fontSize: "0.78rem",
+              padding: "0.4rem 1.25rem",
+              marginTop: "0.1rem",
+              letterSpacing: "0.03em",
+              color: "#334155",
+            }}
+          >
+            or save &amp; continue
+          </button>
         </>
       )}
 
@@ -273,18 +295,15 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
           <button
             onClick={onRestart}
             style={{
-              ...sharedBtnStyle,
+              ...glassBtn,
               marginTop: "0.75rem",
-              background: "rgba(255,255,255,0.55)",
-              color: "#1e293b",
               fontSize: "1rem",
-              padding: "0.5rem 1.75rem",
+              padding: "0.6rem 2rem",
               letterSpacing: "0.06em",
             }}
           >
             PLAY AGAIN
           </button>
-          <p style={hint}>or press Space</p>
         </>
       )}
     </div>

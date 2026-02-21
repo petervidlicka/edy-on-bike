@@ -59,7 +59,7 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
     if (submitting) return;
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Enter your name.");
+      setError("Please enter your name to appear on the leaderboard");
       return;
     }
     setError("");
@@ -75,10 +75,13 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
       e.preventDefault();
       e.stopImmediatePropagation(); // prevent GameCanvas from also handling Space
       if (step === 1) {
-        // Fall back to "Anonymous" so a first-time player's score is never lost
-        const savedName =
-          (localStorage.getItem("edy-player-name") ?? name).trim() || "Anonymous";
-        saveAndAdvance(savedName);
+        const currentName = name.trim() || (localStorage.getItem("edy-player-name") ?? "").trim();
+        if (!currentName) {
+          setError("Please enter your name to appear on the leaderboard");
+          return;
+        }
+        setError("");
+        saveAndAdvance(currentName);
       } else {
         onRestart();
       }
@@ -175,7 +178,7 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => { setName(e.target.value); if (error) setError(""); }}
                 onKeyDown={handleInputKeyDown}
                 placeholder="Your name"
                 maxLength={20}
@@ -205,7 +208,7 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
               </button>
             </div>
             {error && (
-              <p style={{ color: "#9a3412", fontSize: "0.8rem", margin: 0 }}>{error}</p>
+              <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0, fontWeight: 600 }}>{error}</p>
             )}
           </div>
 

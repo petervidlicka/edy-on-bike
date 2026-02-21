@@ -1,4 +1,4 @@
-import { PlayerState, BackgroundLayer, ObstacleInstance, ObstacleType } from "./types";
+import { PlayerState, BackgroundLayer, ObstacleInstance, ObstacleType, SkinDefinition, HelmetStyle } from "./types";
 import { COLORS } from "./constants";
 import { getTotalLayerWidth } from "./Background";
 
@@ -434,9 +434,102 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
+function drawHelmet(
+  ctx: CanvasRenderingContext2D,
+  headX: number,
+  headY: number,
+  helmetStyle: HelmetStyle,
+  helmetColor: string
+) {
+  ctx.fillStyle = helmetColor;
+
+  switch (helmetStyle) {
+    case "aero":
+      // Teardrop aero helmet with tail
+      ctx.beginPath();
+      ctx.arc(headX, headY - 1, 7.5, Math.PI, 0);
+      ctx.fill();
+      // Tail extension
+      ctx.beginPath();
+      ctx.moveTo(headX - 7, headY - 1);
+      ctx.lineTo(headX - 12, headY - 3);
+      ctx.lineTo(headX - 5, headY - 6);
+      ctx.closePath();
+      ctx.fill();
+      break;
+
+    case "cowboy":
+      // Wide brim + dome
+      ctx.beginPath();
+      ctx.arc(headX, headY - 3, 6, Math.PI, 0);
+      ctx.fill();
+      // Wide brim
+      ctx.fillRect(headX - 12, headY - 3, 24, 2);
+      break;
+
+    case "crown":
+      // 3-point crown
+      ctx.beginPath();
+      ctx.moveTo(headX - 8, headY - 1);
+      ctx.lineTo(headX - 7, headY - 8);
+      ctx.lineTo(headX - 3, headY - 5);
+      ctx.lineTo(headX, headY - 10);
+      ctx.lineTo(headX + 3, headY - 5);
+      ctx.lineTo(headX + 7, headY - 8);
+      ctx.lineTo(headX + 8, headY - 1);
+      ctx.closePath();
+      ctx.fill();
+      break;
+
+    case "cap":
+      // Baseball cap
+      ctx.beginPath();
+      ctx.arc(headX, headY - 1, 7.5, Math.PI, 0);
+      ctx.fill();
+      // Visor (forward-facing brim)
+      ctx.fillRect(headX, headY - 2, 11, 2);
+      break;
+
+    case "goggles":
+      // Skull cap
+      ctx.beginPath();
+      ctx.arc(headX, headY - 1, 7.5, Math.PI, -0.1);
+      ctx.fill();
+      // Reflective goggles band
+      ctx.fillStyle = "#88ccff";
+      ctx.fillRect(headX - 7, headY - 1, 14, 2);
+      break;
+
+    default: // standard — BMX half-shell with visor + stripes
+      // Main dome
+      ctx.beginPath();
+      ctx.arc(headX, headY - 1, 7.5, Math.PI, 0);
+      ctx.fill();
+      // Helmet brim
+      ctx.fillRect(headX - 8, headY - 1, 16, 2);
+      // Visor/peak extending forward-down
+      ctx.beginPath();
+      ctx.moveTo(headX + 5, headY - 1);
+      ctx.lineTo(headX + 10, headY + 2);
+      ctx.lineTo(headX + 4, headY + 2);
+      ctx.closePath();
+      ctx.fill();
+      // Stripe accents across dome
+      ctx.strokeStyle = "rgba(255,255,255,0.2)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(headX - 1, headY - 1, 5.5, -Math.PI * 0.82, -Math.PI * 0.18);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(headX + 2, headY - 1, 5.5, -Math.PI * 0.82, -Math.PI * 0.18);
+      ctx.stroke();
+      break;
+  }
+}
+
+export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, skin: SkinDefinition) {
   const { x, y, wheelRotation, bikeTilt, riderLean, riderCrouch, legTuck, backflipAngle, flipDirection } = player;
-  const c = COLORS.player;
+  const c = skin.colors;
 
   // BMX proportions matched to Figma reference — long wheelbase, low frame
   const wheelR = 12;
@@ -506,27 +599,27 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.strokeStyle = c.frame;
   ctx.lineWidth = 2;
 
-  const seatX = x + 23;       // seat cluster (was x+20)
-  const seatY = y + 35;       // seat cluster height (was y+34)
-  const bbX = x + 27;         // bottom bracket (was x+28)
+  const seatX = x + 23;       // seat cluster
+  const seatY = y + 35;       // seat cluster height
+  const bbX = x + 27;         // bottom bracket
   const bbY = wheelY - 2;     // y + 44
-  const headX_f = x + 45;     // head tube top (was x+42) — more forward
-  const headY_f = y + 26;     // head tube top (was y+32) — much higher
+  const headX_f = x + 45;     // head tube top
+  const headY_f = y + 26;     // head tube top
 
   // Main triangle: top tube + down tube + seat tube
-  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(headX_f, headY_f + 3); ctx.stroke();   // top tube → (x+45, y+29)
-  ctx.beginPath(); ctx.moveTo(headX_f, headY_f + 5); ctx.lineTo(bbX, bbY); ctx.stroke();       // down tube from (x+45, y+31)
-  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(bbX, bbY); ctx.stroke();               // seat tube
+  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(headX_f, headY_f + 3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(headX_f, headY_f + 5); ctx.lineTo(bbX, bbY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(bbX, bbY); ctx.stroke();
 
   // Rear triangle: chain stays + seat stays
-  ctx.beginPath(); ctx.moveTo(bbX, bbY); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();           // chain stays
-  ctx.beginPath(); ctx.moveTo(seatX, seatY + 1); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();   // seat stays
+  ctx.beginPath(); ctx.moveTo(bbX, bbY); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(seatX, seatY + 1); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();
 
   // Fork (two segments — steep ~17° from vertical, matching Figma)
-  ctx.beginPath(); ctx.moveTo(headX_f, headY_f); ctx.lineTo(x + 51, y + 45); ctx.stroke();      // main fork blade
-  ctx.beginPath(); ctx.moveTo(x + 51, y + 45); ctx.lineTo(frontWheelX, wheelY); ctx.stroke();    // fork dropout
+  ctx.beginPath(); ctx.moveTo(headX_f, headY_f); ctx.lineTo(x + 51, y + 45); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + 51, y + 45); ctx.lineTo(frontWheelX, wheelY); ctx.stroke();
 
-  // Chainring (sprocket circle at BB — smaller to match Figma proportions)
+  // Chainring (sprocket circle at BB)
   ctx.fillStyle = c.frame;
   ctx.beginPath();
   ctx.arc(bbX, bbY, 4, 0, Math.PI * 2);
@@ -537,17 +630,17 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.arc(bbX, bbY, 4, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Seat post (extends above cluster) + saddle
+  // Seat post + saddle
   ctx.strokeStyle = c.frame;
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(seatX - 1, seatY - 3); ctx.stroke();
   ctx.fillStyle = c.wheel;
   ctx.fillRect(seatX - 6, seatY - 5, 10, 3);
 
-  // Crank arms (horizontal — BMX standing stance, wider from Figma)
-  const pedalLX = bbX - 8;    // left pedal (x+19)
-  const pedalRX = bbX + 8;    // right pedal (x+35)
-  const pedalY = bbY;         // both at same height (y+44)
+  // Crank arms (horizontal — BMX standing stance)
+  const pedalLX = bbX - 8;
+  const pedalRX = bbX + 8;
+  const pedalY = bbY;
   ctx.strokeStyle = c.wheel;
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(bbX, bbY); ctx.lineTo(pedalLX, pedalY); ctx.stroke();
@@ -557,12 +650,11 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.fillRect(pedalLX - 3, pedalY - 1, 6, 3);
   ctx.fillRect(pedalRX - 3, pedalY - 1, 6, 3);
 
-  // Handlebar stem riser + crossbar (from Figma: rises ~7px above headtube)
-  const stemTopX = headX_f - 1;     // x + 44
-  const stemTopY = headY_f - 7;     // y + 19
+  // Handlebar stem riser + crossbar
+  const stemTopX = headX_f - 1;
+  const stemTopY = headY_f - 7;
   ctx.strokeStyle = c.wheel;
   ctx.lineWidth = 2;
-  // Stem riser (slightly back from headtube top)
   ctx.beginPath();
   ctx.moveTo(headX_f, headY_f);
   ctx.lineTo(stemTopX, stemTopY);
@@ -574,21 +666,21 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.lineTo(stemTopX + 2, stemTopY);
   ctx.stroke();
 
-  // Grip point (where rider's hands go — left end of crossbar)
-  const gripX = stemTopX - 2;   // x + 42
-  const gripY = stemTopY;       // y + 19
+  // Grip point (where rider's hands go)
+  const gripX = stemTopX - 2;
+  const gripY = stemTopY;
 
   // ── Rider (standing tall on pedals — matched to Figma proportions) ──
 
-  // Hip: centered over BB, standing tall (20px above pedals vs old 14px)
-  const standX = bbX;             // x + 27
-  const standY = bbY - 20;       // y + 24 (was bbY - 14 = y + 30)
+  // Hip: centered over BB, standing tall
+  const standX = bbX;
+  const standY = bbY - 20;
   const hipX = standX - riderLean * 7;
   const hipY = standY - riderCrouch * 10;
 
-  // Torso: nearly upright (~81° from horizontal) matching Figma
-  const baseTorsoAngle = Math.atan2(-13, 2);   // ≈ -81° (was atan2(-15, 11) ≈ -54°)
-  const torsoLength = 13;                       // shorter, more upright (was 19)
+  // Torso: nearly upright (~81° from horizontal)
+  const baseTorsoAngle = Math.atan2(-13, 2);
+  const torsoLength = 13;
   const adjustedAngle = baseTorsoAngle - riderLean * 1.2;
   const shoulderX = hipX + Math.cos(adjustedAngle) * torsoLength;
   const shoulderY = hipY + Math.sin(adjustedAngle) * torsoLength;
@@ -599,7 +691,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   const footRX = lerp(pedalRX, hipX + 4, legTuck * 0.7);
   const footRY = lerp(pedalY, hipY + 9, legTuck * 0.8);
 
-  // Knees: natural bend from Figma — right knee bows forward, left knee back
+  // Knees: natural bend — right knee bows forward, left knee back
   const kneeLX = lerp((hipX + footLX) / 2 + 1, hipX - 3, legTuck * 0.5);
   const kneeLY = lerp((hipY + footLY) / 2 + 1, hipY + 5, legTuck * 0.5);
   const kneeRX = lerp((hipX + footRX) / 2 + 2, hipX + 2, legTuck * 0.5);
@@ -628,7 +720,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.lineTo(shoulderX, shoulderY);
   ctx.stroke();
 
-  // Arms — two segments: upper arm → elbow → forearm → grip (from Figma)
+  // Arms — two segments: upper arm → elbow → forearm → grip
   const elbowX = shoulderX + 6;
   const elbowY = shoulderY + 6;
   ctx.strokeStyle = c.skin;
@@ -639,7 +731,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.lineTo(gripX, gripY);
   ctx.stroke();
 
-  // Head (face oval — slightly wider than tall, matching Figma)
+  // Head (face oval — slightly wider than tall)
   const headPosX = shoulderX + 1;
   const headPosY = shoulderY - 7;
   ctx.fillStyle = c.skin;
@@ -653,31 +745,37 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.arc(headPosX + 3, headPosY, 1.2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Helmet (BMX half-shell from Figma — dome + visor + stripes)
-  ctx.fillStyle = c.helmet;
-  // Main dome — full coverage over top of head
-  ctx.beginPath();
-  ctx.arc(headPosX, headPosY - 1, 7.5, Math.PI, 0);
-  ctx.fill();
-  // Helmet brim
-  ctx.fillRect(headPosX - 8, headPosY - 1, 16, 2);
-  // Visor/peak extending forward-down
-  ctx.beginPath();
-  ctx.moveTo(headPosX + 5, headPosY - 1);
-  ctx.lineTo(headPosX + 10, headPosY + 2);
-  ctx.lineTo(headPosX + 4, headPosY + 2);
-  ctx.closePath();
-  ctx.fill();
-  // Stripe accents across dome
-  ctx.strokeStyle = "rgba(255,255,255,0.2)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(headPosX - 1, headPosY - 1, 5.5, -Math.PI * 0.82, -Math.PI * 0.18);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(headPosX + 2, headPosY - 1, 5.5, -Math.PI * 0.82, -Math.PI * 0.18);
-  ctx.stroke();
+  // Helmet (skin-specific style)
+  drawHelmet(ctx, headPosX, headPosY, skin.helmetStyle, c.helmet);
 
+  ctx.restore();
+}
+
+export function drawSkinPreview(ctx: CanvasRenderingContext2D, skin: SkinDefinition, w: number, h: number) {
+  ctx.clearRect(0, 0, w, h);
+  const scale = Math.min(w / 50, h / 55);
+  ctx.save();
+  ctx.translate((w - 50 * scale) / 2, (h - 55 * scale) / 2);
+  ctx.scale(scale, scale);
+  const mockPlayer: PlayerState = {
+    x: 0,
+    y: 0,
+    width: 50,
+    height: 55,
+    velocityY: 0,
+    jumpCount: 0,
+    isOnGround: true,
+    wheelRotation: 0,
+    bikeTilt: 0,
+    riderLean: 0,
+    riderCrouch: 0,
+    legTuck: 0,
+    ridingObstacle: null,
+    backflipAngle: 0,
+    isBackflipping: false,
+    flipDirection: 1,
+  };
+  drawPlayer(ctx, mockPlayer, skin);
   ctx.restore();
 }
 

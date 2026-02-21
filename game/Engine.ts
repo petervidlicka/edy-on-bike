@@ -1,4 +1,4 @@
-import { GameState, ObstacleInstance } from "./types";
+import { GameState, ObstacleInstance, SkinDefinition } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
@@ -10,6 +10,7 @@ import {
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
 import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./Renderer";
+import { getSkinById } from "./skins";
 import { spawnObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { SoundManager } from "./SoundManager";
@@ -52,6 +53,7 @@ export class Engine {
   private groundY: number = 0;
   private callbacks: EngineCallbacks;
   private sound = new SoundManager();
+  private skin: SkinDefinition = getSkinById("default");
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -316,10 +318,14 @@ export class Engine {
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs);
     }
-    drawPlayer(ctx, this.player);
+    drawPlayer(ctx, this.player, this.skin);
     for (const ft of this.floatingTexts) {
       drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity);
     }
+  }
+
+  setSkin(skin: SkinDefinition): void {
+    this.skin = skin;
   }
 
   getScore(): number {

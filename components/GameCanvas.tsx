@@ -2,11 +2,33 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Engine } from "@/game/Engine";
-import { GameState } from "@/game/types";
+import { GameState, SkinId } from "@/game/types";
 import { INITIAL_SPEED } from "@/game/constants";
+import { getSkinById } from "@/game/skins";
+import { loadSkinState, updateBestScore, selectSkin, activateCheat } from "@/game/storage";
 import StartScreen from "./StartScreen";
 import HUD from "./HUD";
 import GameOverScreen from "./GameOverScreen";
+
+function useCheatCode(code: string, onActivate: () => void) {
+  const bufferRef = useRef("");
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      bufferRef.current += e.key.toUpperCase();
+      // Keep only the last N characters where N = code length
+      if (bufferRef.current.length > code.length) {
+        bufferRef.current = bufferRef.current.slice(-code.length);
+      }
+      if (bufferRef.current === code) {
+        bufferRef.current = "";
+        onActivate();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [code, onActivate]);
+}
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -14,9 +36,20 @@ export default function GameCanvas() {
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   const [score, setScore] = useState(0);
   const [speed, setSpeed] = useState(INITIAL_SPEED);
-  const [bestScore, setBestScore] = useState(0);
   const [musicMuted, setMusicMuted] = useState(false);
   const [sfxMuted, setSfxMuted] = useState(false);
+
+  // Skin state — lazy initializer reads from localStorage (SSR-safe)
+  const [skinState, setSkinState] = useState(() => {
+    if (typeof window === "undefined") {
+      return { selectedSkinId: "default" as SkinId, bestScore: 0, cheatUnlocked: false };
+    }
+    return loadSkinState();
+  });
+
+  const bestScore = skinState.bestScore;
+  const cheatUnlocked = skinState.cheatUnlocked;
+  const selectedSkinId = skinState.selectedSkinId;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -28,7 +61,8 @@ export default function GameCanvas() {
       onGameOver: (finalScore) => {
         setScore(finalScore);
         setGameState(GameState.GAME_OVER);
-        setBestScore((prev) => Math.max(prev, finalScore));
+        const updated = updateBestScore(finalScore);
+        setSkinState(updated);
       },
       onStateChange: (state) => {
         setGameState(state);
@@ -38,6 +72,9 @@ export default function GameCanvas() {
       },
     });
     engineRef.current = engine;
+
+    // Apply initial skin
+    engine.setSkin(getSkinById(skinState.selectedSkinId));
 
     const handleResize = () => {
       engine.resize(window.innerWidth, window.innerHeight);
@@ -49,6 +86,17 @@ export default function GameCanvas() {
       engineRef.current = null;
       window.removeEventListener("resize", handleResize);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync skin to engine when selection changes
+  useEffect(() => {
+    engineRef.current?.setSkin(getSkinById(selectedSkinId));
+  }, [selectedSkinId]);
+
+  const handleSelectSkin = useCallback((id: SkinId) => {
+    const updated = selectSkin(id);
+    setSkinState(updated);
   }, []);
 
   const handleRestart = useCallback(() => {
@@ -114,6 +162,13 @@ export default function GameCanvas() {
     engineRef.current?.setSfxMuted(sfxMuted);
   }, [sfxMuted]);
 
+  // IDKFA cheat code
+  const handleCheat = useCallback(() => {
+    const updated = activateCheat();
+    setSkinState(updated);
+  }, []);
+  useCheatCode("IDKFA", handleCheat);
+
   // Pause when tab is hidden or device is in portrait (mobile) — resumes on the inverse.
   // A single checkPause fn handles both triggers so they don't conflict.
   const checkPause = useCallback(() => {
@@ -157,7 +212,14 @@ export default function GameCanvas() {
         }}
       />
 
-      {gameState === GameState.IDLE && <StartScreen />}
+      {gameState === GameState.IDLE && (
+        <StartScreen
+          bestScore={bestScore}
+          cheatUnlocked={cheatUnlocked}
+          selectedSkinId={selectedSkinId}
+          onSelectSkin={handleSelectSkin}
+        />
+      )}
 
       {gameState === GameState.RUNNING && (
         <HUD

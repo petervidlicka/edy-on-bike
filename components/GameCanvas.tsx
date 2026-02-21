@@ -69,6 +69,10 @@ export default function GameCanvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  useEffect(() => {
+    engineRef.current?.setMuted(muted);
+  }, [muted]);
+
   return (
     <>
       <canvas

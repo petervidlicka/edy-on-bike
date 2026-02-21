@@ -10,25 +10,27 @@ export default function StartScreen() {
         justifyContent: "center",
         pointerEvents: "none",
         gap: "0.75rem",
+        fontFamily: "var(--font-nunito), Arial, sans-serif",
       }}
     >
       <h1
         style={{
-          color: "#d4dce4",
+          color: "#1e293b",
           fontSize: "3rem",
-          fontWeight: "bold",
+          fontWeight: 800,
           margin: 0,
           letterSpacing: "0.04em",
-          textShadow: "0 2px 10px rgba(0,0,0,0.35)",
+          textShadow: "0 2px 6px rgba(255,255,255,0.4)",
         }}
       >
         Edy on Bike
       </h1>
       <p
         style={{
-          color: "#a0aab4",
+          color: "#334155",
           fontSize: "1rem",
           margin: 0,
+          fontWeight: 600,
         }}
       >
         Jump and double-jump to avoid obstacles
@@ -36,10 +38,10 @@ export default function StartScreen() {
       <div
         style={{
           marginTop: "1.5rem",
-          color: "#d4dce4",
+          color: "#1e293b",
           fontSize: "1rem",
-          fontWeight: 600,
-          border: "2px solid rgba(212,220,228,0.35)",
+          fontWeight: 700,
+          border: "2px solid rgba(30,41,59,0.45)",
           borderRadius: "8px",
           padding: "0.5rem 1.75rem",
           letterSpacing: "0.06em",

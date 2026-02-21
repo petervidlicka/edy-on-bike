@@ -11,6 +11,7 @@ import { createBackgroundLayers, updateLayers } from "./Background";
 import { drawBackground, drawPlayer, drawObstacle } from "./Renderer";
 import { spawnObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision } from "./Collision";
+import { SoundManager } from "./SoundManager";
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
@@ -39,6 +40,7 @@ export class Engine {
   private canvasH: number = 0;
   private groundY: number = 0;
   private callbacks: EngineCallbacks;
+  private sound = new SoundManager();
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -93,7 +95,11 @@ export class Engine {
       return;
     }
     if (this.state === GameState.RUNNING) {
+      const prevCount = this.player.jumpCount;
       jumpPlayer(this.player);
+      if (this.player.jumpCount > prevCount) {
+        this.sound.playJump(prevCount === 1);
+      }
     }
   }
 
@@ -154,6 +160,7 @@ export class Engine {
     for (const obs of this.obstacles) {
       if (checkCollision(this.player, obs)) {
         this.state = GameState.GAME_OVER;
+        this.sound.playCrash();
         this.callbacks.onStateChange(this.state);
         this.callbacks.onGameOver(this.score);
         return;
@@ -180,8 +187,12 @@ export class Engine {
   getState(): GameState {
     return this.state;
   }
+  setMuted(muted: boolean): void {
+    this.sound.setMuted(muted);
+  }
 
   destroy(): void {
     cancelAnimationFrame(this.rafId);
+    this.sound.destroy();
   }
 }

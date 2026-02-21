@@ -55,7 +55,7 @@ export default function HUD({ score, speed, muted, onToggleMute }: HUDProps) {
       >
         <span
           style={{
-            color: "#d4dce4",
+            color: "#1e293b",
             fontFamily: "var(--font-space-mono), monospace",
             fontSize: "1.25rem",
             fontWeight: "bold",
@@ -65,7 +65,7 @@ export default function HUD({ score, speed, muted, onToggleMute }: HUDProps) {
         </span>
         <span
           style={{
-            color: "#a0aab4",
+            color: "#475569",
             fontFamily: "var(--font-space-mono), monospace",
             fontSize: "0.75rem",
           }}
@@ -82,10 +82,10 @@ export default function HUD({ score, speed, muted, onToggleMute }: HUDProps) {
           position: "fixed",
           top: "1rem",
           left: "1.5rem",
-          background: "rgba(0,0,0,0.2)",
-          border: "1px solid rgba(212,220,228,0.25)",
+          background: "rgba(255,255,255,0.35)",
+          border: "1px solid rgba(30,41,59,0.3)",
           borderRadius: "6px",
-          color: "#d4dce4",
+          color: "#1e293b",
           cursor: "pointer",
           padding: "0.35rem 0.5rem",
           lineHeight: 0,

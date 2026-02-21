@@ -45,9 +45,22 @@ export default function StartScreen() {
           borderRadius: "8px",
           padding: "0.5rem 1.75rem",
           letterSpacing: "0.06em",
+          textAlign: "center",
         }}
       >
         PRESS SPACE TO START
+        <span
+          style={{
+            display: "block",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            color: "#64748b",
+            letterSpacing: "0.04em",
+            marginTop: "0.2rem",
+          }}
+        >
+          or tap on mobile
+        </span>
       </div>
     </div>
   );

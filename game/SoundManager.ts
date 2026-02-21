@@ -1,7 +1,33 @@
+// Melody: [frequency_hz, duration_s]. freq=0 means rest.
+// C pentatonic arpeggio at ~140 BPM, square wave at low volume for a chiptune feel.
+const MELODY: [number, number][] = [
+  [523.25, 0.10], // C5
+  [0,      0.05],
+  [659.25, 0.10], // E5
+  [0,      0.05],
+  [783.99, 0.10], // G5
+  [0,      0.05],
+  [659.25, 0.10], // E5
+  [0,      0.05],
+  [880.00, 0.10], // A5
+  [0,      0.05],
+  [659.25, 0.10], // E5
+  [0,      0.05],
+  [587.33, 0.15], // D5
+  [0,      0.05],
+  [523.25, 0.15], // C5
+  [0,      0.15], // pause at bar end
+];
+
+const MELODY_DURATION = MELODY.reduce((sum, [, d]) => sum + d, 0);
+
 export class SoundManager {
   // AudioContext is created lazily on first play to satisfy browser autoplay policy
   private ctx: AudioContext | null = null;
   private muted = false;
+  private musicPlaying = false;
+  private musicTimeout: ReturnType<typeof setTimeout> | null = null;
+  private musicNextStart = 0;
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
@@ -12,6 +38,17 @@ export class SoundManager {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
+    if (muted) {
+      // Cancel next scheduled bar — currently playing notes fade naturally
+      if (this.musicTimeout) {
+        clearTimeout(this.musicTimeout);
+        this.musicTimeout = null;
+      }
+    } else if (this.musicPlaying) {
+      // Resume scheduling from now
+      this.musicNextStart = this.getCtx().currentTime + 0.05;
+      this.scheduleMusicBar();
+    }
   }
 
   // isDouble = true for the second (in-air) jump — higher pitch
@@ -91,7 +128,55 @@ export class SoundManager {
     clang.stop(now + 0.28);
   }
 
+  startMusic(): void {
+    if (this.musicPlaying) return;
+    this.musicPlaying = true;
+    if (this.muted) return;
+    this.musicNextStart = this.getCtx().currentTime + 0.05;
+    this.scheduleMusicBar();
+  }
+
+  stopMusic(): void {
+    this.musicPlaying = false;
+    if (this.musicTimeout) {
+      clearTimeout(this.musicTimeout);
+      this.musicTimeout = null;
+    }
+  }
+
+  private scheduleMusicBar(): void {
+    if (!this.musicPlaying || this.muted) return;
+    const ctx = this.getCtx();
+    let t = this.musicNextStart;
+
+    for (const [freq, dur] of MELODY) {
+      if (freq > 0) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "square";
+        osc.frequency.value = freq;
+        // Low volume with quick fade for a plucky chiptune feel
+        gain.gain.setValueAtTime(0.04, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.85);
+        osc.start(t);
+        osc.stop(t + dur);
+      }
+      t += dur;
+    }
+
+    // Schedule next bar ~50ms before current one ends to avoid gaps
+    this.musicNextStart += MELODY_DURATION;
+    const msUntilNext = (this.musicNextStart - ctx.currentTime - 0.05) * 1000;
+    this.musicTimeout = setTimeout(
+      () => this.scheduleMusicBar(),
+      Math.max(0, msUntilNext),
+    );
+  }
+
   destroy(): void {
+    this.stopMusic();
     this.ctx?.close();
     this.ctx = null;
   }

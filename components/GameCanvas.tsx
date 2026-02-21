@@ -73,6 +73,28 @@ export default function GameCanvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  const handleTouch = useCallback((e: TouchEvent) => {
+    // Don't intercept taps on interactive overlays (name input, submit button)
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    e.preventDefault();
+    const engine = engineRef.current;
+    if (!engine) return;
+    const state = engine.getState();
+    if (state === GameState.IDLE || state === GameState.RUNNING) {
+      engine.jump();
+    } else if (state === GameState.GAME_OVER) {
+      engine.restart();
+    }
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener("touchstart", handleTouch, { passive: false });
+    return () => canvas.removeEventListener("touchstart", handleTouch);
+  }, [handleTouch]);
+
   useEffect(() => {
     engineRef.current?.setMuted(muted);
   }, [muted]);

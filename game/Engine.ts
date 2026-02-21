@@ -69,10 +69,12 @@ export class Engine {
     if (this.state !== GameState.IDLE) return;
     this.state = GameState.RUNNING;
     this.nextObstacleGap = nextSpawnGap(this.speed);
+    this.sound.startMusic();
     this.callbacks.onStateChange(this.state);
   }
 
   restart(): void {
+    this.sound.stopMusic();
     this.state = GameState.IDLE;
     this.speed = INITIAL_SPEED;
     this.score = 0;
@@ -160,6 +162,7 @@ export class Engine {
     for (const obs of this.obstacles) {
       if (checkCollision(this.player, obs)) {
         this.state = GameState.GAME_OVER;
+        this.sound.stopMusic();
         this.sound.playCrash();
         this.callbacks.onStateChange(this.state);
         this.callbacks.onGameOver(this.score);

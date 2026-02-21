@@ -16,6 +16,7 @@ export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
   onGameOver: (score: number) => void;
   onStateChange: (state: GameState) => void;
+  onSpeedUpdate?: (speed: number) => void;
 };
 
 export class Engine {
@@ -118,6 +119,7 @@ export class Engine {
     if (this.speedTimer >= SPEED_INTERVAL) {
       this.speedTimer -= SPEED_INTERVAL;
       this.speed *= 1 + SPEED_INCREASE;
+      this.callbacks.onSpeedUpdate?.(this.speed);
     }
 
     // Score from distance

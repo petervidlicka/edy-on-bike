@@ -21,6 +21,14 @@ export interface PlayerState {
   jumpCount: number;
   isOnGround: boolean;
   wheelRotation: number;
+  /** Bike tilt in radians — positive = front wheel up (lean back). */
+  bikeTilt: number;
+  /** Rider backward lean in radians. 0 = default, positive = lean back. */
+  riderLean: number;
+  /** 0 = seated on saddle, 1 = standing/raised off seat. */
+  riderCrouch: number;
+  /** 0 = legs extended to pedals, 1 = knees pulled toward chest. */
+  legTuck: number;
 }
 
 export interface ObstacleInstance {
@@ -38,11 +46,12 @@ export interface BackgroundLayer {
 }
 
 export interface BackgroundElement {
-  type: "cloud" | "house" | "tree_silhouette";
+  type: "cloud" | "house" | "tree_silhouette" | "deer" | "walking_person";
   x: number;
   y: number;
   width: number;
   height: number;
   color: string;
   roofColor?: string;
+  variant?: number;
 }

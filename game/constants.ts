@@ -12,8 +12,8 @@ export const MIN_OBSTACLE_GAP = 300;
 
 // Player dimensions
 export const PLAYER_X_RATIO = 0.20; // 20% from the left of the canvas
-export const PLAYER_WIDTH = 50;
-export const PLAYER_HEIGHT = 55;
+export const PLAYER_WIDTH = 64;
+export const PLAYER_HEIGHT = 58;
 
 // Colors — muted palette
 export const COLORS = {
@@ -23,17 +23,22 @@ export const COLORS = {
   ground: "#8a9a7c",
   road: "#7a7a78",
   roadLine: "#a3a39f",
-  house1: "#9e8e80",
-  house2: "#8a9a8a",
-  house3: "#a09088",
-  roof1: "#7a6a5e",
-  roof2: "#6a7a6a",
-  roof3: "#8a7a72",
-  treeSilhouette: "#6a7a64",
+  house1: "#c4aa90",
+  house2: "#b8988a",
+  house3: "#a8a098",
+  house4: "#c0b098",
+  roof1: "#6a5548",
+  roof2: "#7a5a4a",
+  roof3: "#5a5a50",
+  roof4: "#6a6058",
+  treeSilhouette: "#4a6a44",
+  treeHighlight: "#5a7a50",
+  deer: "#9a7a5a",
+  person: "#5a5a6a",
   player: {
-    wheel: "#4a4a48",
-    frame: "#6a8a9a",
-    helmet: "#c4785a",
+    wheel: "#2e2e2e",
+    frame: "#8b1a1a",
+    helmet: "#9b3333",
     skin: "#c8a882",
     shirt: "#7a8a9a",
     pants: "#5a5a6a",

@@ -157,9 +157,12 @@ export class SoundManager {
       clearTimeout(this.musicTimeout);
       this.musicTimeout = null;
     }
-    // Quickly fade master gain to silence already-scheduled notes
+    // Quickly fade master gain to silence already-scheduled notes,
+    // then disconnect so a fresh GainNode on restart doesn't overlap.
     if (this.musicGain && this.ctx) {
       this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
+      this.musicGain.disconnect();
+      this.musicGain = null;
     }
   }
 

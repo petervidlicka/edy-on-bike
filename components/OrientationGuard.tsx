@@ -11,6 +11,7 @@ function getFullscreenElement(): Element | null {
 }
 
 export default function OrientationGuard({ children }: { children: React.ReactNode }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [showOverlay, setShowOverlay] = useState(false);
   const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -22,32 +23,32 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
     }
   }, []);
 
-  // Must be called synchronously inside a user-gesture handler (pointerup / click).
-  // Tries document.documentElement first, then document.body as fallback.
-  const handleFullscreenTap = useCallback(() => {
-    if (getFullscreenElement()) {
-      setShowFullscreenPrompt(false);
-      clearDismissTimer();
-      return;
-    }
+  // Must be called synchronously inside a user-gesture handler (click).
+  // Uses the container div as the fullscreen target — Safari rejects
+  // requestFullscreen on document.documentElement.
+  const handleFullscreenTap = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
 
-    const targets = [document.documentElement, document.body];
-    for (const el of targets) {
-      try {
-        if (el.requestFullscreen) {
-          el.requestFullscreen().catch(() => {});
-          return; // request dispatched — fullscreenchange will hide the prompt
-        }
+      if (getFullscreenElement()) {
+        setShowFullscreenPrompt(false);
+        clearDismissTimer();
+        return;
+      }
+
+      const el = containerRef.current ?? document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else {
         const webkit = el as unknown as { webkitRequestFullscreen?: () => void };
         if (webkit.webkitRequestFullscreen) {
           webkit.webkitRequestFullscreen();
-          return;
         }
-      } catch {
-        // try next target
       }
-    }
-  }, [clearDismissTimer]);
+    },
+    [clearDismissTimer],
+  );
 
   useEffect(() => {
     const check = () => {
@@ -96,7 +97,7 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
   }, [clearDismissTimer]);
 
   return (
-    <>
+    <div ref={containerRef}>
       {children}
 
       {showFullscreenPrompt && (
@@ -206,6 +207,6 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
           </p>
         </div>
       )}
-    </>
+    </div>
   );
 }

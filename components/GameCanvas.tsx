@@ -52,6 +52,10 @@ export default function GameCanvas() {
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.code === "Space") {
+      // Don't intercept space when user is typing in an input
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
       e.preventDefault();
       const engine = engineRef.current;
       if (!engine) return;

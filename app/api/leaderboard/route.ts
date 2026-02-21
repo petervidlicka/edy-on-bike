@@ -1,18 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 import { getTopScores, addScore } from "@/lib/leaderboard";
 
-// Simple in-memory rate limiter: 1 submission per 5s per IP
+// --- Rate limiting ---
+// Production: Redis-backed sliding window (survives serverless cold starts)
+// Local dev: in-memory map capped at 1000 entries to prevent memory growth
+
+let ratelimit: Ratelimit | null = null;
+
+if (
+  process.env.UPSTASH_REDIS_REST_URL &&
+  process.env.UPSTASH_REDIS_REST_TOKEN
+) {
+  ratelimit = new Ratelimit({
+    redis: new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    }),
+    limiter: Ratelimit.slidingWindow(1, "5 s"),
+    prefix: "edy-on-bike:rl",
+  });
+}
+
+// Fallback for local dev (no Redis)
 const rateMap = new Map<string, number>();
 
-function isRateLimited(ip: string): boolean {
+async function isRateLimited(ip: string): Promise<boolean> {
+  if (ratelimit) {
+    const { success } = await ratelimit.limit(ip);
+    return !success;
+  }
+  // In-memory fallback: cap map size to prevent memory growth
+  if (rateMap.size > 1000) rateMap.clear();
   const now = Date.now();
   const last = rateMap.get(ip);
-  if (last && now - last < 5000) {
-    return true;
-  }
+  if (last && now - last < 5000) return true;
   rateMap.set(ip, now);
   return false;
 }
+
+const MAX_SCORE = 99999;
 
 export async function GET() {
   const scores = await getTopScores(20);
@@ -20,11 +48,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  // Next.js 16 removed request.ip; use x-forwarded-for set by the hosting platform
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     "unknown";
 
-  if (isRateLimited(ip)) {
+  if (await isRateLimited(ip)) {
     return NextResponse.json(
       { error: "Too many requests. Try again in a few seconds." },
       { status: 429 },
@@ -54,6 +83,13 @@ export async function POST(request: NextRequest) {
   if (typeof score !== "number" || !Number.isFinite(score) || score < 0) {
     return NextResponse.json(
       { error: "Score must be a non-negative number." },
+      { status: 400 },
+    );
+  }
+
+  if (score > MAX_SCORE) {
+    return NextResponse.json(
+      { error: "Score out of range." },
       { status: 400 },
     );
   }

@@ -44,6 +44,7 @@ export default function GameOverScreen({ score, bestScore }: GameOverScreenProps
   }, []);
 
   const handleSubmit = async () => {
+    if (submitting) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Enter your name.");

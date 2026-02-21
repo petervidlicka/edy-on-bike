@@ -69,6 +69,7 @@ function addScoreMemory(name: string, score: number): void {
     memoryStore.push({ name, score });
   }
   memoryStore.sort((a, b) => b.score - a.score);
+  memoryStore.splice(100); // keep only top 100 to prevent unbounded growth
 }
 
 // --- Public API ---

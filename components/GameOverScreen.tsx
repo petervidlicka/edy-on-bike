@@ -233,7 +233,7 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
               color: "#334155",
             }}
           >
-            or save &amp; continue
+            or press Space to save &amp; continue
           </button>
         </>
       )}
@@ -303,6 +303,9 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
             }}
           >
             PLAY AGAIN
+            <span style={{ display: "block", fontSize: "0.7rem", fontWeight: 600, color: "#64748b", letterSpacing: "0.04em", marginTop: "0.15rem" }}>
+              or press Space
+            </span>
           </button>
         </>
       )}

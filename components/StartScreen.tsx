@@ -49,7 +49,7 @@ export default function StartScreen() {
           padding: "0.65rem 2.25rem",
           letterSpacing: "0.06em",
           textAlign: "center",
-          boxShadow: "0 2px 20px rgba(0,0,0,0.08), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
+          boxShadow: "0 2px 20px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
         }}
       >
         PRESS SPACE TO START

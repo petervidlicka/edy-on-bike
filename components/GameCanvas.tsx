@@ -78,6 +78,14 @@ export default function GameCanvas() {
       e.preventDefault();
       engineRef.current?.frontflip();
     }
+    if (e.code === "ArrowLeft") {
+      e.preventDefault();
+      engineRef.current?.superman();
+    }
+    if (e.code === "ArrowRight") {
+      e.preventDefault();
+      engineRef.current?.noHander();
+    }
   }, []);
 
   useEffect(() => {
@@ -169,6 +177,8 @@ export default function GameCanvas() {
           onToggleSfx={() => setSfxMuted((m) => !m)}
           onBackflip={() => engineRef.current?.backflip()}
           onFrontflip={() => engineRef.current?.frontflip()}
+          onSuperman={() => engineRef.current?.superman()}
+          onNoHander={() => engineRef.current?.noHander()}
         />
       )}
 

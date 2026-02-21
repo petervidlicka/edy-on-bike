@@ -1,4 +1,4 @@
-import { PlayerState, ObstacleInstance } from "./types";
+import { PlayerState, ObstacleInstance, ObstacleType } from "./types";
 
 // Inner padding makes hitboxes slightly smaller than the visual bounds,
 // so near-misses feel fair rather than frustrating.
@@ -59,4 +59,46 @@ export function checkRideableCollision(
 
   // Any other overlap is a crash
   return "crash";
+}
+
+export interface RampCollisionResult {
+  onRamp: boolean;
+  surfaceY: number;
+  surfaceAngle: number;
+  rampType: "straight" | "curved" | null;
+}
+
+const NO_RAMP: RampCollisionResult = { onRamp: false, surfaceY: 0, surfaceAngle: 0, rampType: null };
+
+export function checkRampCollision(
+  player: PlayerState,
+  obstacle: ObstacleInstance
+): RampCollisionResult {
+  if (!obstacle.ramp) return NO_RAMP;
+
+  const playerCenterX = player.x + player.width / 2;
+  const rampLeft = obstacle.x;
+  const rampRight = obstacle.x + obstacle.width;
+
+  // Player must be horizontally overlapping the ramp
+  if (playerCenterX < rampLeft || playerCenterX > rampRight) return NO_RAMP;
+
+  const t = (playerCenterX - rampLeft) / obstacle.width; // 0..1 across ramp
+  const rampBaseY = obstacle.y + obstacle.height; // bottom = ground level
+
+  if (obstacle.type === ObstacleType.STRAIGHT_RAMP) {
+    const surfaceY = rampBaseY - t * obstacle.height;
+    const surfaceAngle = Math.atan2(-obstacle.height, obstacle.width);
+    return { onRamp: true, surfaceY, surfaceAngle, rampType: "straight" };
+  }
+
+  if (obstacle.type === ObstacleType.CURVED_RAMP) {
+    const curvedT = t * t; // ease-in quadratic — gentle at bottom, steep at lip
+    const surfaceY = rampBaseY - curvedT * obstacle.height;
+    const dydx = (-2 * t * obstacle.height) / obstacle.width;
+    const surfaceAngle = Math.atan2(dydx, 1);
+    return { onRamp: true, surfaceY, surfaceAngle, rampType: "curved" };
+  }
+
+  return NO_RAMP;
 }

@@ -6,11 +6,14 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.ROCK]:            { width: 28, height: 20 },
   [ObstacleType.SMALL_TREE]:      { width: 22, height: 48 },
   [ObstacleType.TALL_TREE]:       { width: 22, height: 72 },  // 50% taller — needs double-jump
+  [ObstacleType.GIANT_TREE]:      { width: 30, height: 108 }, // 50% taller than tall tree, bushy
   [ObstacleType.SHOPPING_TROLLEY]:{ width: 38, height: 38 },
   [ObstacleType.CAR]:             { width: 80, height: 42 },
   [ObstacleType.PERSON_ON_BIKE]:  { width: 38, height: 52 },
   [ObstacleType.BUS_STOP]:        { width: 117, height: 91 },
   [ObstacleType.SHIPPING_CONTAINER]: { width: 176, height: 75 },
+  [ObstacleType.STRAIGHT_RAMP]:   { width: 60, height: 20 },
+  [ObstacleType.CURVED_RAMP]:     { width: 50, height: 24 },
 };
 
 type WeightedType = { type: ObstacleType; weight: number };
@@ -18,20 +21,22 @@ type WeightedType = { type: ObstacleType; weight: number };
 // Basic obstacles are down-weighted at later stages so harder obstacles
 // appear more frequently (target: ~20-25% fewer basics per stage unlock).
 function getWeightedTypes(elapsedMs: number): WeightedType[] {
-  // basicWeight: 1.0 in stage 1, 0.7 in stages 2+
-  // Advanced obstacles always weight 1.0, so basics become a smaller share.
-  const basicWeight = elapsedMs >= 10_000 ? 0.7 : 1.0;
+  // basicWeight drops as stages advance so harder obstacles dominate
+  const basicWeight = elapsedMs >= 25_000 ? 0.4 : elapsedMs >= 10_000 ? 0.7 : 1.0;
 
   const types: WeightedType[] = [
     { type: ObstacleType.ROCK,       weight: basicWeight },
     { type: ObstacleType.SMALL_TREE, weight: basicWeight },
   ];
-  // Stage 2 (10s): tall trees + shopping trolleys
+  // Stage 2 (10s): tall trees, giant trees, trolleys, ramps
   if (elapsedMs >= 10_000) {
     types.push({ type: ObstacleType.TALL_TREE,        weight: 0.8 });
+    types.push({ type: ObstacleType.GIANT_TREE,       weight: 0.5 });
     types.push({ type: ObstacleType.SHOPPING_TROLLEY, weight: 1.0 });
+    types.push({ type: ObstacleType.STRAIGHT_RAMP,    weight: 0.4 });
+    types.push({ type: ObstacleType.CURVED_RAMP,      weight: 0.4 });
   }
-  // Stage 3 (25s): rideable obstacles
+  // Stage 3 (25s): rideable obstacles — ramps/rideables dominate
   if (elapsedMs >= 25_000) {
     types.push({ type: ObstacleType.BUS_STOP,           weight: 0.8 });
     types.push({ type: ObstacleType.SHIPPING_CONTAINER, weight: 0.8 });
@@ -68,6 +73,7 @@ export function spawnObstacle(
     width: spec.width,
     height: spec.height,
     rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER,
+    ramp: type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP,
   };
 }
 

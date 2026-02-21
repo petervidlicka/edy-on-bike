@@ -12,6 +12,14 @@ export const MIN_OBSTACLE_GAP = 300;
 export const RIDEABLE_JUMP_MULTIPLIER = 1.5;
 export const BACKFLIP_SPEED = 0.18; // radians per dt unit (~0.58s for full rotation at 60fps)
 export const BACKFLIP_BONUS = 50;
+export const SUPERMAN_SPEED = 0.06; // progress per dt (~0.57s full cycle at 60fps)
+export const NO_HANDER_SPEED = 0.07;
+export const SUPERMAN_BONUS = 60;
+export const NO_HANDER_BONUS = 30;
+export const TRICK_COMPLETION_THRESHOLD = 0.9; // 90% = safe landing
+export const RAMP_HEIGHT_MULTIPLIER = 1.5;
+export const DOUBLE_CHAIN_BONUS = 100;
+export const TRIPLE_CHAIN_BONUS = 200;
 
 // Player dimensions
 export const PLAYER_X_RATIO = 0.20; // 20% from the left of the canvas
@@ -70,5 +78,13 @@ export const COLORS = {
     container: "#c4683a",
     containerDark: "#8a4828",
     containerDoor: "#a85830",
+    giantTreeCanopy: "#2e7a36",
+    giantTreeCanopyHighlight: "#48994a",
+    giantTreeTrunk: "#5e4030",
+    rampWood: "#b89a6a",
+    rampWoodDark: "#8a6a40",
+    rampWoodHighlight: "#d4b888",
+    rampMetal: "#7a8a9a",
+    rampMetalDark: "#5a6a7a",
   },
 } as const;

@@ -1,5 +1,5 @@
-import { PlayerState } from "./types";
-import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED } from "./constants";
+import { PlayerState, TrickType } from "./types";
+import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED } from "./constants";
 
 export function createPlayer(groundY: number, canvasWidth: number): PlayerState {
   return {
@@ -19,6 +19,12 @@ export function createPlayer(groundY: number, canvasWidth: number): PlayerState 
     backflipAngle: 0,
     isBackflipping: false,
     flipDirection: 1,
+    activeTrick: TrickType.NONE,
+    trickProgress: 0,
+    trickPhase: "extend",
+    trickCompletions: 0,
+    rampBoost: null,
+    rampSurfaceAngle: 0,
   };
 }
 
@@ -32,16 +38,19 @@ export function jumpPlayer(player: PlayerState): void {
     return;
   }
   if (player.jumpCount >= 2) return;
-  const force = player.jumpCount === 0 ? JUMP_FORCE : JUMP_FORCE * 0.85;
+  let force = player.jumpCount === 0 ? JUMP_FORCE : JUMP_FORCE * 0.85;
+  // Curved ramp boost: 50% more height on first jump
+  if (player.jumpCount === 0 && player.rampBoost === "curved") {
+    force *= RAMP_HEIGHT_MULTIPLIER;
+  }
   player.velocityY = force;
   player.isOnGround = false;
   player.jumpCount++;
 }
 
 export function startBackflip(player: PlayerState): boolean {
-  if (player.isOnGround || player.isBackflipping || player.ridingObstacle) {
-    return false;
-  }
+  if (player.isOnGround || player.isBackflipping || player.ridingObstacle) return false;
+  if (player.activeTrick !== TrickType.NONE) return false;
   player.isBackflipping = true;
   player.backflipAngle = 0;
   player.flipDirection = 1;
@@ -49,12 +58,29 @@ export function startBackflip(player: PlayerState): boolean {
 }
 
 export function startFrontflip(player: PlayerState): boolean {
-  if (player.isOnGround || player.isBackflipping || player.ridingObstacle) {
-    return false;
-  }
+  if (player.isOnGround || player.isBackflipping || player.ridingObstacle) return false;
+  if (player.activeTrick !== TrickType.NONE) return false;
   player.isBackflipping = true;
   player.backflipAngle = 0;
   player.flipDirection = -1;
+  return true;
+}
+
+export function startSuperman(player: PlayerState): boolean {
+  if (player.isOnGround || player.ridingObstacle) return false;
+  if (player.isBackflipping || player.activeTrick !== TrickType.NONE) return false;
+  player.activeTrick = TrickType.SUPERMAN;
+  player.trickProgress = 0;
+  player.trickPhase = "extend";
+  return true;
+}
+
+export function startNoHander(player: PlayerState): boolean {
+  if (player.isOnGround || player.ridingObstacle) return false;
+  if (player.isBackflipping || player.activeTrick !== TrickType.NONE) return false;
+  player.activeTrick = TrickType.NO_HANDER;
+  player.trickProgress = 0;
+  player.trickPhase = "extend";
   return true;
 }
 
@@ -76,7 +102,9 @@ export function updatePlayer(
   }
 
   if (!player.isOnGround) {
-    player.velocityY += GRAVITY * dt;
+    // Straight ramp boost: reduced gravity for 50% more horizontal distance
+    const effectiveGravity = player.rampBoost === "straight" ? GRAVITY * 0.667 : GRAVITY;
+    player.velocityY += effectiveGravity * dt;
     player.y += player.velocityY * dt;
 
     const groundPos = groundY - player.height;
@@ -85,6 +113,7 @@ export function updatePlayer(
       player.velocityY = 0;
       player.isOnGround = true;
       player.jumpCount = 0;
+      player.rampBoost = null;
     }
   }
 
@@ -92,10 +121,25 @@ export function updatePlayer(
   player.wheelRotation += speed * dt * 0.08;
 
   // --- Backflip / frontflip rotation ---
-  // Angle grows unbounded so the engine can count completed rotations on landing.
-  // isBackflipping stays true until Engine resets it on a successful landing.
   if (player.isBackflipping) {
     player.backflipAngle += BACKFLIP_SPEED * dt;
+  }
+
+  // --- Pose trick animation (superman, no hander) ---
+  if (player.activeTrick !== TrickType.NONE) {
+    const speed = player.activeTrick === TrickType.SUPERMAN ? SUPERMAN_SPEED : NO_HANDER_SPEED;
+    if (player.trickPhase === "extend") {
+      player.trickProgress = Math.min(1, player.trickProgress + speed * dt);
+      if (player.trickProgress >= 1) {
+        player.trickPhase = "return";
+      }
+    } else {
+      player.trickProgress = Math.max(0, player.trickProgress - speed * dt);
+      if (player.trickProgress <= 0) {
+        player.trickCompletions++;
+        player.trickPhase = "extend"; // ready for next chain
+      }
+    }
   }
 
   // --- Bunnyhop animation ---
@@ -127,7 +171,13 @@ export function updatePlayer(
     }
   } else {
     // Smoothly return all to neutral on ground
-    player.bikeTilt += (0 - player.bikeTilt) * 0.25 * dt;
+    if (player.rampSurfaceAngle !== 0) {
+      // Match bike tilt to ramp surface
+      const targetTilt = -player.rampSurfaceAngle;
+      player.bikeTilt += (targetTilt - player.bikeTilt) * 0.3 * dt;
+    } else {
+      player.bikeTilt += (0 - player.bikeTilt) * 0.25 * dt;
+    }
     player.riderLean += (0 - player.riderLean) * 0.2 * dt;
     player.riderCrouch += (0 - player.riderCrouch) * 0.2 * dt;
     player.legTuck += (0 - player.legTuck) * 0.2 * dt;

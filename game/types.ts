@@ -8,11 +8,20 @@ export enum ObstacleType {
   ROCK = "ROCK",
   SMALL_TREE = "SMALL_TREE",
   TALL_TREE = "TALL_TREE",
+  GIANT_TREE = "GIANT_TREE",
   SHOPPING_TROLLEY = "SHOPPING_TROLLEY",
   CAR = "CAR",
   PERSON_ON_BIKE = "PERSON_ON_BIKE",
   BUS_STOP = "BUS_STOP",
   SHIPPING_CONTAINER = "SHIPPING_CONTAINER",
+  STRAIGHT_RAMP = "STRAIGHT_RAMP",
+  CURVED_RAMP = "CURVED_RAMP",
+}
+
+export enum TrickType {
+  NONE = "NONE",
+  SUPERMAN = "SUPERMAN",
+  NO_HANDER = "NO_HANDER",
 }
 
 export interface PlayerState {
@@ -40,6 +49,18 @@ export interface PlayerState {
   isBackflipping: boolean;
   /** Rotation direction: 1 = backflip (CCW), -1 = frontflip (CW). */
   flipDirection: number;
+  /** Current active pose trick (mutually exclusive with flips). */
+  activeTrick: TrickType;
+  /** Progress of pose trick animation: 0 = neutral, 1 = fully extended. Animates 0→1→0. */
+  trickProgress: number;
+  /** Phase of pose trick: 'extend' (0→1) or 'return' (1→0). */
+  trickPhase: "extend" | "return";
+  /** Number of completed pose trick cycles in current airtime. */
+  trickCompletions: number;
+  /** Pending ramp boost type. 'straight' = more distance, 'curved' = more height. */
+  rampBoost: "straight" | "curved" | null;
+  /** Current ramp surface angle in radians for bike tilt matching. */
+  rampSurfaceAngle: number;
 }
 
 export interface ObstacleInstance {
@@ -49,6 +70,8 @@ export interface ObstacleInstance {
   width: number;
   height: number;
   rideable: boolean;
+  /** True for ramp obstacles — player rides over them, never crashes. */
+  ramp: boolean;
 }
 
 export interface BackgroundLayer {

@@ -9,6 +9,9 @@ export const SPEED_INCREASE = 0.07;
 export const SPEED_INTERVAL = 12000;
 export const SCORE_PER_PX = 20;
 export const MIN_OBSTACLE_GAP = 300;
+export const RIDEABLE_JUMP_MULTIPLIER = 1.5;
+export const BACKFLIP_SPEED = 0.18; // radians per dt unit (~0.58s for full rotation at 60fps)
+export const BACKFLIP_BONUS = 50;
 
 // Player dimensions
 export const PLAYER_X_RATIO = 0.20; // 20% from the left of the canvas
@@ -44,14 +47,28 @@ export const COLORS = {
     pants: "#5a5a6a",
   },
   obstacle: {
-    rock: "#8a8a82",
-    rockShadow: "#6a6a64",
-    tree: "#6a7a5a",
-    treeTrunk: "#8a7a6a",
-    trolley: "#7a7a82",
-    trolleyBasket: "#6a6a72",
-    car: "#8a6a6a",
-    carWindow: "#9aaaba",
-    bikeRider: "#6a6a7a",
+    rock: "#b58850",
+    rockHighlight: "#cca06a",
+    rockShadow: "#7a5c38",
+    tree: "#3a8a42",
+    treeHighlight: "#58aa50",
+    treeTrunk: "#6e4e38",
+    treeTrunkShadow: "#523828",
+    trolley: "#5a7a9a",
+    trolleyBasket: "#4a6888",
+    trolleyAccent: "#c47a42",
+    car: "#c25a48",
+    carRoof: "#a84a3c",
+    carWindow: "#8abcd4",
+    carBumper: "#8a7a6a",
+    bikeRider: "#5a4878",
+    bikeFrame: "#7a6898",
+    busStopFrame: "#3a7a6a",
+    busStopRoof: "#2e5e52",
+    busStopGlass: "#a0c8d4",
+    busStopSign: "#d4a444",
+    container: "#c4683a",
+    containerDark: "#8a4828",
+    containerDoor: "#a85830",
   },
 } as const;

@@ -10,6 +10,8 @@ export enum ObstacleType {
   SHOPPING_TROLLEY = "SHOPPING_TROLLEY",
   CAR = "CAR",
   PERSON_ON_BIKE = "PERSON_ON_BIKE",
+  BUS_STOP = "BUS_STOP",
+  SHIPPING_CONTAINER = "SHIPPING_CONTAINER",
 }
 
 export interface PlayerState {
@@ -29,6 +31,12 @@ export interface PlayerState {
   riderCrouch: number;
   /** 0 = legs extended to pedals, 1 = knees pulled toward chest. */
   legTuck: number;
+  /** When riding on top of a rideable obstacle, this is the obstacle reference. null otherwise. */
+  ridingObstacle: ObstacleInstance | null;
+  /** Backflip rotation angle in radians. 0 = not flipping, 2*PI = complete. */
+  backflipAngle: number;
+  /** Whether a backflip is in progress. */
+  isBackflipping: boolean;
 }
 
 export interface ObstacleInstance {
@@ -37,6 +45,7 @@ export interface ObstacleInstance {
   y: number;
   width: number;
   height: number;
+  rideable: boolean;
 }
 
 export interface BackgroundLayer {

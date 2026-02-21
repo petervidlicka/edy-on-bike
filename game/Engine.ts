@@ -5,13 +5,22 @@ import {
   SPEED_INCREASE,
   SPEED_INTERVAL,
   SCORE_PER_PX,
+  BACKFLIP_BONUS,
 } from "./constants";
-import { createPlayer, updatePlayer, jumpPlayer } from "./Player";
+import { createPlayer, updatePlayer, jumpPlayer, startBackflip } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
-import { drawBackground, drawPlayer, drawObstacle } from "./Renderer";
+import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./Renderer";
 import { spawnObstacle, nextSpawnGap } from "./Obstacle";
-import { checkCollision } from "./Collision";
+import { checkCollision, checkRideableCollision } from "./Collision";
 import { SoundManager } from "./SoundManager";
+
+interface FloatingText {
+  text: string;
+  x: number;
+  y: number;
+  opacity: number;
+  velocityY: number;
+}
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
@@ -37,6 +46,7 @@ export class Engine {
   private nextObstacleGap: number = 0;
   private rafId: number = 0;
   private isPaused = false;
+  private floatingTexts: FloatingText[] = [];
   private canvasW: number = 0;
   private canvasH: number = 0;
   private groundY: number = 0;
@@ -86,6 +96,7 @@ export class Engine {
     this.distanceSinceLastObstacle = 0;
     this.nextObstacleGap = 0;
     this.obstacles = [];
+    this.floatingTexts = [];
     this.player = createPlayer(this.groundY, this.canvasW);
     this.layers = createBackgroundLayers(this.canvasW, this.groundY);
     this.callbacks.onScoreUpdate(0);
@@ -104,6 +115,11 @@ export class Engine {
         this.sound.playJump(prevCount === 1);
       }
     }
+  }
+
+  backflip(): void {
+    if (this.state !== GameState.RUNNING) return;
+    startBackflip(this.player);
   }
 
   private loop(timestamp: number): void {
@@ -140,8 +156,48 @@ export class Engine {
     }
 
     // Update player and background
+    const wasAirborne = !this.player.isOnGround;
+    const wasBackflipping = this.player.isBackflipping;
+    const prevBackflipAngle = this.player.backflipAngle;
     updatePlayer(this.player, dt, this.groundY, this.speed);
     updateLayers(this.layers, this.speed, dt);
+
+    // Backflip landing check — player just touched the ground
+    if (wasAirborne && this.player.isOnGround) {
+      if (wasBackflipping) {
+        // Incomplete backflip on landing → crash
+        this.state = GameState.GAME_OVER;
+        this.sound.stopMusic();
+        this.sound.playCrash();
+        this.callbacks.onStateChange(this.state);
+        this.callbacks.onGameOver(this.score);
+        return;
+      }
+      // Completed backflip(s) — award bonus for each full rotation
+      if (prevBackflipAngle >= Math.PI * 2) {
+        const flips = Math.floor(prevBackflipAngle / (Math.PI * 2));
+        const bonus = flips * BACKFLIP_BONUS;
+        this.score += bonus;
+        this.distance = this.score * SCORE_PER_PX;
+        this.callbacks.onScoreUpdate(this.score);
+        this.sound.playBackflipSuccess();
+        this.floatingTexts.push({
+          text: `Backflip! +${bonus}`,
+          x: this.player.x + this.player.width / 2,
+          y: this.player.y - 10,
+          opacity: 1,
+          velocityY: -1.5,
+        });
+        this.player.backflipAngle = 0;
+      }
+    }
+
+    // Update floating texts (float up + fade out)
+    for (const ft of this.floatingTexts) {
+      ft.y += ft.velocityY * dt;
+      ft.opacity -= 0.02 * dt;
+    }
+    this.floatingTexts = this.floatingTexts.filter((ft) => ft.opacity > 0);
 
     // Move obstacles and cull off-screen ones
     for (const obs of this.obstacles) {
@@ -159,15 +215,75 @@ export class Engine {
       this.nextObstacleGap = nextSpawnGap(this.speed);
     }
 
+    // Riding state: check if obstacle scrolled past player
+    if (this.player.ridingObstacle) {
+      const obs = this.player.ridingObstacle;
+      if (obs.x + obs.width < this.player.x + 8) {
+        // Obstacle scrolled past — player falls off
+        this.player.ridingObstacle = null;
+      } else {
+        // Keep player on top
+        this.player.y = obs.y - this.player.height;
+      }
+    }
+
     // Collision detection
     for (const obs of this.obstacles) {
-      if (checkCollision(this.player, obs)) {
-        this.state = GameState.GAME_OVER;
-        this.sound.stopMusic();
-        this.sound.playCrash();
-        this.callbacks.onStateChange(this.state);
-        this.callbacks.onGameOver(this.score);
-        return;
+      // Skip the obstacle the player is currently riding
+      if (this.player.ridingObstacle === obs) continue;
+
+      if (obs.rideable) {
+        const result = checkRideableCollision(this.player, obs);
+        if (result === "crash") {
+          this.state = GameState.GAME_OVER;
+          this.sound.stopMusic();
+          this.sound.playCrash();
+          this.callbacks.onStateChange(this.state);
+          this.callbacks.onGameOver(this.score);
+          return;
+        }
+        if (result === "land_on_top") {
+          // Incomplete backflip when landing on rideable → crash
+          if (this.player.isBackflipping) {
+            this.state = GameState.GAME_OVER;
+            this.sound.stopMusic();
+            this.sound.playCrash();
+            this.callbacks.onStateChange(this.state);
+            this.callbacks.onGameOver(this.score);
+            return;
+          }
+          // Award completed backflip bonus
+          if (this.player.backflipAngle >= Math.PI * 2) {
+            const flips = Math.floor(this.player.backflipAngle / (Math.PI * 2));
+            const bonus = flips * BACKFLIP_BONUS;
+            this.score += bonus;
+            this.distance = this.score * SCORE_PER_PX;
+            this.callbacks.onScoreUpdate(this.score);
+            this.sound.playBackflipSuccess();
+            this.floatingTexts.push({
+              text: `Backflip! +${bonus}`,
+              x: this.player.x + this.player.width / 2,
+              y: this.player.y - 10,
+              opacity: 1,
+              velocityY: -1.5,
+            });
+            this.player.backflipAngle = 0;
+          }
+          this.player.ridingObstacle = obs;
+          this.player.y = obs.y - this.player.height;
+          this.player.velocityY = 0;
+          this.player.isOnGround = false;
+          this.player.jumpCount = 0;
+        }
+      } else {
+        if (checkCollision(this.player, obs)) {
+          this.state = GameState.GAME_OVER;
+          this.sound.stopMusic();
+          this.sound.playCrash();
+          this.callbacks.onStateChange(this.state);
+          this.callbacks.onGameOver(this.score);
+          return;
+        }
       }
     }
   }
@@ -180,6 +296,9 @@ export class Engine {
       drawObstacle(ctx, obs);
     }
     drawPlayer(ctx, this.player);
+    for (const ft of this.floatingTexts) {
+      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity);
+    }
   }
 
   getScore(): number {
@@ -210,8 +329,12 @@ export class Engine {
     }
   }
 
-  setMuted(muted: boolean): void {
-    this.sound.setMuted(muted);
+  setMusicMuted(muted: boolean): void {
+    this.sound.setMusicMuted(muted);
+  }
+
+  setSfxMuted(muted: boolean): void {
+    this.sound.setSfxMuted(muted);
   }
 
   destroy(): void {

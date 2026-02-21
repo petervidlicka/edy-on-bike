@@ -7,7 +7,9 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.SMALL_TREE]:      { width: 22, height: 48 },
   [ObstacleType.SHOPPING_TROLLEY]:{ width: 38, height: 38 },
   [ObstacleType.CAR]:             { width: 80, height: 42 },
-  [ObstacleType.PERSON_ON_BIKE]:  { width: 38, height: 52 },
+  [ObstacleType.PERSON_ON_BIKE]:     { width: 38, height: 52 },
+  [ObstacleType.BUS_STOP]:           { width: 60, height: 55 },
+  [ObstacleType.SHIPPING_CONTAINER]: { width: 90, height: 45 },
 };
 
 type WeightedType = { type: ObstacleType; weight: number };
@@ -24,6 +26,10 @@ function getWeightedTypes(elapsedMs: number): WeightedType[] {
     { type: ObstacleType.SMALL_TREE, weight: basicWeight },
   ];
   if (elapsedMs >= 20_000) types.push({ type: ObstacleType.SHOPPING_TROLLEY, weight: 1.0 });
+  if (elapsedMs >= 35_000) {
+    types.push({ type: ObstacleType.BUS_STOP,           weight: 0.8 });
+    types.push({ type: ObstacleType.SHIPPING_CONTAINER,  weight: 0.8 });
+  }
   if (elapsedMs >= 50_000) {
     types.push({ type: ObstacleType.CAR,            weight: 1.0 });
     types.push({ type: ObstacleType.PERSON_ON_BIKE, weight: 1.0 });
@@ -54,6 +60,7 @@ export function spawnObstacle(
     y: groundY - spec.height,
     width: spec.width,
     height: spec.height,
+    rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER,
   };
 }
 

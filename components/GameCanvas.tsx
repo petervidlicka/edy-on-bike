@@ -15,7 +15,8 @@ export default function GameCanvas() {
   const [score, setScore] = useState(0);
   const [speed, setSpeed] = useState(INITIAL_SPEED);
   const [bestScore, setBestScore] = useState(0);
-  const [muted, setMuted] = useState(false);
+  const [musicMuted, setMusicMuted] = useState(false);
+  const [sfxMuted, setSfxMuted] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -66,6 +67,10 @@ export default function GameCanvas() {
         engine.restart();
       }
     }
+    if (e.code === "ArrowDown") {
+      e.preventDefault();
+      engineRef.current?.backflip();
+    }
   }, []);
 
   useEffect(() => {
@@ -96,8 +101,12 @@ export default function GameCanvas() {
   }, [handleTouch]);
 
   useEffect(() => {
-    engineRef.current?.setMuted(muted);
-  }, [muted]);
+    engineRef.current?.setMusicMuted(musicMuted);
+  }, [musicMuted]);
+
+  useEffect(() => {
+    engineRef.current?.setSfxMuted(sfxMuted);
+  }, [sfxMuted]);
 
   // Pause when tab is hidden or device is in portrait (mobile) — resumes on the inverse.
   // A single checkPause fn handles both triggers so they don't conflict.
@@ -148,8 +157,11 @@ export default function GameCanvas() {
         <HUD
           score={score}
           speed={speed}
-          muted={muted}
-          onToggleMute={() => setMuted((m) => !m)}
+          musicMuted={musicMuted}
+          sfxMuted={sfxMuted}
+          onToggleMusic={() => setMusicMuted((m) => !m)}
+          onToggleSfx={() => setSfxMuted((m) => !m)}
+          onBackflip={() => engineRef.current?.backflip()}
         />
       )}
 

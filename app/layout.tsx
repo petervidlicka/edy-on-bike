@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Nunito, Space_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -14,9 +14,22 @@ const spaceMono = Space_Mono({
   weight: ["400", "700"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
+
 export const metadata: Metadata = {
   title: "Edy on Bike",
   description: "A BMX side-scroller game",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Edy on Bike",
+  },
 };
 
 export default function RootLayout({

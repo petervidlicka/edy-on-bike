@@ -10,10 +10,26 @@ function getFullscreenElement(): Element | null {
   );
 }
 
-export default function OrientationGuard({ children }: { children: React.ReactNode }) {
+/** True when running as an installed PWA or launched from Home Screen. */
+function isStandaloneMode(): boolean {
+  if (window.matchMedia("(display-mode: standalone)").matches) return true;
+  if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
+  // iOS Safari standalone detection
+  if ((navigator as unknown as { standalone?: boolean }).standalone === true)
+    return true;
+  return false;
+}
+
+type PromptMode = "hidden" | "fullscreen" | "install";
+
+export default function OrientationGuard({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [showOverlay, setShowOverlay] = useState(false);
-  const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
+  const [prompt, setPrompt] = useState<PromptMode>("hidden");
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearDismissTimer = useCallback(() => {
@@ -23,50 +39,80 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
     }
   }, []);
 
-  // Must be called synchronously inside a user-gesture handler (click).
-  // Uses the container div as the fullscreen target — Safari rejects
-  // requestFullscreen on document.documentElement.
+  const showTimedPrompt = useCallback(
+    (mode: PromptMode) => {
+      setPrompt(mode);
+      clearDismissTimer();
+      dismissTimer.current = setTimeout(() => {
+        setPrompt("hidden");
+      }, 6000);
+    },
+    [clearDismissTimer],
+  );
+
+  // Tap handler: try the Fullscreen API, fall back to "Add to Home Screen".
   const handleFullscreenTap = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
 
       if (getFullscreenElement()) {
-        setShowFullscreenPrompt(false);
+        setPrompt("hidden");
         clearDismissTimer();
         return;
       }
 
       const el = containerRef.current ?? document.documentElement;
+
+      // Try standard API
       if (el.requestFullscreen) {
-        el.requestFullscreen().catch(() => {});
-      } else {
-        const webkit = el as unknown as { webkitRequestFullscreen?: () => void };
-        if (webkit.webkitRequestFullscreen) {
-          webkit.webkitRequestFullscreen();
-        }
+        el.requestFullscreen()
+          .then(() => {
+            setPrompt("hidden");
+            clearDismissTimer();
+          })
+          .catch(() => {
+            // API exists but was rejected — show install hint
+            showTimedPrompt("install");
+          });
+        return;
       }
+
+      // Try webkit-prefixed API
+      const webkit = el as unknown as {
+        webkitRequestFullscreen?: () => void;
+      };
+      if (webkit.webkitRequestFullscreen) {
+        try {
+          webkit.webkitRequestFullscreen();
+          // No promise — rely on fullscreenchange event to hide prompt
+        } catch {
+          showTimedPrompt("install");
+        }
+        return;
+      }
+
+      // API not available at all — show install hint
+      showTimedPrompt("install");
     },
-    [clearDismissTimer],
+    [clearDismissTimer, showTimedPrompt],
   );
 
   useEffect(() => {
     const check = () => {
       const portrait = window.matchMedia("(orientation: portrait)").matches;
-      // Only block on touch devices — desktop portrait windows are fine
       const touch = window.matchMedia("(pointer: coarse)").matches;
       setShowOverlay(portrait && touch);
 
-      // When rotating to landscape on mobile, show the fullscreen prompt
-      // (auto-requesting fullscreen here would fail — it requires a user gesture)
-      if (!portrait && touch && !getFullscreenElement()) {
-        setShowFullscreenPrompt(true);
-        clearDismissTimer();
-        dismissTimer.current = setTimeout(() => {
-          setShowFullscreenPrompt(false);
-        }, 5000);
+      if (
+        !portrait &&
+        touch &&
+        !getFullscreenElement() &&
+        !isStandaloneMode()
+      ) {
+        showTimedPrompt("fullscreen");
       } else {
-        setShowFullscreenPrompt(false);
+        setPrompt("hidden");
         clearDismissTimer();
       }
     };
@@ -74,13 +120,11 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
     check();
     const mq = window.matchMedia("(orientation: portrait)");
     mq.addEventListener("change", check);
-    // Legacy fallback
     window.addEventListener("orientationchange", check);
 
-    // Hide prompt once fullscreen is entered (by tap or any other means)
     const onFsChange = () => {
       if (getFullscreenElement()) {
-        setShowFullscreenPrompt(false);
+        setPrompt("hidden");
         clearDismissTimer();
       }
     };
@@ -94,13 +138,18 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
       document.removeEventListener("webkitfullscreenchange", onFsChange);
       clearDismissTimer();
     };
-  }, [clearDismissTimer]);
+  }, [clearDismissTimer, showTimedPrompt]);
+
+  const isIOS =
+    typeof navigator !== "undefined" &&
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
 
   return (
     <div ref={containerRef}>
       {children}
 
-      {showFullscreenPrompt && (
+      {prompt === "fullscreen" && (
         <button
           onClick={handleFullscreenTap}
           style={{
@@ -127,6 +176,69 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
         >
           Tap for fullscreen
         </button>
+      )}
+
+      {prompt === "install" && (
+        <div
+          onClick={() => {
+            setPrompt("hidden");
+            clearDismissTimer();
+          }}
+          style={{
+            position: "fixed",
+            bottom: "1.5rem",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9998,
+            background: "rgba(30,41,59,0.95)",
+            color: "#b8c6d4",
+            border: "1px solid rgba(196,120,90,0.4)",
+            borderRadius: "1rem",
+            padding: "0.75rem 1.5rem",
+            fontSize: "0.85rem",
+            fontWeight: 600,
+            fontFamily: "var(--font-nunito), Arial, sans-serif",
+            textAlign: "center",
+            lineHeight: 1.5,
+            boxShadow: "0 2px 16px rgba(0,0,0,0.4)",
+            touchAction: "manipulation",
+            WebkitTapHighlightColor: "transparent",
+            animation: "fadeInUp 0.3s ease-out",
+            cursor: "pointer",
+            maxWidth: "90vw",
+          }}
+        >
+          {isIOS ? (
+            <>
+              Tap{" "}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  display: "inline",
+                  verticalAlign: "middle",
+                  margin: "0 0.15em",
+                }}
+              >
+                <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>{" "}
+              then <strong>&quot;Add to Home Screen&quot;</strong> for fullscreen
+            </>
+          ) : (
+            <>
+              Open browser menu → <strong>Add to Home Screen</strong> for
+              fullscreen
+            </>
+          )}
+        </div>
       )}
 
       {showOverlay && (

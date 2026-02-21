@@ -8,6 +8,7 @@ interface HUDProps {
   onToggleMusic: () => void;
   onToggleSfx: () => void;
   onBackflip: () => void;
+  onFrontflip: () => void;
 }
 
 function MusicIcon({ muted }: { muted: boolean }) {
@@ -84,6 +85,7 @@ export default function HUD({
   onToggleMusic,
   onToggleSfx,
   onBackflip,
+  onFrontflip,
 }: HUDProps) {
   const multiplier = (speed / INITIAL_SPEED).toFixed(1);
 
@@ -149,7 +151,35 @@ export default function HUD({
         </button>
       </div>
 
-      {/* Backflip button — bottom right (mobile) */}
+      {/* Trick buttons — bottom corners (mobile) */}
+      <button
+        onTouchStart={(e) => {
+          e.preventDefault();
+          onFrontflip();
+        }}
+        title="Frontflip (↑)"
+        style={{
+          position: "fixed",
+          bottom: "2rem",
+          left: "1.5rem",
+          width: "56px",
+          height: "56px",
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.35)",
+          border: "2px solid rgba(30,41,59,0.3)",
+          color: "#1e293b",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+        }}
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 15 12 9 18 15" />
+        </svg>
+      </button>
+
       <button
         onTouchStart={(e) => {
           e.preventDefault();
@@ -173,17 +203,7 @@ export default function HUD({
           padding: 0,
         }}
       >
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* Down-arrow chevron */}
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>

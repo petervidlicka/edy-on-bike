@@ -51,6 +51,10 @@ export default function GameCanvas() {
     };
   }, []);
 
+  const handleRestart = useCallback(() => {
+    engineRef.current?.restart();
+  }, []);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.code === "Space") {
       // Don't intercept space when user is typing in an input
@@ -63,13 +67,16 @@ export default function GameCanvas() {
       const state = engine.getState();
       if (state === GameState.IDLE || state === GameState.RUNNING) {
         engine.jump();
-      } else if (state === GameState.GAME_OVER) {
-        engine.restart();
       }
+      // GAME_OVER is fully handled by GameOverScreen's own keydown listener
     }
     if (e.code === "ArrowDown") {
       e.preventDefault();
       engineRef.current?.backflip();
+    }
+    if (e.code === "ArrowUp") {
+      e.preventDefault();
+      engineRef.current?.frontflip();
     }
   }, []);
 
@@ -88,9 +95,8 @@ export default function GameCanvas() {
     const state = engine.getState();
     if (state === GameState.IDLE || state === GameState.RUNNING) {
       engine.jump();
-    } else if (state === GameState.GAME_OVER) {
-      engine.restart();
     }
+    // GAME_OVER touch is handled by the "Play Again" button in GameOverScreen
   }, []);
 
   useEffect(() => {
@@ -162,11 +168,12 @@ export default function GameCanvas() {
           onToggleMusic={() => setMusicMuted((m) => !m)}
           onToggleSfx={() => setSfxMuted((m) => !m)}
           onBackflip={() => engineRef.current?.backflip()}
+          onFrontflip={() => engineRef.current?.frontflip()}
         />
       )}
 
       {gameState === GameState.GAME_OVER && (
-        <GameOverScreen score={score} bestScore={bestScore} />
+        <GameOverScreen score={score} bestScore={bestScore} onRestart={handleRestart} />
       )}
     </>
   );

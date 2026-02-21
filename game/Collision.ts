@@ -4,8 +4,9 @@ import { PlayerState, ObstacleInstance } from "./types";
 // so near-misses feel fair rather than frustrating.
 const HITBOX_PADDING = 8;
 
-// How many pixels from the obstacle top counts as "landing on top"
-const TOP_LANDING_TOLERANCE = 12;
+// How many pixels from the obstacle top counts as "landing on top".
+// Must be larger than the max fall distance per frame (~18px at peak velocity).
+const TOP_LANDING_TOLERANCE = 30;
 
 export function checkCollision(player: PlayerState, obstacle: ObstacleInstance): boolean {
   return (
@@ -28,7 +29,9 @@ export function checkRideableCollision(
   const py2 = player.y + player.height - HITBOX_PADDING;
   const ox1 = obstacle.x + HITBOX_PADDING;
   const ox2 = obstacle.x + obstacle.width - HITBOX_PADDING;
-  const oy1 = obstacle.y + HITBOX_PADDING;
+  // For rideable obstacles the visual top IS the landing surface — no top padding.
+  // Side and bottom padding remain so near-misses feel forgiving.
+  const oy1 = obstacle.y;
   const oy2 = obstacle.y + obstacle.height - HITBOX_PADDING;
 
   // No overlap at all

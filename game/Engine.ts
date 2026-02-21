@@ -7,7 +7,7 @@ import {
   SCORE_PER_PX,
   BACKFLIP_BONUS,
 } from "./constants";
-import { createPlayer, updatePlayer, jumpPlayer, startBackflip } from "./Player";
+import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
 import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./Renderer";
 import { spawnObstacle, nextSpawnGap } from "./Obstacle";
@@ -122,6 +122,11 @@ export class Engine {
     startBackflip(this.player);
   }
 
+  frontflip(): void {
+    if (this.state !== GameState.RUNNING) return;
+    startFrontflip(this.player);
+  }
+
   private loop(timestamp: number): void {
     if (this.lastTime === 0) this.lastTime = timestamp;
     const rawDt = timestamp - this.lastTime;
@@ -159,30 +164,54 @@ export class Engine {
     const wasAirborne = !this.player.isOnGround;
     const wasBackflipping = this.player.isBackflipping;
     const prevBackflipAngle = this.player.backflipAngle;
+    const prevFlipDirection = this.player.flipDirection;
     updatePlayer(this.player, dt, this.groundY, this.speed);
     updateLayers(this.layers, this.speed, dt);
 
-    // Backflip landing check — player just touched the ground
+    // Flip landing tolerance: allow landing with up to 30° remaining
+    const FLIP_TOLERANCE = Math.PI / 6; // 30 degrees
+    const FULL_FLIP = Math.PI * 2;
+
+    // Flip landing check — player just touched the ground
     if (wasAirborne && this.player.isOnGround) {
       if (wasBackflipping) {
-        // Incomplete backflip on landing → crash
-        this.state = GameState.GAME_OVER;
-        this.sound.stopMusic();
-        this.sound.playCrash();
-        this.callbacks.onStateChange(this.state);
-        this.callbacks.onGameOver(this.score);
-        return;
-      }
-      // Completed backflip(s) — award bonus for each full rotation
-      if (prevBackflipAngle >= Math.PI * 2) {
-        const flips = Math.floor(prevBackflipAngle / (Math.PI * 2));
+        if (prevBackflipAngle >= FULL_FLIP - FLIP_TOLERANCE) {
+          // Within tolerance — count as completed flip
+          const bonus = BACKFLIP_BONUS;
+          this.score += bonus;
+          this.distance = this.score * SCORE_PER_PX;
+          this.callbacks.onScoreUpdate(this.score);
+          this.sound.playBackflipSuccess();
+          const label = prevFlipDirection >= 0 ? "Backflip" : "Frontflip";
+          this.floatingTexts.push({
+            text: `${label}! +${bonus}`,
+            x: this.player.x + this.player.width / 2,
+            y: this.player.y - 10,
+            opacity: 1,
+            velocityY: -1.5,
+          });
+          this.player.backflipAngle = 0;
+          this.player.isBackflipping = false;
+        } else {
+          // Too incomplete — crash
+          this.state = GameState.GAME_OVER;
+          this.sound.stopMusic();
+          this.sound.playCrash();
+          this.callbacks.onStateChange(this.state);
+          this.callbacks.onGameOver(this.score);
+          return;
+        }
+      } else if (prevBackflipAngle >= FULL_FLIP) {
+        // Completed flip(s) — award bonus for each full rotation
+        const flips = Math.floor(prevBackflipAngle / FULL_FLIP);
         const bonus = flips * BACKFLIP_BONUS;
         this.score += bonus;
         this.distance = this.score * SCORE_PER_PX;
         this.callbacks.onScoreUpdate(this.score);
         this.sound.playBackflipSuccess();
+        const label = prevFlipDirection >= 0 ? "Backflip" : "Frontflip";
         this.floatingTexts.push({
-          text: `Backflip! +${bonus}`,
+          text: `${label}! +${bonus}`,
           x: this.player.x + this.player.width / 2,
           y: this.player.y - 10,
           opacity: 1,
@@ -195,7 +224,7 @@ export class Engine {
     // Update floating texts (float up + fade out)
     for (const ft of this.floatingTexts) {
       ft.y += ft.velocityY * dt;
-      ft.opacity -= 0.02 * dt;
+      ft.opacity -= 0.01333 * dt;
     }
     this.floatingTexts = this.floatingTexts.filter((ft) => ft.opacity > 0);
 
@@ -243,25 +272,44 @@ export class Engine {
           return;
         }
         if (result === "land_on_top") {
-          // Incomplete backflip when landing on rideable → crash
           if (this.player.isBackflipping) {
-            this.state = GameState.GAME_OVER;
-            this.sound.stopMusic();
-            this.sound.playCrash();
-            this.callbacks.onStateChange(this.state);
-            this.callbacks.onGameOver(this.score);
-            return;
-          }
-          // Award completed backflip bonus
-          if (this.player.backflipAngle >= Math.PI * 2) {
-            const flips = Math.floor(this.player.backflipAngle / (Math.PI * 2));
+            if (this.player.backflipAngle >= FULL_FLIP - FLIP_TOLERANCE) {
+              // Within tolerance — award as completed flip
+              const bonus = BACKFLIP_BONUS;
+              this.score += bonus;
+              this.distance = this.score * SCORE_PER_PX;
+              this.callbacks.onScoreUpdate(this.score);
+              this.sound.playBackflipSuccess();
+              const label = this.player.flipDirection >= 0 ? "Backflip" : "Frontflip";
+              this.floatingTexts.push({
+                text: `${label}! +${bonus}`,
+                x: this.player.x + this.player.width / 2,
+                y: this.player.y - 10,
+                opacity: 1,
+                velocityY: -1.5,
+              });
+              this.player.backflipAngle = 0;
+              this.player.isBackflipping = false;
+            } else {
+              // Too incomplete → crash
+              this.state = GameState.GAME_OVER;
+              this.sound.stopMusic();
+              this.sound.playCrash();
+              this.callbacks.onStateChange(this.state);
+              this.callbacks.onGameOver(this.score);
+              return;
+            }
+          } else if (this.player.backflipAngle >= FULL_FLIP) {
+            // Completed flip(s)
+            const flips = Math.floor(this.player.backflipAngle / FULL_FLIP);
             const bonus = flips * BACKFLIP_BONUS;
             this.score += bonus;
             this.distance = this.score * SCORE_PER_PX;
             this.callbacks.onScoreUpdate(this.score);
             this.sound.playBackflipSuccess();
+            const label = this.player.flipDirection >= 0 ? "Backflip" : "Frontflip";
             this.floatingTexts.push({
-              text: `Backflip! +${bonus}`,
+              text: `${label}! +${bonus}`,
               x: this.player.x + this.player.width / 2,
               y: this.player.y - 10,
               opacity: 1,

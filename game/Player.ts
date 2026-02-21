@@ -18,6 +18,7 @@ export function createPlayer(groundY: number, canvasWidth: number): PlayerState 
     ridingObstacle: null,
     backflipAngle: 0,
     isBackflipping: false,
+    flipDirection: 1,
   };
 }
 
@@ -43,6 +44,17 @@ export function startBackflip(player: PlayerState): boolean {
   }
   player.isBackflipping = true;
   player.backflipAngle = 0;
+  player.flipDirection = 1;
+  return true;
+}
+
+export function startFrontflip(player: PlayerState): boolean {
+  if (player.isOnGround || player.isBackflipping || player.ridingObstacle) {
+    return false;
+  }
+  player.isBackflipping = true;
+  player.backflipAngle = 0;
+  player.flipDirection = -1;
   return true;
 }
 

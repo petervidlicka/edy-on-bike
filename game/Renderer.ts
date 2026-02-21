@@ -435,7 +435,7 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
-  const { x, y, wheelRotation, bikeTilt, riderLean, riderCrouch, legTuck, backflipAngle } = player;
+  const { x, y, wheelRotation, bikeTilt, riderLean, riderCrouch, legTuck, backflipAngle, flipDirection } = player;
   const c = COLORS.player;
 
   // BMX proportions matched to Figma reference — long wheelbase, low frame
@@ -450,12 +450,12 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
 
   ctx.save();
 
-  // Backflip rotation — rotate entire player around center
+  // Flip rotation — backflip (CCW) or frontflip (CW) around player center
   if (backflipAngle > 0) {
     const centerX = x + player.width / 2;
     const centerY = y + player.height / 2;
     ctx.translate(centerX, centerY);
-    ctx.rotate(-backflipAngle);
+    ctx.rotate(-backflipAngle * flipDirection);
     ctx.translate(-centerX, -centerY);
   }
 
@@ -783,6 +783,56 @@ function drawSmallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.stroke();
   ctx.beginPath();
   ctx.ellipse(cx + w * 0.05, y + h * 0.18, w * 0.32, h * 0.14, 0.1, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawTallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const c = COLORS.obstacle;
+  const cx = x + w / 2;
+
+  // Slender trunk (narrower than small tree, takes ~25% of height)
+  ctx.fillStyle = c.treeTrunk;
+  ctx.fillRect(cx - w * 0.08, y + h * 0.75, w * 0.16, h * 0.25);
+  // Bark line
+  ctx.strokeStyle = c.treeTrunkShadow;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.02, y + h * 0.77);
+  ctx.lineTo(cx - w * 0.01, y + h * 0.98);
+  ctx.stroke();
+
+  // Tall narrow canopy — cypress/poplar silhouette (two elongated blobs)
+  // Main body: tall narrow oval
+  ctx.fillStyle = c.tree;
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.42, w * 0.38, h * 0.35, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Top pointed section
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.14, w * 0.22, h * 0.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Side wisps (small blobs left and right to break the silhouette)
+  ctx.beginPath();
+  ctx.ellipse(cx - w * 0.25, y + h * 0.5, w * 0.15, h * 0.1, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.25, y + h * 0.45, w * 0.15, h * 0.1, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Highlight (right-facing light)
+  ctx.fillStyle = c.treeHighlight;
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.12, y + h * 0.38, w * 0.16, h * 0.18, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.08, y + h * 0.12, w * 0.1, h * 0.1, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outline (just the outer body)
+  ctx.strokeStyle = c.treeTrunkShadow;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.42, w * 0.38, h * 0.35, 0, 0, Math.PI * 2);
   ctx.stroke();
 }
 
@@ -1167,6 +1217,7 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleIn
   switch (type) {
     case ObstacleType.ROCK:               drawRock(ctx, x, y, w, h); break;
     case ObstacleType.SMALL_TREE:         drawSmallTree(ctx, x, y, w, h); break;
+    case ObstacleType.TALL_TREE:          drawTallTree(ctx, x, y, w, h); break;
     case ObstacleType.SHOPPING_TROLLEY:   drawShoppingTrolley(ctx, x, y, w, h); break;
     case ObstacleType.CAR:                drawCar(ctx, x, y, w, h); break;
     case ObstacleType.PERSON_ON_BIKE:     drawPersonOnBike(ctx, x, y, w, h); break;
@@ -1186,7 +1237,7 @@ export function drawFloatingText(
 ) {
   ctx.save();
   ctx.globalAlpha = Math.max(0, opacity);
-  ctx.font = "bold 16px sans-serif";
+  ctx.font = "bold 21px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   // Dark outline

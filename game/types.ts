@@ -7,6 +7,7 @@ export enum GameState {
 export enum ObstacleType {
   ROCK = "ROCK",
   SMALL_TREE = "SMALL_TREE",
+  TALL_TREE = "TALL_TREE",
   SHOPPING_TROLLEY = "SHOPPING_TROLLEY",
   CAR = "CAR",
   PERSON_ON_BIKE = "PERSON_ON_BIKE",
@@ -33,10 +34,12 @@ export interface PlayerState {
   legTuck: number;
   /** When riding on top of a rideable obstacle, this is the obstacle reference. null otherwise. */
   ridingObstacle: ObstacleInstance | null;
-  /** Backflip rotation angle in radians. 0 = not flipping, 2*PI = complete. */
+  /** Flip rotation angle in radians. 0 = not flipping, 2*PI = complete. */
   backflipAngle: number;
-  /** Whether a backflip is in progress. */
+  /** Whether a flip trick is in progress. */
   isBackflipping: boolean;
+  /** Rotation direction: 1 = backflip (CCW), -1 = frontflip (CW). */
+  flipDirection: number;
 }
 
 export interface ObstacleInstance {

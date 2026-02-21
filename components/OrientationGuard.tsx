@@ -27,6 +27,7 @@ export default function OrientationGuard({
 }: {
   children: React.ReactNode;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [showOverlay, setShowOverlay] = useState(false);
   const [prompt, setPrompt] = useState<PromptMode>("hidden");
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -61,7 +62,7 @@ export default function OrientationGuard({
         return;
       }
 
-      const el = document.documentElement;
+      const el = containerRef.current ?? document.documentElement;
 
       // Try standard API
       if (el.requestFullscreen) {
@@ -145,7 +146,7 @@ export default function OrientationGuard({
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
 
   return (
-    <>
+    <div ref={containerRef}>
       {children}
 
       {prompt === "fullscreen" && (
@@ -318,6 +319,6 @@ export default function OrientationGuard({
           </p>
         </div>
       )}
-    </>
+    </div>
   );
 }

@@ -91,13 +91,11 @@ export function updatePlayer(
   // Wheel rotation synced to game speed
   player.wheelRotation += speed * dt * 0.08;
 
-  // --- Backflip rotation ---
+  // --- Backflip / frontflip rotation ---
+  // Angle grows unbounded so the engine can count completed rotations on landing.
+  // isBackflipping stays true until Engine resets it on a successful landing.
   if (player.isBackflipping) {
     player.backflipAngle += BACKFLIP_SPEED * dt;
-    if (player.backflipAngle >= Math.PI * 2) {
-      player.backflipAngle = Math.PI * 2;
-      player.isBackflipping = false;
-    }
   }
 
   // --- Bunnyhop animation ---

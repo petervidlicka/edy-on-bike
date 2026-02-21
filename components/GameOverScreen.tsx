@@ -75,7 +75,9 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
       e.preventDefault();
       e.stopImmediatePropagation(); // prevent GameCanvas from also handling Space
       if (step === 1) {
-        const savedName = localStorage.getItem("edy-player-name") ?? name;
+        // Fall back to "Anonymous" so a first-time player's score is never lost
+        const savedName =
+          (localStorage.getItem("edy-player-name") ?? name).trim() || "Anonymous";
         saveAndAdvance(savedName);
       } else {
         onRestart();

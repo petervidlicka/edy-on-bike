@@ -336,7 +336,7 @@ export class Engine {
     this.isPaused = true;
     cancelAnimationFrame(this.rafId);
     if (this.state === GameState.RUNNING) {
-      this.sound.stopMusic();
+      this.sound.pauseMusic();
     }
   }
 
@@ -346,7 +346,7 @@ export class Engine {
     this.lastTime = 0; // reset so dt doesn't spike after a long pause
     this.rafId = requestAnimationFrame(this.loop);
     if (this.state === GameState.RUNNING) {
-      this.sound.startMusic();
+      this.sound.resumeMusic();
     }
   }
 

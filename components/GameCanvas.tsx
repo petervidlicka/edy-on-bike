@@ -73,9 +73,59 @@ export default function GameCanvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  const handleTouch = useCallback((e: TouchEvent) => {
+    // Don't intercept taps on interactive overlays (name input, submit button)
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    e.preventDefault();
+    const engine = engineRef.current;
+    if (!engine) return;
+    const state = engine.getState();
+    if (state === GameState.IDLE || state === GameState.RUNNING) {
+      engine.jump();
+    } else if (state === GameState.GAME_OVER) {
+      engine.restart();
+    }
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener("touchstart", handleTouch, { passive: false });
+    return () => canvas.removeEventListener("touchstart", handleTouch);
+  }, [handleTouch]);
+
   useEffect(() => {
     engineRef.current?.setMuted(muted);
   }, [muted]);
+
+  // Pause when tab is hidden or device is in portrait (mobile) — resumes on the inverse.
+  // A single checkPause fn handles both triggers so they don't conflict.
+  const checkPause = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const isHidden = document.hidden;
+    const isPortraitMobile =
+      window.matchMedia("(orientation: portrait)").matches &&
+      window.matchMedia("(pointer: coarse)").matches;
+    if (isHidden || isPortraitMobile) {
+      engine.pause();
+    } else {
+      engine.resume();
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("visibilitychange", checkPause);
+    const mq = window.matchMedia("(orientation: portrait)");
+    mq.addEventListener("change", checkPause);
+    window.addEventListener("orientationchange", checkPause);
+    return () => {
+      document.removeEventListener("visibilitychange", checkPause);
+      mq.removeEventListener("change", checkPause);
+      window.removeEventListener("orientationchange", checkPause);
+    };
+  }, [checkPause]);
 
   return (
     <>
@@ -88,6 +138,7 @@ export default function GameCanvas() {
           width: "100vw",
           height: "100vh",
           display: "block",
+          touchAction: "none", // prevent pull-to-refresh / swipe-back on mobile
         }}
       />
 

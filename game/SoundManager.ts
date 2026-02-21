@@ -1,7 +1,35 @@
+// Melody: [frequency_hz, duration_s]. freq=0 means rest.
+// C pentatonic arpeggio at ~140 BPM, square wave at low volume for a chiptune feel.
+const MELODY: [number, number][] = [
+  [523.25, 0.10], // C5
+  [0,      0.05],
+  [659.25, 0.10], // E5
+  [0,      0.05],
+  [783.99, 0.10], // G5
+  [0,      0.05],
+  [659.25, 0.10], // E5
+  [0,      0.05],
+  [880.00, 0.10], // A5
+  [0,      0.05],
+  [659.25, 0.10], // E5
+  [0,      0.05],
+  [587.33, 0.15], // D5
+  [0,      0.05],
+  [523.25, 0.15], // C5
+  [0,      0.15], // pause at bar end
+];
+
+const MELODY_DURATION = MELODY.reduce((sum, [, d]) => sum + d, 0);
+
 export class SoundManager {
   // AudioContext is created lazily on first play to satisfy browser autoplay policy
   private ctx: AudioContext | null = null;
   private muted = false;
+  private musicPlaying = false;
+  private musicTimeout: ReturnType<typeof setTimeout> | null = null;
+  private musicNextStart = 0;
+  // Master gain node for music — lets us silence already-scheduled oscillators instantly
+  private musicGain: GainNode | null = null;
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
@@ -12,6 +40,25 @@ export class SoundManager {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
+    if (muted) {
+      // Cancel next scheduled bar and instantly fade master gain to silence
+      // already-scheduled oscillators for the current bar
+      if (this.musicTimeout) {
+        clearTimeout(this.musicTimeout);
+        this.musicTimeout = null;
+      }
+      if (this.musicGain && this.ctx) {
+        this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
+      }
+    } else if (this.musicPlaying) {
+      // Restore master gain and resume scheduling from now
+      const ctx = this.getCtx();
+      if (this.musicGain) {
+        this.musicGain.gain.setTargetAtTime(1, ctx.currentTime, 0.015);
+      }
+      this.musicNextStart = ctx.currentTime + 0.05;
+      this.scheduleMusicBar();
+    }
   }
 
   // isDouble = true for the second (in-air) jump — higher pitch
@@ -91,7 +138,64 @@ export class SoundManager {
     clang.stop(now + 0.28);
   }
 
+  startMusic(): void {
+    if (this.musicPlaying) return;
+    this.musicPlaying = true;
+    if (this.muted) return;
+    const ctx = this.getCtx();
+    // Fresh master gain node each time music starts
+    this.musicGain = ctx.createGain();
+    this.musicGain.gain.setValueAtTime(1, ctx.currentTime);
+    this.musicGain.connect(ctx.destination);
+    this.musicNextStart = ctx.currentTime + 0.05;
+    this.scheduleMusicBar();
+  }
+
+  stopMusic(): void {
+    this.musicPlaying = false;
+    if (this.musicTimeout) {
+      clearTimeout(this.musicTimeout);
+      this.musicTimeout = null;
+    }
+    // Quickly fade master gain to silence already-scheduled notes
+    if (this.musicGain && this.ctx) {
+      this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
+    }
+  }
+
+  private scheduleMusicBar(): void {
+    if (!this.musicPlaying || this.muted) return;
+    const ctx = this.getCtx();
+    let t = this.musicNextStart;
+
+    for (const [freq, dur] of MELODY) {
+      if (freq > 0) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.musicGain!); // route through master gain, not directly to destination
+        osc.type = "square";
+        osc.frequency.value = freq;
+        // Low volume with quick fade for a plucky chiptune feel
+        gain.gain.setValueAtTime(0.04, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.85);
+        osc.start(t);
+        osc.stop(t + dur);
+      }
+      t += dur;
+    }
+
+    // Schedule next bar ~50ms before current one ends to avoid gaps
+    this.musicNextStart += MELODY_DURATION;
+    const msUntilNext = (this.musicNextStart - ctx.currentTime - 0.05) * 1000;
+    this.musicTimeout = setTimeout(
+      () => this.scheduleMusicBar(),
+      Math.max(0, msUntilNext),
+    );
+  }
+
   destroy(): void {
+    this.stopMusic();
     this.ctx?.close();
     this.ctx = null;
   }

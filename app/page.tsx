@@ -1,7 +1,12 @@
 "use client";
 
 import GameCanvas from "@/components/GameCanvas";
+import OrientationGuard from "@/components/OrientationGuard";
 
 export default function Home() {
-  return <GameCanvas />;
+  return (
+    <OrientationGuard>
+      <GameCanvas />
+    </OrientationGuard>
+  );
 }

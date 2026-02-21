@@ -2,24 +2,21 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
-function isFullscreen(): boolean {
-  return !!(
+function getFullscreenElement(): Element | null {
+  return (
     document.fullscreenElement ||
     (document as unknown as { webkitFullscreenElement: Element | null })
       .webkitFullscreenElement
   );
 }
 
-function requestFullscreen(el: HTMLElement): Promise<void> {
-  if (el.requestFullscreen) {
-    return el.requestFullscreen();
-  }
-  const webkit = el as unknown as { webkitRequestFullscreen?: () => void };
-  if (webkit.webkitRequestFullscreen) {
-    webkit.webkitRequestFullscreen();
-    return Promise.resolve();
-  }
-  return Promise.reject(new Error("Fullscreen API not supported"));
+function canFullscreen(): boolean {
+  const el = document.documentElement;
+  return !!(
+    el.requestFullscreen ||
+    (el as unknown as { webkitRequestFullscreen?: () => void })
+      .webkitRequestFullscreen
+  );
 }
 
 export default function OrientationGuard({ children }: { children: React.ReactNode }) {
@@ -34,27 +31,31 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
     }
   }, []);
 
-  const tryFullscreen = useCallback(() => {
-    if (isFullscreen()) return;
-    requestFullscreen(document.documentElement)
-      .then(() => {
-        setShowFullscreenPrompt(false);
-        clearDismissTimer();
-      })
-      .catch(() => {
-        // Fullscreen needs a user gesture — show tap prompt
-        setShowFullscreenPrompt(true);
-        clearDismissTimer();
-        dismissTimer.current = setTimeout(() => {
-          setShowFullscreenPrompt(false);
-        }, 5000);
-      });
-  }, [clearDismissTimer]);
-
+  // Must be called synchronously inside a user-gesture handler (pointerup / click).
+  // Tries document.documentElement first, then document.body as fallback.
   const handleFullscreenTap = useCallback(() => {
-    requestFullscreen(document.documentElement).catch(() => {});
-    setShowFullscreenPrompt(false);
-    clearDismissTimer();
+    if (getFullscreenElement()) {
+      setShowFullscreenPrompt(false);
+      clearDismissTimer();
+      return;
+    }
+
+    const targets = [document.documentElement, document.body];
+    for (const el of targets) {
+      try {
+        if (el.requestFullscreen) {
+          el.requestFullscreen().catch(() => {});
+          return; // request dispatched — fullscreenchange will hide the prompt
+        }
+        const webkit = el as unknown as { webkitRequestFullscreen?: () => void };
+        if (webkit.webkitRequestFullscreen) {
+          webkit.webkitRequestFullscreen();
+          return;
+        }
+      } catch {
+        // try next target
+      }
+    }
   }, [clearDismissTimer]);
 
   useEffect(() => {
@@ -64,9 +65,14 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
       const touch = window.matchMedia("(pointer: coarse)").matches;
       setShowOverlay(portrait && touch);
 
-      // When rotating to landscape on mobile, try to enter fullscreen
-      if (!portrait && touch) {
-        tryFullscreen();
+      // When rotating to landscape on mobile, show the fullscreen prompt
+      // (auto-requesting fullscreen here would fail — it requires a user gesture)
+      if (!portrait && touch && !getFullscreenElement() && canFullscreen()) {
+        setShowFullscreenPrompt(true);
+        clearDismissTimer();
+        dismissTimer.current = setTimeout(() => {
+          setShowFullscreenPrompt(false);
+        }, 5000);
       } else {
         setShowFullscreenPrompt(false);
         clearDismissTimer();
@@ -79,9 +85,9 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
     // Legacy fallback
     window.addEventListener("orientationchange", check);
 
-    // Hide prompt if fullscreen is entered via other means
+    // Hide prompt once fullscreen is entered (by tap or any other means)
     const onFsChange = () => {
-      if (isFullscreen()) {
+      if (getFullscreenElement()) {
         setShowFullscreenPrompt(false);
         clearDismissTimer();
       }
@@ -96,7 +102,7 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
       document.removeEventListener("webkitfullscreenchange", onFsChange);
       clearDismissTimer();
     };
-  }, [tryFullscreen, clearDismissTimer]);
+  }, [clearDismissTimer]);
 
   return (
     <>
@@ -104,7 +110,7 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
 
       {showFullscreenPrompt && (
         <button
-          onClick={handleFullscreenTap}
+          onPointerUp={handleFullscreenTap}
           style={{
             position: "fixed",
             bottom: "1.5rem",
@@ -115,13 +121,15 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
             color: "#fff",
             border: "none",
             borderRadius: "2rem",
-            padding: "0.6rem 1.6rem",
-            fontSize: "0.95rem",
+            padding: "0.75rem 2rem",
+            fontSize: "1rem",
             fontWeight: 700,
             fontFamily: "var(--font-nunito), Arial, sans-serif",
             cursor: "pointer",
             boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
             letterSpacing: "0.02em",
+            touchAction: "manipulation",
+            WebkitTapHighlightColor: "transparent",
             animation: "fadeInUp 0.3s ease-out",
           }}
         >

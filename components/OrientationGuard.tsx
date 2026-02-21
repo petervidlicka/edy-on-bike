@@ -10,15 +10,6 @@ function getFullscreenElement(): Element | null {
   );
 }
 
-function canFullscreen(): boolean {
-  const el = document.documentElement;
-  return !!(
-    el.requestFullscreen ||
-    (el as unknown as { webkitRequestFullscreen?: () => void })
-      .webkitRequestFullscreen
-  );
-}
-
 export default function OrientationGuard({ children }: { children: React.ReactNode }) {
   const [showOverlay, setShowOverlay] = useState(false);
   const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
@@ -67,7 +58,7 @@ export default function OrientationGuard({ children }: { children: React.ReactNo
 
       // When rotating to landscape on mobile, show the fullscreen prompt
       // (auto-requesting fullscreen here would fail — it requires a user gesture)
-      if (!portrait && touch && !getFullscreenElement() && canFullscreen()) {
+      if (!portrait && touch && !getFullscreenElement()) {
         setShowFullscreenPrompt(true);
         clearDismissTimer();
         dismissTimer.current = setTimeout(() => {

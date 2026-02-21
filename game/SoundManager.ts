@@ -28,6 +28,8 @@ export class SoundManager {
   private musicPlaying = false;
   private musicTimeout: ReturnType<typeof setTimeout> | null = null;
   private musicNextStart = 0;
+  // Master gain node for music — lets us silence already-scheduled oscillators instantly
+  private musicGain: GainNode | null = null;
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
@@ -39,14 +41,22 @@ export class SoundManager {
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (muted) {
-      // Cancel next scheduled bar — currently playing notes fade naturally
+      // Cancel next scheduled bar and instantly fade master gain to silence
+      // already-scheduled oscillators for the current bar
       if (this.musicTimeout) {
         clearTimeout(this.musicTimeout);
         this.musicTimeout = null;
       }
+      if (this.musicGain && this.ctx) {
+        this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
+      }
     } else if (this.musicPlaying) {
-      // Resume scheduling from now
-      this.musicNextStart = this.getCtx().currentTime + 0.05;
+      // Restore master gain and resume scheduling from now
+      const ctx = this.getCtx();
+      if (this.musicGain) {
+        this.musicGain.gain.setTargetAtTime(1, ctx.currentTime, 0.015);
+      }
+      this.musicNextStart = ctx.currentTime + 0.05;
       this.scheduleMusicBar();
     }
   }
@@ -132,7 +142,12 @@ export class SoundManager {
     if (this.musicPlaying) return;
     this.musicPlaying = true;
     if (this.muted) return;
-    this.musicNextStart = this.getCtx().currentTime + 0.05;
+    const ctx = this.getCtx();
+    // Fresh master gain node each time music starts
+    this.musicGain = ctx.createGain();
+    this.musicGain.gain.setValueAtTime(1, ctx.currentTime);
+    this.musicGain.connect(ctx.destination);
+    this.musicNextStart = ctx.currentTime + 0.05;
     this.scheduleMusicBar();
   }
 
@@ -141,6 +156,10 @@ export class SoundManager {
     if (this.musicTimeout) {
       clearTimeout(this.musicTimeout);
       this.musicTimeout = null;
+    }
+    // Quickly fade master gain to silence already-scheduled notes
+    if (this.musicGain && this.ctx) {
+      this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
     }
   }
 
@@ -154,7 +173,7 @@ export class SoundManager {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(this.musicGain!); // route through master gain, not directly to destination
         osc.type = "square";
         osc.frequency.value = freq;
         // Low volume with quick fade for a plucky chiptune feel

@@ -36,6 +36,7 @@ export class Engine {
   private distanceSinceLastObstacle: number = 0;
   private nextObstacleGap: number = 0;
   private rafId: number = 0;
+  private isPaused = false;
   private canvasW: number = 0;
   private canvasH: number = 0;
   private groundY: number = 0;
@@ -190,6 +191,25 @@ export class Engine {
   getState(): GameState {
     return this.state;
   }
+  pause(): void {
+    if (this.isPaused) return;
+    this.isPaused = true;
+    cancelAnimationFrame(this.rafId);
+    if (this.state === GameState.RUNNING) {
+      this.sound.stopMusic();
+    }
+  }
+
+  resume(): void {
+    if (!this.isPaused) return;
+    this.isPaused = false;
+    this.lastTime = 0; // reset so dt doesn't spike after a long pause
+    this.rafId = requestAnimationFrame(this.loop);
+    if (this.state === GameState.RUNNING) {
+      this.sound.startMusic();
+    }
+  }
+
   setMuted(muted: boolean): void {
     this.sound.setMuted(muted);
   }

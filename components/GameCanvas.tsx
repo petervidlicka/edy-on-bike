@@ -99,6 +99,34 @@ export default function GameCanvas() {
     engineRef.current?.setMuted(muted);
   }, [muted]);
 
+  // Pause when tab is hidden or device is in portrait (mobile) — resumes on the inverse.
+  // A single checkPause fn handles both triggers so they don't conflict.
+  const checkPause = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const isHidden = document.hidden;
+    const isPortraitMobile =
+      window.matchMedia("(orientation: portrait)").matches &&
+      window.matchMedia("(pointer: coarse)").matches;
+    if (isHidden || isPortraitMobile) {
+      engine.pause();
+    } else {
+      engine.resume();
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("visibilitychange", checkPause);
+    const mq = window.matchMedia("(orientation: portrait)");
+    mq.addEventListener("change", checkPause);
+    window.addEventListener("orientationchange", checkPause);
+    return () => {
+      document.removeEventListener("visibilitychange", checkPause);
+      mq.removeEventListener("change", checkPause);
+      window.removeEventListener("orientationchange", checkPause);
+    };
+  }, [checkPause]);
+
   return (
     <>
       <canvas
@@ -110,6 +138,7 @@ export default function GameCanvas() {
           width: "100vw",
           height: "100vh",
           display: "block",
+          touchAction: "none", // prevent pull-to-refresh / swipe-back on mobile
         }}
       />
 

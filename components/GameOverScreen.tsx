@@ -28,12 +28,14 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
     if (saved) setName(saved);
   }, []);
 
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
+
   const fetchLeaderboard = useCallback(async () => {
     try {
-      const data = await fetch("/api/leaderboard").then((r) => r.json());
+      const data = await fetch(`${apiBase}/api/leaderboard`).then((r) => r.json());
       setLeaderboard(data);
     } catch {}
-  }, []);
+  }, [apiBase]);
 
   // Save score then show leaderboard (step 2)
   const saveAndAdvance = useCallback(async (nameToSave: string) => {
@@ -41,7 +43,7 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
     setSubmitting(true);
     if (trimmed) {
       try {
-        await fetch("/api/leaderboard", {
+        await fetch(`${apiBase}/api/leaderboard`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: trimmed, score }),
@@ -52,7 +54,7 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
     await fetchLeaderboard();
     setSubmitting(false);
     setStep(2);
-  }, [score, fetchLeaderboard]);
+  }, [score, fetchLeaderboard, apiBase]);
 
   // Handle Save Score button — validates name first
   const handleSaveScore = async () => {

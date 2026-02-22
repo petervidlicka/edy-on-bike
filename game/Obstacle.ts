@@ -11,7 +11,7 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.SHOPPING_TROLLEY]:{ width: 38, height: 38 },
   [ObstacleType.CAR]:             { width: 80, height: 42 },
   [ObstacleType.PERSON_ON_BIKE]:  { width: 38, height: 52 },
-  [ObstacleType.BUS_STOP]:        { width: 117, height: 91 },
+  [ObstacleType.BUS_STOP]:        { width: 129, height: 68 },
   [ObstacleType.SHIPPING_CONTAINER]: { width: 176, height: 75 },
   [ObstacleType.STRAIGHT_RAMP]:   { width: 90, height: 30 },
   [ObstacleType.CURVED_RAMP]:     { width: 75, height: 36 },

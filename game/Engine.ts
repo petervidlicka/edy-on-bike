@@ -422,18 +422,20 @@ export class Engine {
     const remainder = angle - completedFlips * fullFlip;
     const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
 
-    // Validate pose trick
+    // Validate pose trick — relaxed for combos:
+    // Accept if at least one full cycle completed, OR if the trick reached peak extension
+    // (trickPhase === "return" means it extended fully and started returning)
     const poseCompletions = this.player.trickCompletions;
-    const poseProgress = this.player.trickProgress;
-    const safeProgress = 1 - TRICK_COMPLETION_THRESHOLD;
-    const poseSafe = poseCompletions >= 1 && poseProgress <= safeProgress;
+    const posePhase = this.player.trickPhase;
+    const poseSafe = poseCompletions >= 1 || posePhase === "return";
 
     if (totalFlips >= 1 && poseSafe) {
       const flipName = direction >= 0 ? "backflip" : "frontflip";
       const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
       const poseName = isSuperman ? "superman" : "no-hander";
       const posePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
-      const baseScore = BACKFLIP_BONUS * totalFlips + posePoints * poseCompletions;
+      const effectivePoseCount = Math.max(poseCompletions, 1); // at least 1 since combo validated
+      const baseScore = BACKFLIP_BONUS * totalFlips + posePoints * effectivePoseCount;
       const comboScore = baseScore * COMBO_MULTIPLIER;
 
       this.score += comboScore;

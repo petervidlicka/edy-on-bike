@@ -17,6 +17,8 @@ export default function GameCanvas() {
   const [bestScore, setBestScore] = useState(0);
   const [musicMuted, setMusicMuted] = useState(false);
   const [sfxMuted, setSfxMuted] = useState(false);
+  const [trickFeedback, setTrickFeedback] = useState<{ name: string; points: number } | null>(null);
+  const trickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -36,6 +38,11 @@ export default function GameCanvas() {
           setSpeed(INITIAL_SPEED);
         }
       },
+      onTrickLanded: (trickName, points) => {
+        if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
+        setTrickFeedback({ name: trickName, points });
+        trickTimeoutRef.current = setTimeout(() => setTrickFeedback(null), 2000);
+      },
     });
     engineRef.current = engine;
 
@@ -48,6 +55,7 @@ export default function GameCanvas() {
       engine.destroy();
       engineRef.current = null;
       window.removeEventListener("resize", handleResize);
+      if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
     };
   }, []);
 
@@ -77,6 +85,14 @@ export default function GameCanvas() {
     if (e.code === "ArrowUp") {
       e.preventDefault();
       engineRef.current?.frontflip();
+    }
+    if (e.code === "ArrowLeft") {
+      e.preventDefault();
+      engineRef.current?.superman();
+    }
+    if (e.code === "ArrowRight") {
+      e.preventDefault();
+      engineRef.current?.noHander();
     }
   }, []);
 
@@ -163,12 +179,15 @@ export default function GameCanvas() {
         <HUD
           score={score}
           speed={speed}
+          trickFeedback={trickFeedback}
           musicMuted={musicMuted}
           sfxMuted={sfxMuted}
           onToggleMusic={() => setMusicMuted((m) => !m)}
           onToggleSfx={() => setSfxMuted((m) => !m)}
           onBackflip={() => engineRef.current?.backflip()}
           onFrontflip={() => engineRef.current?.frontflip()}
+          onSuperman={() => engineRef.current?.superman()}
+          onNoHander={() => engineRef.current?.noHander()}
         />
       )}
 

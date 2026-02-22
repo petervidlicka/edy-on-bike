@@ -1,13 +1,13 @@
-import { PlayerState, BackgroundLayer, ObstacleInstance, ObstacleType } from "./types";
-import { COLORS } from "./constants";
+import { PlayerState, BackgroundLayer, ObstacleInstance, ObstacleType, TrickType } from "./types";
+import type { EnvironmentPalette, BackgroundDrawFn } from "./environments/types";
 import { getTotalLayerWidth } from "./Background";
 
 // --- Sky ---
 
-function drawSky(ctx: CanvasRenderingContext2D, w: number, groundY: number) {
+function drawSky(ctx: CanvasRenderingContext2D, w: number, groundY: number, palette: EnvironmentPalette) {
   const gradient = ctx.createLinearGradient(0, 0, 0, groundY);
-  gradient.addColorStop(0, COLORS.sky);
-  gradient.addColorStop(1, COLORS.skyBottom);
+  gradient.addColorStop(0, palette.sky);
+  gradient.addColorStop(1, palette.skyBottom);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, w, groundY);
 }
@@ -32,7 +32,7 @@ function drawCloud(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 function drawCottage(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  wallColor: string, roofColor: string
+  wallColor: string, roofColor: string, palette: EnvironmentPalette
 ) {
   // Stone-textured wall
   ctx.fillStyle = wallColor;
@@ -58,7 +58,7 @@ function drawCottage(
   ctx.fillRect(x + w * 0.72, y - h * 0.35, w * 0.14, h * 0.25);
 
   // Arched window
-  ctx.fillStyle = "#b0c0cc";
+  ctx.fillStyle = palette.windowGlass;
   const ww = w * 0.26;
   const wy = y + h * 0.25;
   ctx.fillRect(x + w * 0.5 - ww / 2, wy + ww * 0.35, ww, ww * 0.65);
@@ -74,7 +74,7 @@ function drawCottage(
 function drawVillageHouse(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  wallColor: string, roofColor: string
+  wallColor: string, roofColor: string, palette: EnvironmentPalette
 ) {
   // Wall
   ctx.fillStyle = wallColor;
@@ -102,11 +102,11 @@ function drawVillageHouse(
   ctx.closePath();
   ctx.fill();
   // Dormer glass
-  ctx.fillStyle = "#b0c0cc";
+  ctx.fillStyle = palette.windowGlass;
   ctx.fillRect(dX + dW * 0.25, y - h * 0.1, dW * 0.5, h * 0.07);
 
   // Main windows (2)
-  ctx.fillStyle = "#b0c0cc";
+  ctx.fillStyle = palette.windowGlass;
   const ws = Math.min(w * 0.18, 8);
   ctx.fillRect(x + w * 0.15, y + h * 0.28, ws, ws);
   ctx.fillRect(x + w * 0.62, y + h * 0.28, ws, ws);
@@ -124,7 +124,7 @@ function drawVillageHouse(
   ctx.fillStyle = roofColor;
   ctx.fillRect(x + w * 0.38, y + h * 0.55, w * 0.24, h * 0.45);
   // Door knob
-  ctx.fillStyle = "#c8c0b8";
+  ctx.fillStyle = palette.doorKnob;
   ctx.beginPath();
   ctx.arc(x + w * 0.38 + w * 0.18, y + h * 0.78, 1.5, 0, Math.PI * 2);
   ctx.fill();
@@ -133,7 +133,7 @@ function drawVillageHouse(
 function drawTallHouse(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  wallColor: string, roofColor: string
+  wallColor: string, roofColor: string, palette: EnvironmentPalette
 ) {
   // Wall
   ctx.fillStyle = wallColor;
@@ -152,7 +152,7 @@ function drawTallHouse(
   ctx.fillRect(x + w * 0.76, y - h * 0.25, w * 0.12, h * 0.18);
 
   // Upper windows (2)
-  ctx.fillStyle = "#b0c0cc";
+  ctx.fillStyle = palette.windowGlass;
   const ws = Math.min(w * 0.2, 7);
   ctx.fillRect(x + w * 0.18, y + h * 0.12, ws, ws);
   ctx.fillRect(x + w * 0.6, y + h * 0.12, ws, ws);
@@ -174,28 +174,30 @@ function drawTallHouse(
   ctx.fillRect(x + w * 0.35, y + h * 0.7, w * 0.3, h * 0.3);
 }
 
-function drawHouse(
+/** Draw a house background element — dispatches to the correct variant. */
+export function drawHouse(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  wallColor: string, roofColor: string, variant: number
+  wallColor: string, palette: EnvironmentPalette, roofColor?: string, variant?: number
 ) {
+  const roof = roofColor || wallColor;
   switch (variant) {
-    case 0: drawCottage(ctx, x, y, w, h, wallColor, roofColor); break;
-    case 1: drawVillageHouse(ctx, x, y, w, h, wallColor, roofColor); break;
-    case 2: drawTallHouse(ctx, x, y, w, h, wallColor, roofColor); break;
-    default: drawVillageHouse(ctx, x, y, w, h, wallColor, roofColor); break;
+    case 0: drawCottage(ctx, x, y, w, h, wallColor, roof, palette); break;
+    case 1: drawVillageHouse(ctx, x, y, w, h, wallColor, roof, palette); break;
+    case 2: drawTallHouse(ctx, x, y, w, h, wallColor, roof, palette); break;
+    default: drawVillageHouse(ctx, x, y, w, h, wallColor, roof, palette); break;
   }
 }
 
 // --- Conifer trees (layered triangles from reference) ---
 
-function drawTreeSilhouette(
+export function drawTreeSilhouette(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  color: string
+  color: string, palette: EnvironmentPalette
 ) {
   // Trunk
-  ctx.fillStyle = "#7a6a5a";
+  ctx.fillStyle = palette.backgroundTreeTrunk;
   ctx.fillRect(x + w * 0.38, y + h * 0.75, w * 0.24, h * 0.25);
 
   // Three layered triangular sections (dark green)
@@ -225,7 +227,7 @@ function drawTreeSilhouette(
   ctx.fill();
 
   // Lighter highlight triangles on right side
-  ctx.fillStyle = COLORS.treeHighlight;
+  ctx.fillStyle = palette.treeHighlight;
   ctx.beginPath();
   ctx.moveTo(x + w / 2, y + h * 0.38);
   ctx.lineTo(x + w * 0.95, y + h * 0.75);
@@ -243,12 +245,12 @@ function drawTreeSilhouette(
 
 // --- Deer (side-view silhouette) ---
 
-function drawDeer(
+export function drawDeer(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  color: string
+  color: string, palette: EnvironmentPalette
 ) {
-  const legColor = "#7a6048";
+  const legColor = palette.creatureLeg;
 
   // Body (oval)
   ctx.fillStyle = color;
@@ -302,7 +304,7 @@ function drawDeer(
   ctx.stroke();
 
   // Tail
-  ctx.fillStyle = "#c0a880";
+  ctx.fillStyle = palette.creatureTail;
   ctx.beginPath();
   ctx.ellipse(x + w * 0.82, y + h * 0.35, w * 0.04, h * 0.05, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -310,13 +312,13 @@ function drawDeer(
 
 // --- Walking person (simple side-view figure) ---
 
-function drawWalkingPerson(
+export function drawWalkingPerson(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  color: string
+  color: string, palette: EnvironmentPalette
 ) {
   // Head
-  ctx.fillStyle = "#c8a882";
+  ctx.fillStyle = palette.player.skin;
   ctx.beginPath();
   ctx.arc(x + w * 0.5, y + h * 0.1, h * 0.07, 0, Math.PI * 2);
   ctx.fill();
@@ -350,17 +352,17 @@ function drawWalkingPerson(
 
 // --- Ground ---
 
-function drawGround(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, groundY: number, offset: number) {
+function drawGround(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, groundY: number, offset: number, palette: EnvironmentPalette) {
   // Ground fill — stretches to bottom of canvas
-  ctx.fillStyle = COLORS.ground;
+  ctx.fillStyle = palette.ground;
   ctx.fillRect(0, groundY, canvasW, canvasH - groundY);
 
   // Road surface
-  ctx.fillStyle = COLORS.road;
+  ctx.fillStyle = palette.road;
   ctx.fillRect(0, groundY, canvasW, 20);
 
   // Dashed road markings
-  ctx.strokeStyle = COLORS.roadLine;
+  ctx.strokeStyle = palette.roadLine;
   ctx.lineWidth = 2;
   ctx.setLineDash([20, 15]);
   ctx.lineDashOffset = offset;
@@ -378,9 +380,11 @@ export function drawBackground(
   layers: BackgroundLayer[],
   canvasW: number,
   canvasH: number,
-  groundY: number
+  groundY: number,
+  palette: EnvironmentPalette,
+  drawers: Record<string, BackgroundDrawFn>
 ) {
-  drawSky(ctx, canvasW, groundY);
+  drawSky(ctx, canvasW, groundY, palette);
 
   // Layer 0: clouds
   const cloudLayer = layers[0];
@@ -395,35 +399,23 @@ export function drawBackground(
     }
   }
 
-  // Layer 1: houses & trees
+  // Layer 1: buildings & nature — dispatched via drawers map
   const buildingLayer = layers[1];
   const buildingWidth = getTotalLayerWidth(buildingLayer, canvasW);
   const buildingNorm = buildingLayer.offset % buildingWidth;
   for (const el of buildingLayer.elements) {
-    // Check both the natural scroll position and the wrapped copy so elements
-    // slide off the left edge instead of teleporting back to the right
     for (const shift of [0, buildingWidth, -buildingWidth]) {
       const drawX = el.x - buildingNorm + shift;
       if (drawX + el.width < 0 || drawX > canvasW) continue;
-      switch (el.type) {
-        case "house":
-          drawHouse(ctx, drawX, el.y, el.width, el.height, el.color, el.roofColor || el.color, el.variant ?? 1);
-          break;
-        case "tree_silhouette":
-          drawTreeSilhouette(ctx, drawX, el.y, el.width, el.height, el.color);
-          break;
-        case "deer":
-          drawDeer(ctx, drawX, el.y, el.width, el.height, el.color);
-          break;
-        case "walking_person":
-          drawWalkingPerson(ctx, drawX, el.y, el.width, el.height, el.color);
-          break;
+      const drawFn = drawers[el.type];
+      if (drawFn) {
+        drawFn(ctx, drawX, el.y, el.width, el.height, el.color, palette, el.roofColor, el.variant);
       }
     }
   }
 
   // Layer 2: ground + road
-  drawGround(ctx, canvasW, canvasH, groundY, layers[2].offset);
+  drawGround(ctx, canvasW, canvasH, groundY, layers[2].offset, palette);
 }
 
 // --- Player (BMX bike + stick-figure rider with helmet) ---
@@ -434,9 +426,9 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
+export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, palette: EnvironmentPalette) {
   const { x, y, wheelRotation, bikeTilt, riderLean, riderCrouch, legTuck, backflipAngle, flipDirection } = player;
-  const c = COLORS.player;
+  const c = palette.player;
 
   // BMX proportions matched to Figma reference — long wheelbase, low frame
   const wheelR = 12;
@@ -506,27 +498,27 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.strokeStyle = c.frame;
   ctx.lineWidth = 2;
 
-  const seatX = x + 23;       // seat cluster (was x+20)
-  const seatY = y + 35;       // seat cluster height (was y+34)
-  const bbX = x + 27;         // bottom bracket (was x+28)
+  const seatX = x + 23;       // seat cluster
+  const seatY = y + 35;       // seat cluster height
+  const bbX = x + 27;         // bottom bracket
   const bbY = wheelY - 2;     // y + 44
-  const headX_f = x + 45;     // head tube top (was x+42) — more forward
-  const headY_f = y + 26;     // head tube top (was y+32) — much higher
+  const headX_f = x + 45;     // head tube top
+  const headY_f = y + 26;     // head tube top
 
   // Main triangle: top tube + down tube + seat tube
-  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(headX_f, headY_f + 3); ctx.stroke();   // top tube → (x+45, y+29)
-  ctx.beginPath(); ctx.moveTo(headX_f, headY_f + 5); ctx.lineTo(bbX, bbY); ctx.stroke();       // down tube from (x+45, y+31)
-  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(bbX, bbY); ctx.stroke();               // seat tube
+  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(headX_f, headY_f + 3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(headX_f, headY_f + 5); ctx.lineTo(bbX, bbY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(bbX, bbY); ctx.stroke();
 
   // Rear triangle: chain stays + seat stays
-  ctx.beginPath(); ctx.moveTo(bbX, bbY); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();           // chain stays
-  ctx.beginPath(); ctx.moveTo(seatX, seatY + 1); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();   // seat stays
+  ctx.beginPath(); ctx.moveTo(bbX, bbY); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(seatX, seatY + 1); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();
 
-  // Fork (two segments — steep ~17° from vertical, matching Figma)
-  ctx.beginPath(); ctx.moveTo(headX_f, headY_f); ctx.lineTo(x + 51, y + 45); ctx.stroke();      // main fork blade
-  ctx.beginPath(); ctx.moveTo(x + 51, y + 45); ctx.lineTo(frontWheelX, wheelY); ctx.stroke();    // fork dropout
+  // Fork (two segments)
+  ctx.beginPath(); ctx.moveTo(headX_f, headY_f); ctx.lineTo(x + 51, y + 45); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + 51, y + 45); ctx.lineTo(frontWheelX, wheelY); ctx.stroke();
 
-  // Chainring (sprocket circle at BB — smaller to match Figma proportions)
+  // Chainring (sprocket circle at BB)
   ctx.fillStyle = c.frame;
   ctx.beginPath();
   ctx.arc(bbX, bbY, 4, 0, Math.PI * 2);
@@ -537,17 +529,17 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.arc(bbX, bbY, 4, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Seat post (extends above cluster) + saddle
+  // Seat post + saddle
   ctx.strokeStyle = c.frame;
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(seatX - 1, seatY - 3); ctx.stroke();
   ctx.fillStyle = c.wheel;
   ctx.fillRect(seatX - 6, seatY - 5, 10, 3);
 
-  // Crank arms (horizontal — BMX standing stance, wider from Figma)
-  const pedalLX = bbX - 8;    // left pedal (x+19)
-  const pedalRX = bbX + 8;    // right pedal (x+35)
-  const pedalY = bbY;         // both at same height (y+44)
+  // Crank arms
+  const pedalLX = bbX - 8;
+  const pedalRX = bbX + 8;
+  const pedalY = bbY;
   ctx.strokeStyle = c.wheel;
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(bbX, bbY); ctx.lineTo(pedalLX, pedalY); ctx.stroke();
@@ -557,63 +549,96 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.fillRect(pedalLX - 3, pedalY - 1, 6, 3);
   ctx.fillRect(pedalRX - 3, pedalY - 1, 6, 3);
 
-  // Handlebar stem riser + crossbar (from Figma: rises ~7px above headtube)
-  const stemTopX = headX_f - 1;     // x + 44
-  const stemTopY = headY_f - 7;     // y + 19
+  // Handlebar stem riser + crossbar
+  const stemTopX = headX_f - 1;
+  const stemTopY = headY_f - 7;
   ctx.strokeStyle = c.wheel;
   ctx.lineWidth = 2;
-  // Stem riser (slightly back from headtube top)
   ctx.beginPath();
   ctx.moveTo(headX_f, headY_f);
   ctx.lineTo(stemTopX, stemTopY);
   ctx.stroke();
-  // Handlebar crossbar (grips)
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(stemTopX - 3, stemTopY);
   ctx.lineTo(stemTopX + 2, stemTopY);
   ctx.stroke();
 
-  // Grip point (where rider's hands go — left end of crossbar)
-  const gripX = stemTopX - 2;   // x + 42
-  const gripY = stemTopY;       // y + 19
+  // Grip point
+  const gripX = stemTopX - 2;
+  const gripY = stemTopY;
 
-  // ── Rider (standing tall on pedals — matched to Figma proportions) ──
+  // ── Rider (standing tall on pedals) ──
 
-  // Hip: centered over BB, standing tall (20px above pedals vs old 14px)
-  const standX = bbX;             // x + 27
-  const standY = bbY - 20;       // y + 24 (was bbY - 14 = y + 30)
-  const hipX = standX - riderLean * 7;
-  const hipY = standY - riderCrouch * 10;
+  const trickProg = player.trickProgress;
+  const activeTrick = player.activeTrick;
 
-  // Torso: nearly upright (~81° from horizontal) matching Figma
-  const baseTorsoAngle = Math.atan2(-13, 2);   // ≈ -81° (was atan2(-15, 11) ≈ -54°)
-  const torsoLength = 13;                       // shorter, more upright (was 19)
+  // Hip
+  const standX = bbX;
+  const standY = bbY - 20;
+  let hipX = standX - riderLean * 7;
+  let hipY = standY - riderCrouch * 10;
+
+  // Torso
+  const baseTorsoAngle = Math.atan2(-13, 2);
+  const torsoLength = 13;
   const adjustedAngle = baseTorsoAngle - riderLean * 1.2;
-  const shoulderX = hipX + Math.cos(adjustedAngle) * torsoLength;
-  const shoulderY = hipY + Math.sin(adjustedAngle) * torsoLength;
+  let shoulderX = hipX + Math.cos(adjustedAngle) * torsoLength;
+  let shoulderY = hipY + Math.sin(adjustedAngle) * torsoLength;
 
-  // Legs: both feet on pedals; tuck pulls toward chest during jump
-  const footLX = lerp(pedalLX, hipX - 2, legTuck * 0.7);
-  const footLY = lerp(pedalY, hipY + 7, legTuck * 0.8);
-  const footRX = lerp(pedalRX, hipX + 4, legTuck * 0.7);
-  const footRY = lerp(pedalY, hipY + 9, legTuck * 0.8);
+  // Legs
+  let footLX = lerp(pedalLX, hipX - 2, legTuck * 0.7);
+  let footLY = lerp(pedalY, hipY + 7, legTuck * 0.8);
+  let footRX = lerp(pedalRX, hipX + 4, legTuck * 0.7);
+  let footRY = lerp(pedalY, hipY + 9, legTuck * 0.8);
 
-  // Knees: natural bend from Figma — right knee bows forward, left knee back
-  const kneeLX = lerp((hipX + footLX) / 2 + 1, hipX - 3, legTuck * 0.5);
-  const kneeLY = lerp((hipY + footLY) / 2 + 1, hipY + 5, legTuck * 0.5);
-  const kneeRX = lerp((hipX + footRX) / 2 + 2, hipX + 2, legTuck * 0.5);
-  const kneeRY = lerp((hipY + footRY) / 2, hipY + 5, legTuck * 0.5);
+  // Knees
+  let kneeLX = lerp((hipX + footLX) / 2 + 1, hipX - 3, legTuck * 0.5);
+  let kneeLY = lerp((hipY + footLY) / 2 + 1, hipY + 5, legTuck * 0.5);
+  let kneeRX = lerp((hipX + footRX) / 2 + 2, hipX + 2, legTuck * 0.5);
+  let kneeRY = lerp((hipY + footRY) / 2, hipY + 5, legTuck * 0.5);
+
+  // Arms
+  let elbowX = shoulderX + 6;
+  let elbowY = shoulderY + 6;
+  let drawGripX = gripX;
+  let drawGripY = gripY;
+
+  // --- Pose trick modifications ---
+  if (activeTrick === TrickType.SUPERMAN && trickProg > 0) {
+    hipX = lerp(hipX, hipX - 10, trickProg);
+    hipY = lerp(hipY, hipY + 5, trickProg);
+    const supermanAngle = lerp(adjustedAngle, -0.3, trickProg);
+    shoulderX = hipX + Math.cos(supermanAngle) * torsoLength;
+    shoulderY = hipY + Math.sin(supermanAngle) * torsoLength;
+    footLX = lerp(pedalLX, hipX - 22, trickProg);
+    footLY = lerp(pedalY, hipY + 2, trickProg);
+    footRX = lerp(pedalRX, hipX - 20, trickProg);
+    footRY = lerp(pedalY, hipY + 4, trickProg);
+    kneeLX = lerp(kneeLX, (hipX + footLX) / 2, trickProg);
+    kneeLY = lerp(kneeLY, (hipY + footLY) / 2 - 1, trickProg);
+    kneeRX = lerp(kneeRX, (hipX + footRX) / 2, trickProg);
+    kneeRY = lerp(kneeRY, (hipY + footRY) / 2 + 1, trickProg);
+    elbowX = lerp(shoulderX + 6, (shoulderX + gripX) / 2 + 3, trickProg);
+    elbowY = lerp(shoulderY + 6, (shoulderY + gripY) / 2 + 2, trickProg);
+  }
+
+  if (activeTrick === TrickType.NO_HANDER && trickProg > 0) {
+    elbowX = lerp(shoulderX + 6, shoulderX - 4, trickProg);
+    elbowY = lerp(shoulderY + 6, shoulderY - 8, trickProg);
+    drawGripX = lerp(gripX, shoulderX + 8, trickProg);
+    drawGripY = lerp(gripY, shoulderY - 14, trickProg);
+  }
 
   ctx.strokeStyle = c.pants;
   ctx.lineWidth = 3;
-  // Left leg: hip → knee → foot (on left/rear pedal)
+  // Left leg
   ctx.beginPath();
   ctx.moveTo(hipX - 1, hipY + 2);
   ctx.lineTo(kneeLX, kneeLY);
   ctx.lineTo(footLX, footLY);
   ctx.stroke();
-  // Right leg: hip → knee → foot (on right/front pedal)
+  // Right leg
   ctx.beginPath();
   ctx.moveTo(hipX + 2, hipY + 2);
   ctx.lineTo(kneeRX, kneeRY);
@@ -628,18 +653,16 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.lineTo(shoulderX, shoulderY);
   ctx.stroke();
 
-  // Arms — two segments: upper arm → elbow → forearm → grip (from Figma)
-  const elbowX = shoulderX + 6;
-  const elbowY = shoulderY + 6;
+  // Arms
   ctx.strokeStyle = c.skin;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(shoulderX, shoulderY);
   ctx.lineTo(elbowX, elbowY);
-  ctx.lineTo(gripX, gripY);
+  ctx.lineTo(drawGripX, drawGripY);
   ctx.stroke();
 
-  // Head (face oval — slightly wider than tall, matching Figma)
+  // Head
   const headPosX = shoulderX + 1;
   const headPosY = shoulderY - 7;
   ctx.fillStyle = c.skin;
@@ -647,28 +670,25 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.ellipse(headPosX, headPosY + 1, 5, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eye (small dot, facing forward)
+  // Eye
   ctx.fillStyle = "#2e2e2e";
   ctx.beginPath();
   ctx.arc(headPosX + 3, headPosY, 1.2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Helmet (BMX half-shell from Figma — dome + visor + stripes)
+  // Helmet
   ctx.fillStyle = c.helmet;
-  // Main dome — full coverage over top of head
   ctx.beginPath();
   ctx.arc(headPosX, headPosY - 1, 7.5, Math.PI, 0);
   ctx.fill();
-  // Helmet brim
   ctx.fillRect(headPosX - 8, headPosY - 1, 16, 2);
-  // Visor/peak extending forward-down
   ctx.beginPath();
   ctx.moveTo(headPosX + 5, headPosY - 1);
   ctx.lineTo(headPosX + 10, headPosY + 2);
   ctx.lineTo(headPosX + 4, headPosY + 2);
   ctx.closePath();
   ctx.fill();
-  // Stripe accents across dome
+  // Stripe accents
   ctx.strokeStyle = "rgba(255,255,255,0.2)";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -683,9 +703,8 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
 
 // --- Obstacle draw functions ---
 
-function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const c = COLORS.obstacle;
-  // Irregular polygon body
+function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
   ctx.fillStyle = c.rock;
   ctx.beginPath();
   ctx.moveTo(x + w * 0.15, y + h * 0.9);
@@ -697,7 +716,6 @@ function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.lineTo(x + w * 0.82, y + h * 0.95);
   ctx.closePath();
   ctx.fill();
-  // Highlight patch (upper-right)
   ctx.fillStyle = c.rockHighlight;
   ctx.beginPath();
   ctx.moveTo(x + w * 0.5, y + h * 0.12);
@@ -706,7 +724,6 @@ function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.lineTo(x + w * 0.45, y + h * 0.4);
   ctx.closePath();
   ctx.fill();
-  // Shadow patch (lower-left)
   ctx.fillStyle = c.rockShadow;
   ctx.beginPath();
   ctx.moveTo(x + w * 0.08, y + h * 0.6);
@@ -715,7 +732,6 @@ function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.lineTo(x + w * 0.15, y + h * 0.9);
   ctx.closePath();
   ctx.fill();
-  // Crack lines
   ctx.strokeStyle = c.rockShadow;
   ctx.lineWidth = 0.8;
   ctx.beginPath();
@@ -723,7 +739,6 @@ function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.lineTo(x + w * 0.45, y + h * 0.55);
   ctx.lineTo(x + w * 0.55, y + h * 0.5);
   ctx.stroke();
-  // Outline
   ctx.strokeStyle = c.rockShadow;
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -738,13 +753,11 @@ function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.stroke();
 }
 
-function drawSmallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const c = COLORS.obstacle;
+function drawSmallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
   const cx = x + w / 2;
-  // Trunk with bark texture
   ctx.fillStyle = c.treeTrunk;
   ctx.fillRect(cx - w * 0.1, y + h * 0.55, w * 0.2, h * 0.45);
-  // Bark lines
   ctx.strokeStyle = c.treeTrunkShadow;
   ctx.lineWidth = 0.7;
   ctx.beginPath();
@@ -753,21 +766,16 @@ function drawSmallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.moveTo(cx + w * 0.05, y + h * 0.6);
   ctx.lineTo(cx + w * 0.04, y + h * 0.9);
   ctx.stroke();
-  // Canopy — three overlapping rounded blobs (lush deciduous, contrasts with background conifers)
-  // Bottom blob
   ctx.fillStyle = c.tree;
   ctx.beginPath();
   ctx.ellipse(cx, y + h * 0.48, w * 0.5, h * 0.18, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Middle blob
   ctx.beginPath();
   ctx.ellipse(cx - w * 0.08, y + h * 0.32, w * 0.42, h * 0.16, -0.15, 0, Math.PI * 2);
   ctx.fill();
-  // Top blob
   ctx.beginPath();
   ctx.ellipse(cx + w * 0.05, y + h * 0.18, w * 0.32, h * 0.14, 0.1, 0, Math.PI * 2);
   ctx.fill();
-  // Highlight blobs (light-facing right side)
   ctx.fillStyle = c.treeHighlight;
   ctx.beginPath();
   ctx.ellipse(cx + w * 0.15, y + h * 0.44, w * 0.22, h * 0.1, 0.2, 0, Math.PI * 2);
@@ -775,7 +783,6 @@ function drawSmallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.beginPath();
   ctx.ellipse(cx + w * 0.1, y + h * 0.26, w * 0.18, h * 0.08, 0.1, 0, Math.PI * 2);
   ctx.fill();
-  // Outline
   ctx.strokeStyle = c.treeTrunkShadow;
   ctx.lineWidth = 0.8;
   ctx.beginPath();
@@ -786,40 +793,30 @@ function drawSmallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.stroke();
 }
 
-function drawTallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const c = COLORS.obstacle;
+function drawTallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
   const cx = x + w / 2;
-
-  // Slender trunk (narrower than small tree, takes ~25% of height)
   ctx.fillStyle = c.treeTrunk;
   ctx.fillRect(cx - w * 0.08, y + h * 0.75, w * 0.16, h * 0.25);
-  // Bark line
   ctx.strokeStyle = c.treeTrunkShadow;
   ctx.lineWidth = 0.7;
   ctx.beginPath();
   ctx.moveTo(cx - w * 0.02, y + h * 0.77);
   ctx.lineTo(cx - w * 0.01, y + h * 0.98);
   ctx.stroke();
-
-  // Tall narrow canopy — cypress/poplar silhouette (two elongated blobs)
-  // Main body: tall narrow oval
   ctx.fillStyle = c.tree;
   ctx.beginPath();
   ctx.ellipse(cx, y + h * 0.42, w * 0.38, h * 0.35, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Top pointed section
   ctx.beginPath();
   ctx.ellipse(cx, y + h * 0.14, w * 0.22, h * 0.2, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Side wisps (small blobs left and right to break the silhouette)
   ctx.beginPath();
   ctx.ellipse(cx - w * 0.25, y + h * 0.5, w * 0.15, h * 0.1, -0.3, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
   ctx.ellipse(cx + w * 0.25, y + h * 0.45, w * 0.15, h * 0.1, 0.3, 0, Math.PI * 2);
   ctx.fill();
-
-  // Highlight (right-facing light)
   ctx.fillStyle = c.treeHighlight;
   ctx.beginPath();
   ctx.ellipse(cx + w * 0.12, y + h * 0.38, w * 0.16, h * 0.18, 0.2, 0, Math.PI * 2);
@@ -827,8 +824,6 @@ function drawTallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
   ctx.beginPath();
   ctx.ellipse(cx + w * 0.08, y + h * 0.12, w * 0.1, h * 0.1, 0.1, 0, Math.PI * 2);
   ctx.fill();
-
-  // Outline (just the outer body)
   ctx.strokeStyle = c.treeTrunkShadow;
   ctx.lineWidth = 0.8;
   ctx.beginPath();
@@ -836,8 +831,136 @@ function drawTallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
   ctx.stroke();
 }
 
-function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const c = COLORS.obstacle;
+function drawGiantTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  const cx = x + w / 2;
+  ctx.fillStyle = c.giantTreeTrunk;
+  ctx.fillRect(cx - w * 0.14, y + h * 0.65, w * 0.28, h * 0.35);
+  ctx.strokeStyle = c.giantTreeBark;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.04, y + h * 0.67);
+  ctx.lineTo(cx - w * 0.02, y + h * 0.97);
+  ctx.moveTo(cx + w * 0.06, y + h * 0.69);
+  ctx.lineTo(cx + w * 0.05, y + h * 0.95);
+  ctx.stroke();
+  ctx.fillStyle = c.giantTreeCanopy;
+  ctx.beginPath();
+  ctx.ellipse(cx - w * 0.15, y + h * 0.55, w * 0.38, h * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.15, y + h * 0.52, w * 0.38, h * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.40, w * 0.48, h * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx - w * 0.1, y + h * 0.30, w * 0.40, h * 0.14, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.05, y + h * 0.20, w * 0.32, h * 0.12, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.10, w * 0.22, h * 0.09, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = c.giantTreeCanopyHighlight;
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.2, y + h * 0.38, w * 0.20, h * 0.10, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.12, y + h * 0.22, w * 0.16, h * 0.08, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.08, y + h * 0.50, w * 0.18, h * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = c.giantTreeOutline;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.40, w * 0.48, h * 0.16, 0, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawStraightRamp(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  ctx.fillStyle = c.rampWood;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = c.rampWoodHighlight;
+  ctx.beginPath();
+  ctx.moveTo(x + 2, y + h);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + 3);
+  ctx.lineTo(x + 3, y + h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = c.rampWoodDark;
+  ctx.lineWidth = 0.8;
+  for (let i = 1; i < 4; i++) {
+    const t = i / 4;
+    const lx = x + w * t;
+    ctx.beginPath();
+    ctx.moveTo(lx, y + h - h * t);
+    ctx.lineTo(lx, y + h);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = c.rampWoodDark;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.55, y + h);
+  ctx.lineTo(x + w - 2, y + h * 0.45);
+  ctx.stroke();
+  ctx.strokeStyle = c.rampWoodDark;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawCurvedRamp(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  ctx.fillStyle = c.rampMetal;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.quadraticCurveTo(x + w * 0.7, y + h, x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = c.rampMetalDark;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.quadraticCurveTo(x + w * 0.7, y + h, x + w, y);
+  ctx.stroke();
+  ctx.fillStyle = c.rampMetalDark;
+  ctx.fillRect(x + w - 3, y, 3, 6);
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.lineWidth = 0.7;
+  for (let i = 1; i < 3; i++) {
+    const ly = y + h * (i / 3);
+    ctx.beginPath();
+    ctx.moveTo(x, ly + h * 0.1);
+    ctx.lineTo(x + w, ly);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = c.rampMetalDark;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.quadraticCurveTo(x + w * 0.7, y + h, x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
   const basketTop = y;
   const basketBottom = y + h - 14;
   const basketLeft = x + 8;
@@ -845,14 +968,12 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
   const bw = basketRight - basketLeft;
   const bh = basketBottom - basketTop;
 
-  // Handle bar with orange grip
   ctx.strokeStyle = c.trolley;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(x, basketTop + 4);
   ctx.lineTo(basketLeft, basketTop);
   ctx.stroke();
-  // Orange grip
   ctx.strokeStyle = c.trolleyAccent;
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -860,7 +981,6 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.lineTo(x, basketTop + 10);
   ctx.stroke();
 
-  // Basket body (slight trapezoid — wider at top)
   ctx.fillStyle = c.trolleyBasket;
   ctx.beginPath();
   ctx.moveTo(basketLeft + 2, basketBottom);
@@ -870,10 +990,8 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.closePath();
   ctx.fill();
 
-  // Wire grid pattern
   ctx.strokeStyle = c.trolley;
   ctx.lineWidth = 0.8;
-  // Horizontal wires
   for (let i = 1; i <= 3; i++) {
     const gy = basketTop + bh * (i / 4);
     ctx.beginPath();
@@ -881,7 +999,6 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
     ctx.lineTo(basketRight, gy);
     ctx.stroke();
   }
-  // Vertical wires
   for (let i = 1; i <= 3; i++) {
     const gx = basketLeft + bw * (i / 4);
     ctx.beginPath();
@@ -890,7 +1007,6 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
     ctx.stroke();
   }
 
-  // Basket frame outline
   ctx.strokeStyle = c.trolley;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -901,7 +1017,6 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.closePath();
   ctx.stroke();
 
-  // Wheels with spokes
   const wheelR = 5;
   const wy = y + h - wheelR - 1;
   for (const wx of [x + 14, x + w - 8]) {
@@ -912,7 +1027,6 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
     ctx.arc(wx, wy, wheelR, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // Spokes
     ctx.lineWidth = 0.6;
     for (let i = 0; i < 4; i++) {
       const a = (i * Math.PI) / 2;
@@ -923,7 +1037,6 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
     }
   }
 
-  // Legs connecting basket to wheels
   ctx.strokeStyle = c.trolley;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -934,10 +1047,10 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.stroke();
 }
 
-function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const c = COLORS.obstacle;
+function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
 
-  // Body (lower) — terracotta red
+  // Body (lower)
   ctx.fillStyle = c.car;
   ctx.beginPath();
   ctx.moveTo(x + 4, y + 14);
@@ -951,7 +1064,7 @@ function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.quadraticCurveTo(x, y + 14, x + 4, y + 14);
   ctx.fill();
 
-  // Roof — darker red with sloped profile
+  // Roof
   ctx.fillStyle = c.carRoof;
   ctx.beginPath();
   ctx.moveTo(x + 16, y + 14);
@@ -963,11 +1076,10 @@ function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.closePath();
   ctx.fill();
 
-  // Windows — light blue with reflective highlight
+  // Windows
   ctx.fillStyle = c.carWindow;
   ctx.fillRect(x + 16, y + 2, 18, 11);
   ctx.fillRect(x + w - 34, y + 2, 18, 11);
-  // Window reflection
   ctx.fillStyle = "rgba(255,255,255,0.2)";
   ctx.fillRect(x + 17, y + 3, 6, 4);
   ctx.fillRect(x + w - 33, y + 3, 6, 4);
@@ -986,17 +1098,17 @@ function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.fillRect(x + w - 5, y + h - 10, 6, 3);
 
   // Headlight / Taillight
-  ctx.fillStyle = "#e8d06a";
+  ctx.fillStyle = c.carHeadlight;
   ctx.beginPath();
   ctx.arc(x + w - 3, y + 20, 2.5, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#c44040";
+  ctx.fillStyle = c.carTaillight;
   ctx.beginPath();
   ctx.arc(x + 3, y + 20, 2.5, 0, Math.PI * 2);
   ctx.fill();
 
   // Wheels
-  ctx.fillStyle = "#2e2e2c";
+  ctx.fillStyle = c.carWheel;
   ctx.beginPath();
   ctx.arc(x + 16, y + h - 7, 9, 0, Math.PI * 2);
   ctx.fill();
@@ -1026,21 +1138,19 @@ function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.stroke();
 }
 
-function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const c = COLORS.obstacle;
+function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
   const wheelR = 9;
   const rearWX = x + wheelR + 2;
   const frontWX = x + w - wheelR - 2;
   const wheelY = y + h - wheelR;
 
-  // Wheels with spokes
   ctx.strokeStyle = c.bikeFrame;
   ctx.lineWidth = 2;
   for (const wx of [rearWX, frontWX]) {
     ctx.beginPath();
     ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2);
     ctx.stroke();
-    // Spokes
     ctx.lineWidth = 0.7;
     for (let i = 0; i < 6; i++) {
       const a = (i * Math.PI) / 3;
@@ -1049,7 +1159,6 @@ function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w
       ctx.lineTo(wx + Math.cos(a) * wheelR, wheelY + Math.sin(a) * wheelR);
       ctx.stroke();
     }
-    // Center dot
     ctx.fillStyle = c.bikeFrame;
     ctx.beginPath();
     ctx.arc(wx, wheelY, 1.5, 0, Math.PI * 2);
@@ -1057,7 +1166,6 @@ function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w
     ctx.lineWidth = 2;
   }
 
-  // Frame (diamond shape)
   const pedalX = x + w * 0.45;
   const pedalY = wheelY - 4;
   const seatX = x + w * 0.3;
@@ -1074,11 +1182,9 @@ function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.lineTo(frontWX - 2, seatY - 4);
   ctx.stroke();
 
-  // Seat
   ctx.fillStyle = c.bikeRider;
   ctx.fillRect(seatX - 4, seatY - 2, 8, 3);
 
-  // Rider torso — plum/indigo shirt
   const shoulderX = seatX + 6;
   const shoulderY = seatY - 14;
   ctx.strokeStyle = c.bikeRider;
@@ -1088,14 +1194,12 @@ function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.lineTo(shoulderX, shoulderY);
   ctx.stroke();
 
-  // Arms
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(shoulderX, shoulderY);
   ctx.lineTo(frontWX - 4, seatY - 6);
   ctx.stroke();
 
-  // Legs (to pedals)
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(seatX + 2, seatY);
@@ -1104,62 +1208,51 @@ function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.lineTo(pedalX + 3, pedalY);
   ctx.stroke();
 
-  // Head — skin tone
-  ctx.fillStyle = COLORS.player.skin;
+  // Head — use palette player skin
+  ctx.fillStyle = palette.player.skin;
   ctx.beginPath();
   ctx.arc(shoulderX + 1, shoulderY - 7, 5, 0, Math.PI * 2);
   ctx.fill();
-  // Helmet
   ctx.fillStyle = c.bikeRider;
   ctx.beginPath();
   ctx.arc(shoulderX + 1, shoulderY - 8, 5.5, Math.PI, 0);
   ctx.fill();
 }
 
-function drawBusStop(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const c = COLORS.obstacle;
-  // Two vertical posts
+function drawBusStop(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
   ctx.fillStyle = c.busStopFrame;
   ctx.fillRect(x + 4, y + 10, 4, h - 10);
   ctx.fillRect(x + w - 8, y + 10, 4, h - 10);
 
-  // Roof (flat top — landing surface)
   ctx.fillStyle = c.busStopRoof;
   ctx.fillRect(x - 2, y, w + 4, 10);
-  // Roof overhang shadow
   ctx.fillStyle = "rgba(0,0,0,0.1)";
   ctx.fillRect(x, y + 10, w, 3);
 
-  // Glass back panel
   ctx.save();
   ctx.globalAlpha = 0.45;
   ctx.fillStyle = c.busStopGlass;
   ctx.fillRect(x + 10, y + 14, w - 20, h - 22);
   ctx.restore();
-  // Glass panel frame
   ctx.strokeStyle = c.busStopFrame;
   ctx.lineWidth = 1.5;
   ctx.strokeRect(x + 10, y + 14, w - 20, h - 22);
-  // Glass divider
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(x + w / 2, y + 14);
   ctx.lineTo(x + w / 2, y + h - 8);
   ctx.stroke();
 
-  // Bench
   ctx.fillStyle = c.busStopFrame;
   ctx.fillRect(x + 12, y + h - 14, w - 24, 4);
-  // Bench legs
   ctx.fillRect(x + 14, y + h - 10, 2, 6);
   ctx.fillRect(x + w - 16, y + h - 10, 2, 6);
 
-  // Bus stop sign (circle on left post)
   ctx.fillStyle = c.busStopSign;
   ctx.beginPath();
   ctx.arc(x + 6, y + 18, 5, 0, Math.PI * 2);
   ctx.fill();
-  // Sign letter "B"
   ctx.fillStyle = "#fff";
   ctx.font = "bold 6px sans-serif";
   ctx.textAlign = "center";
@@ -1167,13 +1260,11 @@ function drawBusStop(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.fillText("B", x + 6, y + 18);
 }
 
-function drawShippingContainer(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const c = COLORS.obstacle;
-  // Main body
+function drawShippingContainer(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
   ctx.fillStyle = c.container;
   ctx.fillRect(x, y, w, h);
 
-  // Corrugated ridges (vertical lines)
   ctx.strokeStyle = c.containerDark;
   ctx.lineWidth = 1;
   for (let i = 1; i < 12; i++) {
@@ -1184,17 +1275,13 @@ function drawShippingContainer(ctx: CanvasRenderingContext2D, x: number, y: numb
     ctx.stroke();
   }
 
-  // Top edge highlight
   ctx.fillStyle = "rgba(255,255,255,0.15)";
   ctx.fillRect(x, y, w, 3);
 
-  // Door end (right side)
   ctx.fillStyle = c.containerDoor;
   ctx.fillRect(x + w - 16, y + 4, 14, h - 8);
-  // Door handle
   ctx.fillStyle = c.containerDark;
   ctx.fillRect(x + w - 10, y + h * 0.4, 3, 8);
-  // Door seam
   ctx.strokeStyle = c.containerDark;
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -1202,27 +1289,83 @@ function drawShippingContainer(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.lineTo(x + w - 9, y + h - 4);
   ctx.stroke();
 
-  // Bottom shadow
   ctx.fillStyle = "rgba(0,0,0,0.12)";
   ctx.fillRect(x, y + h - 3, w, 3);
 
-  // Outline
   ctx.strokeStyle = c.containerDark;
   ctx.lineWidth = 1.5;
   ctx.strokeRect(x, y, w, h);
 }
 
-export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance) {
+function drawContainerWithRamp(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  // Draw the base container
+  drawShippingContainer(ctx, x, y, w, h, palette);
+
+  // Draw a curved ramp on top of the right end (last 75px of width)
+  const c = palette.obstacle;
+  const rampW = 75;
+  const rampH = 36;
+  const rampX = x + w - rampW;
+  const rampY = y - rampH;
+
+  // Ramp surface (metal curved ramp sitting on top of the container)
+  ctx.fillStyle = c.rampMetal;
+  ctx.beginPath();
+  ctx.moveTo(rampX, y);
+  ctx.quadraticCurveTo(rampX + rampW * 0.7, y, rampX + rampW, rampY);
+  ctx.lineTo(rampX + rampW, y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Ramp edge stroke
+  ctx.strokeStyle = c.rampMetalDark;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(rampX, y);
+  ctx.quadraticCurveTo(rampX + rampW * 0.7, y, rampX + rampW, rampY);
+  ctx.stroke();
+
+  // Lip at the top
+  ctx.fillStyle = c.rampMetalDark;
+  ctx.fillRect(rampX + rampW - 3, rampY, 3, 6);
+
+  // Horizontal guide lines
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.lineWidth = 0.7;
+  for (let i = 1; i < 3; i++) {
+    const ly = y - rampH * (i / 3);
+    ctx.beginPath();
+    ctx.moveTo(rampX, y - (y - ly) * 0.3);
+    ctx.lineTo(rampX + rampW, ly);
+    ctx.stroke();
+  }
+
+  // Outline
+  ctx.strokeStyle = c.rampMetalDark;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(rampX, y);
+  ctx.quadraticCurveTo(rampX + rampW * 0.7, y, rampX + rampW, rampY);
+  ctx.lineTo(rampX + rampW, y);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette) {
   const { type, x, y, width: w, height: h } = obstacle;
   switch (type) {
-    case ObstacleType.ROCK:               drawRock(ctx, x, y, w, h); break;
-    case ObstacleType.SMALL_TREE:         drawSmallTree(ctx, x, y, w, h); break;
-    case ObstacleType.TALL_TREE:          drawTallTree(ctx, x, y, w, h); break;
-    case ObstacleType.SHOPPING_TROLLEY:   drawShoppingTrolley(ctx, x, y, w, h); break;
-    case ObstacleType.CAR:                drawCar(ctx, x, y, w, h); break;
-    case ObstacleType.PERSON_ON_BIKE:     drawPersonOnBike(ctx, x, y, w, h); break;
-    case ObstacleType.BUS_STOP:           drawBusStop(ctx, x, y, w, h); break;
-    case ObstacleType.SHIPPING_CONTAINER: drawShippingContainer(ctx, x, y, w, h); break;
+    case ObstacleType.ROCK:               drawRock(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SMALL_TREE:         drawSmallTree(ctx, x, y, w, h, palette); break;
+    case ObstacleType.TALL_TREE:          drawTallTree(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SHOPPING_TROLLEY:   drawShoppingTrolley(ctx, x, y, w, h, palette); break;
+    case ObstacleType.CAR:                drawCar(ctx, x, y, w, h, palette); break;
+    case ObstacleType.PERSON_ON_BIKE:     drawPersonOnBike(ctx, x, y, w, h, palette); break;
+    case ObstacleType.BUS_STOP:           drawBusStop(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SHIPPING_CONTAINER: drawShippingContainer(ctx, x, y, w, h, palette); break;
+    case ObstacleType.GIANT_TREE:         drawGiantTree(ctx, x, y, w, h, palette); break;
+    case ObstacleType.STRAIGHT_RAMP:      drawStraightRamp(ctx, x, y, w, h, palette); break;
+    case ObstacleType.CURVED_RAMP:        drawCurvedRamp(ctx, x, y, w, h, palette); break;
+    case ObstacleType.CONTAINER_WITH_RAMP: drawContainerWithRamp(ctx, x, y, w, h, palette); break;
   }
 }
 
@@ -1240,12 +1383,29 @@ export function drawFloatingText(
   ctx.font = "bold 21px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  // Dark outline
   ctx.strokeStyle = "rgba(0,0,0,0.6)";
   ctx.lineWidth = 3;
   ctx.strokeText(text, x, y);
-  // Gold fill
   ctx.fillStyle = "#f0c030";
   ctx.fillText(text, x, y);
   ctx.restore();
 }
+
+// ── Background drawer wrappers ──
+// These adapt the exported draw functions to the BackgroundDrawFn signature
+// so they can be registered in an environment's backgroundDrawers map.
+
+export const SUBURBAN_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
+  house: (ctx, x, y, w, h, color, palette, roofColor, variant) => {
+    drawHouse(ctx, x, y, w, h, color, palette, roofColor, variant);
+  },
+  tree_silhouette: (ctx, x, y, w, h, color, palette) => {
+    drawTreeSilhouette(ctx, x, y, w, h, color, palette);
+  },
+  deer: (ctx, x, y, w, h, color, palette) => {
+    drawDeer(ctx, x, y, w, h, color, palette);
+  },
+  walking_person: (ctx, x, y, w, h, color, palette) => {
+    drawWalkingPerson(ctx, x, y, w, h, color, palette);
+  },
+};

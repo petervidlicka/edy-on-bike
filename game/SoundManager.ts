@@ -4,8 +4,15 @@ export class SoundManager {
   private musicMuted = false;
   private sfxMuted = false;
   private musicPlaying = false;
-  // HTML Audio element for background music MP3
-  private musicAudio: HTMLAudioElement | null = null;
+
+  // Dual-slot music system for crossfading between biome tracks
+  private musicAudioA: HTMLAudioElement | null = null;
+  private musicAudioB: HTMLAudioElement | null = null;
+  private activeSlot: "A" | "B" = "A";
+  private crossfadeTimer: ReturnType<typeof setInterval> | null = null;
+  private currentTrack = "/music.mp3";
+  /** Target volume when music is playing (not muted). */
+  private readonly MUSIC_VOLUME = 0.45;
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
@@ -14,24 +21,40 @@ export class SoundManager {
     return this.ctx;
   }
 
-  private ensureMusicAudio(): HTMLAudioElement {
-    if (!this.musicAudio) {
-      this.musicAudio = new Audio("/music.mp3");
-      this.musicAudio.loop = true;
-      this.musicAudio.volume = 0.45;
+  private getActiveAudio(): HTMLAudioElement | null {
+    return this.activeSlot === "A" ? this.musicAudioA : this.musicAudioB;
+  }
+
+  private ensureMusicAudio(slot: "A" | "B", track: string): HTMLAudioElement {
+    if (slot === "A") {
+      if (!this.musicAudioA || this.musicAudioA.src !== new URL(track, location.href).href) {
+        if (this.musicAudioA) {
+          this.musicAudioA.pause();
+          this.musicAudioA.src = "";
+        }
+        this.musicAudioA = new Audio(track);
+        this.musicAudioA.loop = true;
+        this.musicAudioA.volume = this.MUSIC_VOLUME;
+      }
+      return this.musicAudioA;
+    } else {
+      if (!this.musicAudioB || this.musicAudioB.src !== new URL(track, location.href).href) {
+        if (this.musicAudioB) {
+          this.musicAudioB.pause();
+          this.musicAudioB.src = "";
+        }
+        this.musicAudioB = new Audio(track);
+        this.musicAudioB.loop = true;
+        this.musicAudioB.volume = this.MUSIC_VOLUME;
+      }
+      return this.musicAudioB;
     }
-    return this.musicAudio;
   }
 
   setMusicMuted(muted: boolean): void {
     this.musicMuted = muted;
-    const audio = this.musicAudio;
-    if (!audio) return;
-    if (muted) {
-      audio.muted = true;
-    } else {
-      audio.muted = false;
-    }
+    if (this.musicAudioA) this.musicAudioA.muted = muted;
+    if (this.musicAudioB) this.musicAudioB.muted = muted;
   }
 
   setSfxMuted(muted: boolean): void {
@@ -119,29 +142,91 @@ export class SoundManager {
     if (this.musicPlaying) return;
     this.musicPlaying = true;
     if (this.musicMuted) return;
-    const audio = this.ensureMusicAudio();
+    const audio = this.ensureMusicAudio(this.activeSlot, this.currentTrack);
     audio.currentTime = 0;
+    audio.volume = this.MUSIC_VOLUME;
     audio.play().catch(() => {});
   }
 
   stopMusic(): void {
     this.musicPlaying = false;
-    if (this.musicAudio) {
-      this.musicAudio.pause();
-      this.musicAudio.currentTime = 0;
+    this.cancelCrossfade();
+    if (this.musicAudioA) {
+      this.musicAudioA.pause();
+      this.musicAudioA.currentTime = 0;
+    }
+    if (this.musicAudioB) {
+      this.musicAudioB.pause();
+      this.musicAudioB.currentTime = 0;
     }
   }
 
   pauseMusic(): void {
-    if (this.musicAudio && !this.musicAudio.paused) {
-      this.musicAudio.pause();
+    const active = this.getActiveAudio();
+    if (active && !active.paused) {
+      active.pause();
     }
   }
 
   resumeMusic(): void {
-    if (this.musicPlaying && !this.musicMuted && this.musicAudio && this.musicAudio.paused) {
-      this.musicAudio.play().catch(() => {});
+    if (this.musicPlaying && !this.musicMuted) {
+      const active = this.getActiveAudio();
+      if (active && active.paused) {
+        active.play().catch(() => {});
+      }
     }
+  }
+
+  /**
+   * Smoothly crossfade from the current music track to a new one.
+   * Ramps the active slot volume down while ramping the new slot up.
+   */
+  crossfadeTo(track: string, durationMs = 3000): void {
+    if (!this.musicPlaying || this.musicMuted) {
+      // Not playing — just switch track for next startMusic()
+      this.currentTrack = track;
+      return;
+    }
+
+    this.cancelCrossfade();
+
+    const oldSlot = this.activeSlot;
+    const newSlot = oldSlot === "A" ? "B" : "A";
+    const oldAudio = this.getActiveAudio();
+    const newAudio = this.ensureMusicAudio(newSlot, track);
+
+    newAudio.currentTime = 0;
+    newAudio.volume = 0;
+    newAudio.muted = this.musicMuted;
+    newAudio.play().catch(() => {});
+
+    const stepMs = 50;
+    const steps = Math.ceil(durationMs / stepMs);
+    let step = 0;
+
+    this.crossfadeTimer = setInterval(() => {
+      step++;
+      const t = Math.min(step / steps, 1);
+
+      if (oldAudio) {
+        oldAudio.volume = this.MUSIC_VOLUME * (1 - t);
+      }
+      newAudio.volume = this.MUSIC_VOLUME * t;
+
+      if (t >= 1) {
+        this.cancelCrossfade();
+        if (oldAudio) {
+          oldAudio.pause();
+          oldAudio.currentTime = 0;
+        }
+        this.activeSlot = newSlot;
+        this.currentTrack = track;
+      }
+    }, stepMs);
+
+    // Set active slot immediately so pause/resume works on the new track
+    this.activeSlot = newSlot;
+    this.currentTrack = track;
   }
 
   playBackflipSuccess(): void {
@@ -167,11 +252,22 @@ export class SoundManager {
 
   destroy(): void {
     this.stopMusic();
-    if (this.musicAudio) {
-      this.musicAudio.src = "";
-      this.musicAudio = null;
+    if (this.musicAudioA) {
+      this.musicAudioA.src = "";
+      this.musicAudioA = null;
+    }
+    if (this.musicAudioB) {
+      this.musicAudioB.src = "";
+      this.musicAudioB = null;
     }
     this.ctx?.close();
     this.ctx = null;
+  }
+
+  private cancelCrossfade(): void {
+    if (this.crossfadeTimer) {
+      clearInterval(this.crossfadeTimer);
+      this.crossfadeTimer = null;
+    }
   }
 }

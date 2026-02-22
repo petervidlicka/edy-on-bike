@@ -196,6 +196,7 @@ function suburbanWeightedTypes(elapsedMs: number): WeightedType[] {
   if (elapsedMs >= 25_000) {
     types.push({ type: ObstacleType.BUS_STOP, weight: 0.8 });
     types.push({ type: ObstacleType.SHIPPING_CONTAINER, weight: 0.8 });
+    types.push({ type: ObstacleType.CONTAINER_WITH_RAMP, weight: 0.5 });
   }
   // Stage 4 (40s): cars + other riders
   if (elapsedMs >= 40_000) {

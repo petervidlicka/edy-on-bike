@@ -3,6 +3,7 @@ import { INITIAL_SPEED } from "@/game/constants";
 interface HUDProps {
   score: number;
   speed: number;
+  trickFeedback: { name: string; points: number } | null;
   musicMuted: boolean;
   sfxMuted: boolean;
   onToggleMusic: () => void;
@@ -16,8 +17,8 @@ interface HUDProps {
 function MusicIcon({ muted }: { muted: boolean }) {
   return (
     <svg
-      width="18"
-      height="18"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -41,8 +42,8 @@ function MusicIcon({ muted }: { muted: boolean }) {
 function SpeakerIcon({ muted }: { muted: boolean }) {
   return (
     <svg
-      width="18"
-      height="18"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -67,16 +68,20 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
 }
 
 const btnStyle: React.CSSProperties = {
-  background: "rgba(255,255,255,0.35)",
-  border: "1px solid rgba(30,41,59,0.3)",
-  borderRadius: "6px",
+  background: "rgba(255,255,255,0.22)",
+  backdropFilter: "blur(24px) saturate(200%)",
+  WebkitBackdropFilter: "blur(24px) saturate(200%)",
+  border: "1.5px solid rgba(255,255,255,0.55)",
+  borderRadius: "14px",
   color: "#1e293b",
   cursor: "pointer",
-  padding: "0.35rem 0.5rem",
+  padding: "0.45rem 0.65rem",
   lineHeight: 0,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  boxShadow:
+    "0 2px 16px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
 };
 
 const dpadBtnStyle: React.CSSProperties = {
@@ -104,6 +109,7 @@ function ArrowSVG({ points }: { points: string }) {
 export default function HUD({
   score,
   speed,
+  trickFeedback,
   musicMuted,
   sfxMuted,
   onToggleMusic,
@@ -132,10 +138,11 @@ export default function HUD({
       >
         <span
           style={{
-            color: "#1e293b",
+            color: trickFeedback ? "#f0c030" : "#1e293b",
             fontFamily: "var(--font-space-mono), monospace",
             fontSize: "1.25rem",
             fontWeight: "bold",
+            transition: "color 0.3s ease",
           }}
         >
           {String(score).padStart(5, "0")}
@@ -149,6 +156,19 @@ export default function HUD({
         >
           &times;{multiplier}
         </span>
+        {trickFeedback && (
+          <span
+            style={{
+              color: "#f0c030",
+              fontFamily: "var(--font-space-mono), monospace",
+              fontSize: "0.7rem",
+              fontWeight: "bold",
+              textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+            }}
+          >
+            {trickFeedback.name} +{trickFeedback.points}
+          </span>
+        )}
       </div>
 
       {/* Audio toggles — top left */}

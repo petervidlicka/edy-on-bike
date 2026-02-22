@@ -1,4 +1,4 @@
-import { GameState, ObstacleInstance, TrickType } from "./types";
+import { GameState, ObstacleInstance, ObstacleType, TrickType } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
@@ -13,6 +13,8 @@ import {
   TRIPLE_CHAIN_BONUS,
   JUMP_FORCE,
   RAMP_HEIGHT_MULTIPLIER,
+  MAX_SPEED_MULTIPLIER,
+  COMBO_MULTIPLIER,
 } from "./constants";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
@@ -42,6 +44,7 @@ export type EngineCallbacks = {
   onGameOver: (score: number) => void;
   onStateChange: (state: GameState) => void;
   onSpeedUpdate?: (speed: number) => void;
+  onTrickLanded?: (trickName: string, points: number) => void;
 };
 
 export class Engine {
@@ -95,7 +98,7 @@ export class Engine {
   start(): void {
     if (this.state !== GameState.IDLE) return;
     this.state = GameState.RUNNING;
-    this.nextObstacleGap = nextSpawnGap(this.speed);
+    this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs);
     this.sound.startMusic();
     this.callbacks.onStateChange(this.state);
   }
@@ -185,6 +188,8 @@ export class Engine {
     if (this.speedTimer >= SPEED_INTERVAL) {
       this.speedTimer -= SPEED_INTERVAL;
       this.speed *= 1 + SPEED_INCREASE;
+      const maxSpeed = INITIAL_SPEED * MAX_SPEED_MULTIPLIER;
+      if (this.speed > maxSpeed) this.speed = maxSpeed;
       this.callbacks.onSpeedUpdate?.(this.speed);
     }
 
@@ -208,14 +213,17 @@ export class Engine {
     const FLIP_TOLERANCE = Math.PI / 6; // 30 degrees
     const FULL_FLIP = Math.PI * 2;
 
-    // Flip landing check — player just touched the ground
-    if (wasAirborne && this.player.isOnGround && wasBackflipping) {
-      if (this.handleFlipLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
-    }
-
-    // Pose trick landing check (superman, no hander)
-    if (wasAirborne && this.player.isOnGround && this.player.activeTrick !== TrickType.NONE) {
-      if (this.handlePoseTrickLanding()) return;
+    // Trick landing checks — unified to support combos (pose + flip simultaneously)
+    if (wasAirborne && this.player.isOnGround) {
+      const hadFlip = wasBackflipping;
+      const hadPose = this.player.activeTrick !== TrickType.NONE;
+      if (hadFlip && hadPose) {
+        if (this.handleComboLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+      } else if (hadFlip) {
+        if (this.handleFlipLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+      } else if (hadPose) {
+        if (this.handlePoseTrickLanding()) return;
+      }
     }
 
     // Update floating texts (float up + fade out)
@@ -238,7 +246,7 @@ export class Engine {
         spawnObstacle(this.canvasW, this.groundY, this.elapsedMs, this.envManager.getCurrentEnvironment())
       );
       this.distanceSinceLastObstacle = 0;
-      this.nextObstacleGap = nextSpawnGap(this.speed);
+      this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs);
     }
 
     // Ramp interaction (before collision checks)
@@ -260,12 +268,13 @@ export class Engine {
         const groundPos = this.groundY - this.player.height;
         if (this.player.y < groundPos - 2) {
           // Auto-launch: player is above ground after riding off ramp
+          // Half boost for passive roll-off; active jump gives full boost
           this.player.isOnGround = false;
           this.player.jumpCount = 1; // can still double-jump
           if (this.player.rampBoost === "curved") {
-            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER;
+            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.5;
           } else {
-            this.player.velocityY = JUMP_FORCE;
+            this.player.velocityY = JUMP_FORCE * 0.5;
           }
         }
       }
@@ -280,7 +289,34 @@ export class Engine {
     if (this.player.ridingObstacle) {
       const obs = this.player.ridingObstacle;
       if (obs.x + obs.width < this.player.x + 8) {
+        // Apply half-boost for passive roll-off from container ramp
+        if (this.player.rampBoost) {
+          this.player.jumpCount = 1;
+          if (this.player.rampBoost === "curved") {
+            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.5;
+          } else {
+            this.player.velocityY = JUMP_FORCE * 0.5;
+          }
+        }
         this.player.ridingObstacle = null;
+      } else if (obs.type === ObstacleType.CONTAINER_WITH_RAMP) {
+        // Container with ramp: last 75px has a curved ramp on top
+        const rampW = 75;
+        const rampH = 36;
+        const rampX = obs.x + obs.width - rampW;
+        const playerCenterX = this.player.x + this.player.width / 2;
+        if (playerCenterX >= rampX) {
+          // Player is on the ramp section
+          const t = (playerCenterX - rampX) / rampW;
+          const curvedT = t * t;
+          const surfaceY = obs.y - curvedT * rampH;
+          this.player.y = surfaceY - this.player.height;
+          this.player.rampBoost = "curved";
+          this.player.rampSurfaceAngle = Math.atan2((-2 * t * rampH) / rampW, 1);
+          onAnyRamp = true;
+        } else {
+          this.player.y = obs.y - this.player.height;
+        }
       } else {
         this.player.y = obs.y - this.player.height;
       }
@@ -298,12 +334,14 @@ export class Engine {
           return;
         }
         if (result === "land_on_top") {
-          // Check flip landing on rideable
-          if (this.player.isBackflipping) {
+          // Check trick landing on rideable (combo-aware)
+          const landFlip = this.player.isBackflipping;
+          const landPose = this.player.activeTrick !== TrickType.NONE;
+          if (landFlip && landPose) {
+            if (this.handleComboLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+          } else if (landFlip) {
             if (this.handleFlipLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
-          }
-          // Check pose trick landing on rideable
-          if (this.player.activeTrick !== TrickType.NONE) {
+          } else if (landPose) {
             if (this.handlePoseTrickLanding()) return;
           }
           this.player.ridingObstacle = obs;
@@ -377,6 +415,61 @@ export class Engine {
     return false;
   }
 
+  /** Handle combo landing (pose trick + flip simultaneously). Returns true if crash. */
+  private handleComboLanding(angle: number, direction: number, fullFlip: number, tolerance: number): boolean {
+    // Validate flip
+    const completedFlips = Math.floor(angle / fullFlip);
+    const remainder = angle - completedFlips * fullFlip;
+    const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
+
+    // Validate pose trick — relaxed for combos:
+    // Accept if at least one full cycle completed, OR if the trick reached peak extension
+    // (trickPhase === "return" means it extended fully and started returning)
+    const poseCompletions = this.player.trickCompletions;
+    const posePhase = this.player.trickPhase;
+    const poseSafe = poseCompletions >= 1 || posePhase === "return";
+
+    if (totalFlips >= 1 && poseSafe) {
+      const flipName = direction >= 0 ? "backflip" : "frontflip";
+      const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
+      const poseName = isSuperman ? "superman" : "no-hander";
+      const posePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
+      const effectivePoseCount = Math.max(poseCompletions, 1); // at least 1 since combo validated
+      const baseScore = BACKFLIP_BONUS * totalFlips + posePoints * effectivePoseCount;
+      const comboScore = baseScore * COMBO_MULTIPLIER;
+
+      this.score += comboScore;
+      this.distance = this.score * SCORE_PER_PX;
+      this.callbacks.onScoreUpdate(this.score);
+      this.sound.playBackflipSuccess();
+      this.floatingTexts.push({
+        text: `Combo: ${poseName} ${flipName}, ${comboScore} pts!`,
+        x: this.player.x + this.player.width / 2,
+        y: this.player.y - 10,
+        opacity: 1,
+        velocityY: -1.5,
+      });
+      this.callbacks.onTrickLanded?.(`Combo: ${poseName} ${flipName}`, comboScore);
+
+      // Reset all trick state
+      this.player.backflipAngle = 0;
+      this.player.isBackflipping = false;
+      this.player.activeTrick = TrickType.NONE;
+      this.player.trickProgress = 0;
+      this.player.trickCompletions = 0;
+      return false;
+    }
+
+    // Either component failed — crash
+    this.player.backflipAngle = 0;
+    this.player.isBackflipping = false;
+    this.player.activeTrick = TrickType.NONE;
+    this.player.trickProgress = 0;
+    this.player.trickCompletions = 0;
+    this.gameOver();
+    return true;
+  }
+
   private awardTrickBonus(label: string, bonus: number): void {
     this.score += bonus;
     this.distance = this.score * SCORE_PER_PX;
@@ -389,6 +482,7 @@ export class Engine {
       opacity: 1,
       velocityY: -1.5,
     });
+    this.callbacks.onTrickLanded?.(label, bonus);
   }
 
   private render(): void {

@@ -289,6 +289,15 @@ export class Engine {
     if (this.player.ridingObstacle) {
       const obs = this.player.ridingObstacle;
       if (obs.x + obs.width < this.player.x + 8) {
+        // Apply half-boost for passive roll-off from container ramp
+        if (this.player.rampBoost) {
+          this.player.jumpCount = 1;
+          if (this.player.rampBoost === "curved") {
+            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.5;
+          } else {
+            this.player.velocityY = JUMP_FORCE * 0.5;
+          }
+        }
         this.player.ridingObstacle = null;
       } else if (obs.type === ObstacleType.CONTAINER_WITH_RAMP) {
         // Container with ramp: last 75px has a curved ramp on top

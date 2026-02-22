@@ -17,8 +17,8 @@ interface HUDProps {
 function MusicIcon({ muted }: { muted: boolean }) {
   return (
     <svg
-      width="18"
-      height="18"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -42,8 +42,8 @@ function MusicIcon({ muted }: { muted: boolean }) {
 function SpeakerIcon({ muted }: { muted: boolean }) {
   return (
     <svg
-      width="18"
-      height="18"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -68,16 +68,20 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
 }
 
 const btnStyle: React.CSSProperties = {
-  background: "rgba(255,255,255,0.35)",
-  border: "1px solid rgba(30,41,59,0.3)",
-  borderRadius: "6px",
+  background: "rgba(255,255,255,0.22)",
+  backdropFilter: "blur(24px) saturate(200%)",
+  WebkitBackdropFilter: "blur(24px) saturate(200%)",
+  border: "1.5px solid rgba(255,255,255,0.55)",
+  borderRadius: "14px",
   color: "#1e293b",
   cursor: "pointer",
-  padding: "0.35rem 0.5rem",
+  padding: "0.45rem 0.65rem",
   lineHeight: 0,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  boxShadow:
+    "0 2px 16px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
 };
 
 const dpadBtnStyle: React.CSSProperties = {

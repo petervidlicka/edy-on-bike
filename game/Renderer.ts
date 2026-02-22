@@ -1297,6 +1297,60 @@ function drawShippingContainer(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.strokeRect(x, y, w, h);
 }
 
+function drawContainerWithRamp(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  // Draw the base container
+  drawShippingContainer(ctx, x, y, w, h, palette);
+
+  // Draw a curved ramp on top of the right end (last 75px of width)
+  const c = palette.obstacle;
+  const rampW = 75;
+  const rampH = 36;
+  const rampX = x + w - rampW;
+  const rampY = y - rampH;
+
+  // Ramp surface (metal curved ramp sitting on top of the container)
+  ctx.fillStyle = c.rampMetal;
+  ctx.beginPath();
+  ctx.moveTo(rampX, y);
+  ctx.quadraticCurveTo(rampX + rampW * 0.7, y, rampX + rampW, rampY);
+  ctx.lineTo(rampX + rampW, y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Ramp edge stroke
+  ctx.strokeStyle = c.rampMetalDark;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(rampX, y);
+  ctx.quadraticCurveTo(rampX + rampW * 0.7, y, rampX + rampW, rampY);
+  ctx.stroke();
+
+  // Lip at the top
+  ctx.fillStyle = c.rampMetalDark;
+  ctx.fillRect(rampX + rampW - 3, rampY, 3, 6);
+
+  // Horizontal guide lines
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.lineWidth = 0.7;
+  for (let i = 1; i < 3; i++) {
+    const ly = y - rampH * (i / 3);
+    ctx.beginPath();
+    ctx.moveTo(rampX, y - (y - ly) * 0.3);
+    ctx.lineTo(rampX + rampW, ly);
+    ctx.stroke();
+  }
+
+  // Outline
+  ctx.strokeStyle = c.rampMetalDark;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(rampX, y);
+  ctx.quadraticCurveTo(rampX + rampW * 0.7, y, rampX + rampW, rampY);
+  ctx.lineTo(rampX + rampW, y);
+  ctx.closePath();
+  ctx.stroke();
+}
+
 export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette) {
   const { type, x, y, width: w, height: h } = obstacle;
   switch (type) {
@@ -1311,6 +1365,7 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleIn
     case ObstacleType.GIANT_TREE:         drawGiantTree(ctx, x, y, w, h, palette); break;
     case ObstacleType.STRAIGHT_RAMP:      drawStraightRamp(ctx, x, y, w, h, palette); break;
     case ObstacleType.CURVED_RAMP:        drawCurvedRamp(ctx, x, y, w, h, palette); break;
+    case ObstacleType.CONTAINER_WITH_RAMP: drawContainerWithRamp(ctx, x, y, w, h, palette); break;
   }
 }
 

@@ -50,7 +50,7 @@ export function jumpPlayer(player: PlayerState): void {
 
 export function startBackflip(player: PlayerState): boolean {
   if (player.isOnGround || player.isBackflipping || player.ridingObstacle) return false;
-  if (player.activeTrick !== TrickType.NONE) return false;
+  // Allow starting a flip while a pose trick is active (combo)
   player.isBackflipping = true;
   player.backflipAngle = 0;
   player.flipDirection = 1;
@@ -59,7 +59,7 @@ export function startBackflip(player: PlayerState): boolean {
 
 export function startFrontflip(player: PlayerState): boolean {
   if (player.isOnGround || player.isBackflipping || player.ridingObstacle) return false;
-  if (player.activeTrick !== TrickType.NONE) return false;
+  // Allow starting a flip while a pose trick is active (combo)
   player.isBackflipping = true;
   player.backflipAngle = 0;
   player.flipDirection = -1;
@@ -68,7 +68,8 @@ export function startFrontflip(player: PlayerState): boolean {
 
 export function startSuperman(player: PlayerState): boolean {
   if (player.isOnGround || player.ridingObstacle) return false;
-  if (player.isBackflipping || player.activeTrick !== TrickType.NONE) return false;
+  if (player.activeTrick !== TrickType.NONE) return false; // can't switch pose tricks
+  // Allow starting a pose trick while flipping (combo)
   player.activeTrick = TrickType.SUPERMAN;
   player.trickProgress = 0;
   player.trickPhase = "extend";
@@ -77,7 +78,8 @@ export function startSuperman(player: PlayerState): boolean {
 
 export function startNoHander(player: PlayerState): boolean {
   if (player.isOnGround || player.ridingObstacle) return false;
-  if (player.isBackflipping || player.activeTrick !== TrickType.NONE) return false;
+  if (player.activeTrick !== TrickType.NONE) return false; // can't switch pose tricks
+  // Allow starting a pose trick while flipping (combo)
   player.activeTrick = TrickType.NO_HANDER;
   player.trickProgress = 0;
   player.trickPhase = "extend";
@@ -102,8 +104,8 @@ export function updatePlayer(
   }
 
   if (!player.isOnGround) {
-    // Straight ramp boost: reduced gravity for 50% more horizontal distance
-    const effectiveGravity = player.rampBoost === "straight" ? GRAVITY * 0.667 : GRAVITY;
+    // Straight ramp boost: reduced gravity for more horizontal distance
+    const effectiveGravity = player.rampBoost === "straight" ? GRAVITY * 0.5 : GRAVITY;
     player.velocityY += effectiveGravity * dt;
     player.y += player.velocityY * dt;
 

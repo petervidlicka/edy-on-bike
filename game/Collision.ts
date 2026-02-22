@@ -6,7 +6,7 @@ const HITBOX_PADDING = 8;
 
 // How many pixels from the obstacle top counts as "landing on top".
 // Must be larger than the max fall distance per frame (~18px at peak velocity).
-const TOP_LANDING_TOLERANCE = 30;
+const TOP_LANDING_TOLERANCE = 35;
 
 export function checkCollision(player: PlayerState, obstacle: ObstacleInstance): boolean {
   return (
@@ -42,17 +42,19 @@ export function checkRideableCollision(
   // There is overlap. Check if it qualifies as "landing on top":
   // 1. Player must be falling (velocityY > 0)
   // 2. Player's bottom edge must be near the top of the obstacle
-  // 3. Player's horizontal center must be within the obstacle bounds
+  // 3. At least 25% of the player's width overlaps the obstacle (allows rear-wheel landings)
   const playerBottom = py2;
   const obstacleTop = oy1;
-  const playerCenterX = (px1 + px2) / 2;
+  const overlapLeft = Math.max(px1, ox1);
+  const overlapRight = Math.min(px2, ox2);
+  const overlapWidth = overlapRight - overlapLeft;
+  const playerWidth = px2 - px1;
 
   if (
     player.velocityY > 0 &&
     playerBottom >= obstacleTop &&
     playerBottom <= obstacleTop + TOP_LANDING_TOLERANCE &&
-    playerCenterX >= ox1 &&
-    playerCenterX <= ox2
+    overlapWidth / playerWidth >= 0.25
   ) {
     return "land_on_top";
   }

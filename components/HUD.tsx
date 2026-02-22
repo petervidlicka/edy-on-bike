@@ -3,6 +3,7 @@ import { INITIAL_SPEED } from "@/game/constants";
 interface HUDProps {
   score: number;
   speed: number;
+  trickFeedback: { name: string; points: number } | null;
   musicMuted: boolean;
   sfxMuted: boolean;
   onToggleMusic: () => void;
@@ -104,6 +105,7 @@ function ArrowSVG({ points }: { points: string }) {
 export default function HUD({
   score,
   speed,
+  trickFeedback,
   musicMuted,
   sfxMuted,
   onToggleMusic,
@@ -132,10 +134,11 @@ export default function HUD({
       >
         <span
           style={{
-            color: "#1e293b",
+            color: trickFeedback ? "#f0c030" : "#1e293b",
             fontFamily: "var(--font-space-mono), monospace",
             fontSize: "1.25rem",
             fontWeight: "bold",
+            transition: "color 0.3s ease",
           }}
         >
           {String(score).padStart(5, "0")}
@@ -149,6 +152,19 @@ export default function HUD({
         >
           &times;{multiplier}
         </span>
+        {trickFeedback && (
+          <span
+            style={{
+              color: "#f0c030",
+              fontFamily: "var(--font-space-mono), monospace",
+              fontSize: "0.7rem",
+              fontWeight: "bold",
+              textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+            }}
+          >
+            {trickFeedback.name} +{trickFeedback.points}
+          </span>
+        )}
       </div>
 
       {/* Audio toggles — top left */}

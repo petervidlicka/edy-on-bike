@@ -3,6 +3,28 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { getTopScores, addScore } from "@/lib/leaderboard";
 
+// Allow requests from the Capacitor native app (iOS: capacitor://localhost, Android: http://localhost)
+const ALLOWED_ORIGINS = [
+  "capacitor://localhost",
+  "http://localhost",
+];
+
+function corsHeaders(request: NextRequest) {
+  const origin = request.headers.get("origin") ?? "";
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    return {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+  }
+  return {};
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
+}
+
 // --- Rate limiting ---
 // Production: Redis-backed sliding window (survives serverless cold starts)
 // Local dev: in-memory map capped at 1000 entries to prevent memory growth
@@ -42,12 +64,14 @@ async function isRateLimited(ip: string): Promise<boolean> {
 
 const MAX_SCORE = 99999;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const scores = await getTopScores(20);
-  return NextResponse.json(scores);
+  return NextResponse.json(scores, { headers: corsHeaders(request) });
 }
 
 export async function POST(request: NextRequest) {
+  const cors = corsHeaders(request);
+
   // Next.js 16 removed request.ip; use x-forwarded-for set by the hosting platform
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -56,7 +80,7 @@ export async function POST(request: NextRequest) {
   if (await isRateLimited(ip)) {
     return NextResponse.json(
       { error: "Too many requests. Try again in a few seconds." },
-      { status: 429 },
+      { status: 429, headers: cors },
     );
   }
 
@@ -64,37 +88,37 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400, headers: cors });
   }
 
   const { name, score } = body;
 
   if (typeof name !== "string" || name.trim().length === 0) {
-    return NextResponse.json({ error: "Name is required." }, { status: 400 });
+    return NextResponse.json({ error: "Name is required." }, { status: 400, headers: cors });
   }
 
   if (name.trim().length > 20) {
     return NextResponse.json(
       { error: "Name must be 20 characters or less." },
-      { status: 400 },
+      { status: 400, headers: cors },
     );
   }
 
   if (typeof score !== "number" || !Number.isFinite(score) || score < 0) {
     return NextResponse.json(
       { error: "Score must be a non-negative number." },
-      { status: 400 },
+      { status: 400, headers: cors },
     );
   }
 
   if (score > MAX_SCORE) {
     return NextResponse.json(
       { error: "Score out of range." },
-      { status: 400 },
+      { status: 400, headers: cors },
     );
   }
 
   await addScore(name.trim(), Math.floor(score));
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, { headers: cors });
 }

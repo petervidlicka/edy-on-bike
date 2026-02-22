@@ -81,7 +81,8 @@ export interface BackgroundLayer {
 }
 
 export interface BackgroundElement {
-  type: "cloud" | "house" | "tree_silhouette" | "deer" | "walking_person";
+  /** Element type — extensible per biome (e.g. "house", "skyscraper", "palm_tree") */
+  type: string;
   x: number;
   y: number;
   width: number;

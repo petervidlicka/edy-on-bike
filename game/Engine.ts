@@ -20,6 +20,7 @@ import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./Re
 import { spawnObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision, checkRampCollision } from "./Collision";
 import { SoundManager } from "./SoundManager";
+import { EnvironmentManager } from "./environments";
 
 function computeTrickScore(baseName: string, basePoints: number, count: number): { label: string; totalBonus: number } {
   if (count === 1) return { label: baseName, totalBonus: basePoints };
@@ -47,8 +48,9 @@ export class Engine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private state: GameState = GameState.IDLE;
+  private envManager = new EnvironmentManager();
   private player = createPlayer(0, 0);
-  private layers = createBackgroundLayers(0, 0);
+  private layers = createBackgroundLayers(0, 0, this.envManager.getCurrentEnvironment());
   private obstacles: ObstacleInstance[] = [];
   private speed: number = INITIAL_SPEED;
   private score: number = 0;
@@ -82,7 +84,7 @@ export class Engine {
     this.groundY = Math.floor(h * GROUND_RATIO);
     this.canvas.width = w;
     this.canvas.height = h;
-    this.layers = createBackgroundLayers(w, this.groundY);
+    this.layers = createBackgroundLayers(w, this.groundY, this.envManager.getCurrentEnvironment());
     if (this.state !== GameState.RUNNING) {
       this.player = createPlayer(this.groundY, w);
     } else {
@@ -111,8 +113,9 @@ export class Engine {
     this.nextObstacleGap = 0;
     this.obstacles = [];
     this.floatingTexts = [];
+    this.envManager.reset();
     this.player = createPlayer(this.groundY, this.canvasW);
-    this.layers = createBackgroundLayers(this.canvasW, this.groundY);
+    this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
     this.callbacks.onStateChange(this.state);
   }
@@ -167,6 +170,15 @@ export class Engine {
   }
 
   private update(dt: number, rawDt: number): void {
+    // Environment progression
+    const envResult = this.envManager.update(dt, this.score);
+    if (envResult.musicCrossfade) {
+      this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
+    }
+    if (envResult.regenerateBackground) {
+      this.layers = createBackgroundLayers(this.canvasW, this.groundY, envResult.regenerateBackground);
+    }
+
     // Speed progression
     this.speedTimer += rawDt;
     this.elapsedMs += rawDt;
@@ -223,7 +235,7 @@ export class Engine {
     this.distanceSinceLastObstacle += this.speed * dt;
     if (this.distanceSinceLastObstacle >= this.nextObstacleGap) {
       this.obstacles.push(
-        spawnObstacle(this.canvasW, this.groundY, this.elapsedMs)
+        spawnObstacle(this.canvasW, this.groundY, this.elapsedMs, this.envManager.getCurrentEnvironment())
       );
       this.distanceSinceLastObstacle = 0;
       this.nextObstacleGap = nextSpawnGap(this.speed);
@@ -381,12 +393,14 @@ export class Engine {
 
   private render(): void {
     const { ctx, canvasW, canvasH, groundY } = this;
+    const palette = this.envManager.getCurrentPalette();
+    const drawers = this.envManager.getBackgroundDrawers();
     ctx.clearRect(0, 0, canvasW, canvasH);
-    drawBackground(ctx, this.layers, canvasW, canvasH, groundY);
+    drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
     for (const obs of this.obstacles) {
-      drawObstacle(ctx, obs);
+      drawObstacle(ctx, obs, palette);
     }
-    drawPlayer(ctx, this.player);
+    drawPlayer(ctx, this.player, palette);
     for (const ft of this.floatingTexts) {
       drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity);
     }

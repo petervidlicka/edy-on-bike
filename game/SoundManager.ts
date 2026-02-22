@@ -1,35 +1,11 @@
-// Melody: [frequency_hz, duration_s]. freq=0 means rest.
-// C pentatonic arpeggio at ~140 BPM, square wave at low volume for a chiptune feel.
-const MELODY: [number, number][] = [
-  [523.25, 0.10], // C5
-  [0,      0.05],
-  [659.25, 0.10], // E5
-  [0,      0.05],
-  [783.99, 0.10], // G5
-  [0,      0.05],
-  [659.25, 0.10], // E5
-  [0,      0.05],
-  [880.00, 0.10], // A5
-  [0,      0.05],
-  [659.25, 0.10], // E5
-  [0,      0.05],
-  [587.33, 0.15], // D5
-  [0,      0.05],
-  [523.25, 0.15], // C5
-  [0,      0.15], // pause at bar end
-];
-
-const MELODY_DURATION = MELODY.reduce((sum, [, d]) => sum + d, 0);
-
 export class SoundManager {
   // AudioContext is created lazily on first play to satisfy browser autoplay policy
   private ctx: AudioContext | null = null;
-  private muted = false;
+  private musicMuted = false;
+  private sfxMuted = false;
   private musicPlaying = false;
-  private musicTimeout: ReturnType<typeof setTimeout> | null = null;
-  private musicNextStart = 0;
-  // Master gain node for music — lets us silence already-scheduled oscillators instantly
-  private musicGain: GainNode | null = null;
+  // HTML Audio element for background music MP3
+  private musicAudio: HTMLAudioElement | null = null;
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
@@ -38,32 +14,33 @@ export class SoundManager {
     return this.ctx;
   }
 
-  setMuted(muted: boolean): void {
-    this.muted = muted;
-    if (muted) {
-      // Cancel next scheduled bar and instantly fade master gain to silence
-      // already-scheduled oscillators for the current bar
-      if (this.musicTimeout) {
-        clearTimeout(this.musicTimeout);
-        this.musicTimeout = null;
-      }
-      if (this.musicGain && this.ctx) {
-        this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
-      }
-    } else if (this.musicPlaying) {
-      // Restore master gain and resume scheduling from now
-      const ctx = this.getCtx();
-      if (this.musicGain) {
-        this.musicGain.gain.setTargetAtTime(1, ctx.currentTime, 0.015);
-      }
-      this.musicNextStart = ctx.currentTime + 0.05;
-      this.scheduleMusicBar();
+  private ensureMusicAudio(): HTMLAudioElement {
+    if (!this.musicAudio) {
+      this.musicAudio = new Audio("/music.mp3");
+      this.musicAudio.loop = true;
+      this.musicAudio.volume = 0.45;
     }
+    return this.musicAudio;
+  }
+
+  setMusicMuted(muted: boolean): void {
+    this.musicMuted = muted;
+    const audio = this.musicAudio;
+    if (!audio) return;
+    if (muted) {
+      audio.muted = true;
+    } else {
+      audio.muted = false;
+    }
+  }
+
+  setSfxMuted(muted: boolean): void {
+    this.sfxMuted = muted;
   }
 
   // isDouble = true for the second (in-air) jump — higher pitch
   playJump(isDouble = false): void {
-    if (this.muted) return;
+    if (this.sfxMuted) return;
     const ctx = this.getCtx();
     const now = ctx.currentTime;
 
@@ -87,7 +64,7 @@ export class SoundManager {
   }
 
   playCrash(): void {
-    if (this.muted) return;
+    if (this.sfxMuted) return;
     const ctx = this.getCtx();
     const now = ctx.currentTime;
 
@@ -141,67 +118,59 @@ export class SoundManager {
   startMusic(): void {
     if (this.musicPlaying) return;
     this.musicPlaying = true;
-    if (this.muted) return;
-    const ctx = this.getCtx();
-    // Fresh master gain node each time music starts
-    this.musicGain = ctx.createGain();
-    this.musicGain.gain.setValueAtTime(1, ctx.currentTime);
-    this.musicGain.connect(ctx.destination);
-    this.musicNextStart = ctx.currentTime + 0.05;
-    this.scheduleMusicBar();
+    if (this.musicMuted) return;
+    const audio = this.ensureMusicAudio();
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
   }
 
   stopMusic(): void {
     this.musicPlaying = false;
-    if (this.musicTimeout) {
-      clearTimeout(this.musicTimeout);
-      this.musicTimeout = null;
-    }
-    // Fade master gain to silence already-scheduled notes, then disconnect
-    // after the fade completes so a fresh GainNode on restart doesn't overlap.
-    // disconnect() must be deferred — calling it synchronously cancels the
-    // fade immediately (removes the node from the graph) causing an audible pop.
-    if (this.musicGain && this.ctx) {
-      const gainNode = this.musicGain;
-      gainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
-      setTimeout(() => gainNode.disconnect(), 100); // 100ms >> 0.015s time-constant
-      this.musicGain = null;
+    if (this.musicAudio) {
+      this.musicAudio.pause();
+      this.musicAudio.currentTime = 0;
     }
   }
 
-  private scheduleMusicBar(): void {
-    if (!this.musicPlaying || this.muted) return;
-    const ctx = this.getCtx();
-    let t = this.musicNextStart;
-
-    for (const [freq, dur] of MELODY) {
-      if (freq > 0) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.musicGain!); // route through master gain, not directly to destination
-        osc.type = "square";
-        osc.frequency.value = freq;
-        // Low volume with quick fade for a plucky chiptune feel
-        gain.gain.setValueAtTime(0.04, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + dur * 0.85);
-        osc.start(t);
-        osc.stop(t + dur);
-      }
-      t += dur;
+  pauseMusic(): void {
+    if (this.musicAudio && !this.musicAudio.paused) {
+      this.musicAudio.pause();
     }
+  }
 
-    // Schedule next bar ~50ms before current one ends to avoid gaps
-    this.musicNextStart += MELODY_DURATION;
-    const msUntilNext = (this.musicNextStart - ctx.currentTime - 0.05) * 1000;
-    this.musicTimeout = setTimeout(
-      () => this.scheduleMusicBar(),
-      Math.max(0, msUntilNext),
-    );
+  resumeMusic(): void {
+    if (this.musicPlaying && !this.musicMuted && this.musicAudio && this.musicAudio.paused) {
+      this.musicAudio.play().catch(() => {});
+    }
+  }
+
+  playBackflipSuccess(): void {
+    if (this.sfxMuted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    // Ascending 3-note arpeggio
+    const notes = [523.25, 659.25, 880.00]; // C5, E5, A5
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const t = now + i * 0.06;
+      gain.gain.setValueAtTime(0.22, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.start(t);
+      osc.stop(t + 0.12);
+    });
   }
 
   destroy(): void {
     this.stopMusic();
+    if (this.musicAudio) {
+      this.musicAudio.src = "";
+      this.musicAudio = null;
+    }
     this.ctx?.close();
     this.ctx = null;
   }

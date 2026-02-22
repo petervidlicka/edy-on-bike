@@ -1,4 +1,6 @@
 import { Redis } from "@upstash/redis";
+import fs from "fs";
+import path from "path";
 
 export interface LeaderboardEntry {
   name: string;
@@ -10,13 +12,13 @@ const LEADERBOARD_KEY = "edy-on-bike:leaderboard";
 // --- Upstash Redis store ---
 
 function getRedis(): Redis | null {
-  if (
-    process.env.UPSTASH_REDIS_REST_URL &&
-    process.env.UPSTASH_REDIS_REST_TOKEN
-  ) {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (url && token) {
     return new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      url,
+      token,
     });
   }
   return null;
@@ -51,25 +53,46 @@ async function addScoreRedis(
   await redis.zadd(LEADERBOARD_KEY, { gt: true }, { score, member: name });
 }
 
-// --- In-memory fallback store ---
+// --- File-based fallback store (persists across hot-reloads in local dev) ---
 
-const memoryStore: LeaderboardEntry[] = [];
+const DATA_FILE = path.join(process.cwd(), "data", "leaderboard.json");
 
-function getTopScoresMemory(limit: number): LeaderboardEntry[] {
-  return memoryStore.slice(0, limit);
+function readFileStore(): LeaderboardEntry[] {
+  try {
+    const dir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(DATA_FILE)) return [];
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")) as LeaderboardEntry[];
+  } catch {
+    return [];
+  }
 }
 
-function addScoreMemory(name: string, score: number): void {
-  const existing = memoryStore.find((e) => e.name === name);
-  if (existing) {
-    if (score > existing.score) {
-      existing.score = score;
-    }
-  } else {
-    memoryStore.push({ name, score });
+function writeFileStore(entries: LeaderboardEntry[]): void {
+  try {
+    const dir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(entries, null, 2), "utf-8");
+  } catch {
+    // non-fatal — fall through silently
   }
-  memoryStore.sort((a, b) => b.score - a.score);
-  memoryStore.splice(100); // keep only top 100 to prevent unbounded growth
+}
+
+function getTopScoresFile(limit: number): LeaderboardEntry[] {
+  return readFileStore().slice(0, limit);
+}
+
+function addScoreFile(name: string, score: number): void {
+  const entries = readFileStore();
+  const existing = entries.find((e) => e.name === name);
+  if (existing) {
+    if (score > existing.score) existing.score = score;
+  } else {
+    entries.push({ name, score });
+  }
+  entries.sort((a, b) => b.score - a.score);
+  entries.splice(100); // keep top 100
+  writeFileStore(entries);
 }
 
 // --- Public API ---
@@ -81,7 +104,7 @@ export async function getTopScores(
   if (redis) {
     return getTopScoresRedis(redis, limit);
   }
-  return getTopScoresMemory(limit);
+  return getTopScoresFile(limit);
 }
 
 export async function addScore(name: string, score: number): Promise<void> {
@@ -89,5 +112,5 @@ export async function addScore(name: string, score: number): Promise<void> {
   if (redis) {
     return addScoreRedis(redis, name, score);
   }
-  addScoreMemory(name, score);
+  addScoreFile(name, score);
 }

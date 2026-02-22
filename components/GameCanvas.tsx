@@ -15,7 +15,8 @@ export default function GameCanvas() {
   const [score, setScore] = useState(0);
   const [speed, setSpeed] = useState(INITIAL_SPEED);
   const [bestScore, setBestScore] = useState(0);
-  const [muted, setMuted] = useState(false);
+  const [musicMuted, setMusicMuted] = useState(false);
+  const [sfxMuted, setSfxMuted] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -50,6 +51,10 @@ export default function GameCanvas() {
     };
   }, []);
 
+  const handleRestart = useCallback(() => {
+    engineRef.current?.restart();
+  }, []);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.code === "Space") {
       // Don't intercept space when user is typing in an input
@@ -62,9 +67,24 @@ export default function GameCanvas() {
       const state = engine.getState();
       if (state === GameState.IDLE || state === GameState.RUNNING) {
         engine.jump();
-      } else if (state === GameState.GAME_OVER) {
-        engine.restart();
       }
+      // GAME_OVER is fully handled by GameOverScreen's own keydown listener
+    }
+    if (e.code === "ArrowDown") {
+      e.preventDefault();
+      engineRef.current?.backflip();
+    }
+    if (e.code === "ArrowUp") {
+      e.preventDefault();
+      engineRef.current?.frontflip();
+    }
+    if (e.code === "ArrowLeft") {
+      e.preventDefault();
+      engineRef.current?.superman();
+    }
+    if (e.code === "ArrowRight") {
+      e.preventDefault();
+      engineRef.current?.noHander();
     }
   }, []);
 
@@ -83,9 +103,8 @@ export default function GameCanvas() {
     const state = engine.getState();
     if (state === GameState.IDLE || state === GameState.RUNNING) {
       engine.jump();
-    } else if (state === GameState.GAME_OVER) {
-      engine.restart();
     }
+    // GAME_OVER touch is handled by the "Play Again" button in GameOverScreen
   }, []);
 
   useEffect(() => {
@@ -96,8 +115,12 @@ export default function GameCanvas() {
   }, [handleTouch]);
 
   useEffect(() => {
-    engineRef.current?.setMuted(muted);
-  }, [muted]);
+    engineRef.current?.setMusicMuted(musicMuted);
+  }, [musicMuted]);
+
+  useEffect(() => {
+    engineRef.current?.setSfxMuted(sfxMuted);
+  }, [sfxMuted]);
 
   // Pause when tab is hidden or device is in portrait (mobile) — resumes on the inverse.
   // A single checkPause fn handles both triggers so they don't conflict.
@@ -148,13 +171,19 @@ export default function GameCanvas() {
         <HUD
           score={score}
           speed={speed}
-          muted={muted}
-          onToggleMute={() => setMuted((m) => !m)}
+          musicMuted={musicMuted}
+          sfxMuted={sfxMuted}
+          onToggleMusic={() => setMusicMuted((m) => !m)}
+          onToggleSfx={() => setSfxMuted((m) => !m)}
+          onBackflip={() => engineRef.current?.backflip()}
+          onFrontflip={() => engineRef.current?.frontflip()}
+          onSuperman={() => engineRef.current?.superman()}
+          onNoHander={() => engineRef.current?.noHander()}
         />
       )}
 
       {gameState === GameState.GAME_OVER && (
-        <GameOverScreen score={score} bestScore={bestScore} />
+        <GameOverScreen score={score} bestScore={bestScore} onRestart={handleRestart} />
       )}
     </>
   );

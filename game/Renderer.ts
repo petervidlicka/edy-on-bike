@@ -1,4 +1,4 @@
-import { PlayerState, BackgroundLayer, ObstacleInstance, ObstacleType } from "./types";
+import { PlayerState, BackgroundLayer, ObstacleInstance, ObstacleType, TrickType } from "./types";
 import { COLORS } from "./constants";
 import { getTotalLayerWidth } from "./Background";
 
@@ -435,7 +435,7 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
-  const { x, y, wheelRotation, bikeTilt, riderLean, riderCrouch, legTuck } = player;
+  const { x, y, wheelRotation, bikeTilt, riderLean, riderCrouch, legTuck, backflipAngle, flipDirection } = player;
   const c = COLORS.player;
 
   // BMX proportions matched to Figma reference — long wheelbase, low frame
@@ -449,6 +449,16 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   const pivotY = y + 43;
 
   ctx.save();
+
+  // Flip rotation — backflip (CCW) or frontflip (CW) around player center
+  if (backflipAngle > 0) {
+    const centerX = x + player.width / 2;
+    const centerY = y + player.height / 2;
+    ctx.translate(centerX, centerY);
+    ctx.rotate(-backflipAngle * flipDirection);
+    ctx.translate(-centerX, -centerY);
+  }
+
   ctx.translate(pivotX, pivotY);
   ctx.rotate(-bikeTilt);
   ctx.translate(-pivotX, -pivotY);
@@ -570,40 +580,84 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
 
   // ── Rider (standing tall on pedals — matched to Figma proportions) ──
 
+  const trickProg = player.trickProgress;
+  const activeTrick = player.activeTrick;
+
   // Hip: centered over BB, standing tall (20px above pedals vs old 14px)
   const standX = bbX;             // x + 27
-  const standY = bbY - 20;       // y + 24 (was bbY - 14 = y + 30)
-  const hipX = standX - riderLean * 7;
-  const hipY = standY - riderCrouch * 10;
+  const standY = bbY - 20;       // y + 24
+  let hipX = standX - riderLean * 7;
+  let hipY = standY - riderCrouch * 10;
 
   // Torso: nearly upright (~81° from horizontal) matching Figma
-  const baseTorsoAngle = Math.atan2(-13, 2);   // ≈ -81° (was atan2(-15, 11) ≈ -54°)
-  const torsoLength = 13;                       // shorter, more upright (was 19)
+  const baseTorsoAngle = Math.atan2(-13, 2);
+  const torsoLength = 13;
   const adjustedAngle = baseTorsoAngle - riderLean * 1.2;
-  const shoulderX = hipX + Math.cos(adjustedAngle) * torsoLength;
-  const shoulderY = hipY + Math.sin(adjustedAngle) * torsoLength;
+  let shoulderX = hipX + Math.cos(adjustedAngle) * torsoLength;
+  let shoulderY = hipY + Math.sin(adjustedAngle) * torsoLength;
 
   // Legs: both feet on pedals; tuck pulls toward chest during jump
-  const footLX = lerp(pedalLX, hipX - 2, legTuck * 0.7);
-  const footLY = lerp(pedalY, hipY + 7, legTuck * 0.8);
-  const footRX = lerp(pedalRX, hipX + 4, legTuck * 0.7);
-  const footRY = lerp(pedalY, hipY + 9, legTuck * 0.8);
+  let footLX = lerp(pedalLX, hipX - 2, legTuck * 0.7);
+  let footLY = lerp(pedalY, hipY + 7, legTuck * 0.8);
+  let footRX = lerp(pedalRX, hipX + 4, legTuck * 0.7);
+  let footRY = lerp(pedalY, hipY + 9, legTuck * 0.8);
 
-  // Knees: natural bend from Figma — right knee bows forward, left knee back
-  const kneeLX = lerp((hipX + footLX) / 2 + 1, hipX - 3, legTuck * 0.5);
-  const kneeLY = lerp((hipY + footLY) / 2 + 1, hipY + 5, legTuck * 0.5);
-  const kneeRX = lerp((hipX + footRX) / 2 + 2, hipX + 2, legTuck * 0.5);
-  const kneeRY = lerp((hipY + footRY) / 2, hipY + 5, legTuck * 0.5);
+  // Knees
+  let kneeLX = lerp((hipX + footLX) / 2 + 1, hipX - 3, legTuck * 0.5);
+  let kneeLY = lerp((hipY + footLY) / 2 + 1, hipY + 5, legTuck * 0.5);
+  let kneeRX = lerp((hipX + footRX) / 2 + 2, hipX + 2, legTuck * 0.5);
+  let kneeRY = lerp((hipY + footRY) / 2, hipY + 5, legTuck * 0.5);
+
+  // Arms
+  let elbowX = shoulderX + 6;
+  let elbowY = shoulderY + 6;
+  let drawGripX = gripX;
+  let drawGripY = gripY;
+
+  // --- Pose trick modifications ---
+  if (activeTrick === TrickType.SUPERMAN && trickProg > 0) {
+    // Superman: feet leave pedals, legs+torso extend backward horizontally
+    // Rider holds handlebars — arms stay connected to grip
+    hipX = lerp(hipX, hipX - 10, trickProg);
+    hipY = lerp(hipY, hipY + 5, trickProg);
+    // Recalculate shoulder for more horizontal torso
+    const supermanAngle = lerp(adjustedAngle, -0.3, trickProg); // nearly horizontal
+    shoulderX = hipX + Math.cos(supermanAngle) * torsoLength;
+    shoulderY = hipY + Math.sin(supermanAngle) * torsoLength;
+    // Feet extend backward and up (legs straight out behind)
+    footLX = lerp(pedalLX, hipX - 22, trickProg);
+    footLY = lerp(pedalY, hipY + 2, trickProg);
+    footRX = lerp(pedalRX, hipX - 20, trickProg);
+    footRY = lerp(pedalY, hipY + 4, trickProg);
+    // Knees straighten
+    kneeLX = lerp(kneeLX, (hipX + footLX) / 2, trickProg);
+    kneeLY = lerp(kneeLY, (hipY + footLY) / 2 - 1, trickProg);
+    kneeRX = lerp(kneeRX, (hipX + footRX) / 2, trickProg);
+    kneeRY = lerp(kneeRY, (hipY + footRY) / 2 + 1, trickProg);
+    // Arms reach forward to grip (recalculate elbow)
+    elbowX = lerp(shoulderX + 6, (shoulderX + gripX) / 2 + 3, trickProg);
+    elbowY = lerp(shoulderY + 6, (shoulderY + gripY) / 2 + 2, trickProg);
+  }
+
+  if (activeTrick === TrickType.NO_HANDER && trickProg > 0) {
+    // No Hander: hands leave handlebars, arms extend outward/upward
+    // Feet stay on pedals, bike held by legs via saddle
+    // Arms extend up and out
+    elbowX = lerp(shoulderX + 6, shoulderX - 4, trickProg);
+    elbowY = lerp(shoulderY + 6, shoulderY - 8, trickProg);
+    drawGripX = lerp(gripX, shoulderX + 8, trickProg);
+    drawGripY = lerp(gripY, shoulderY - 14, trickProg);
+  }
 
   ctx.strokeStyle = c.pants;
   ctx.lineWidth = 3;
-  // Left leg: hip → knee → foot (on left/rear pedal)
+  // Left leg
   ctx.beginPath();
   ctx.moveTo(hipX - 1, hipY + 2);
   ctx.lineTo(kneeLX, kneeLY);
   ctx.lineTo(footLX, footLY);
   ctx.stroke();
-  // Right leg: hip → knee → foot (on right/front pedal)
+  // Right leg
   ctx.beginPath();
   ctx.moveTo(hipX + 2, hipY + 2);
   ctx.lineTo(kneeRX, kneeRY);
@@ -618,18 +672,16 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
   ctx.lineTo(shoulderX, shoulderY);
   ctx.stroke();
 
-  // Arms — two segments: upper arm → elbow → forearm → grip (from Figma)
-  const elbowX = shoulderX + 6;
-  const elbowY = shoulderY + 6;
+  // Arms — two segments: upper arm → elbow → forearm → grip
   ctx.strokeStyle = c.skin;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(shoulderX, shoulderY);
   ctx.lineTo(elbowX, elbowY);
-  ctx.lineTo(gripX, gripY);
+  ctx.lineTo(drawGripX, drawGripY);
   ctx.stroke();
 
-  // Head (face oval — slightly wider than tall, matching Figma)
+  // Head (face oval)
   const headPosX = shoulderX + 1;
   const headPosY = shoulderY - 7;
   ctx.fillStyle = c.skin;
@@ -675,37 +727,314 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState) {
 
 function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   const c = COLORS.obstacle;
-  // Main body — slightly irregular ellipse
+  // Irregular polygon body
   ctx.fillStyle = c.rock;
   ctx.beginPath();
-  ctx.ellipse(x + w * 0.5, y + h * 0.55, w * 0.5, h * 0.5, -0.2, 0, Math.PI * 2);
+  ctx.moveTo(x + w * 0.15, y + h * 0.9);
+  ctx.lineTo(x + w * 0.02, y + h * 0.55);
+  ctx.lineTo(x + w * 0.2, y + h * 0.15);
+  ctx.lineTo(x + w * 0.55, y + h * 0.05);
+  ctx.lineTo(x + w * 0.88, y + h * 0.2);
+  ctx.lineTo(x + w * 0.98, y + h * 0.6);
+  ctx.lineTo(x + w * 0.82, y + h * 0.95);
+  ctx.closePath();
   ctx.fill();
-  // Shadow patch
+  // Highlight patch (upper-right)
+  ctx.fillStyle = c.rockHighlight;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.5, y + h * 0.12);
+  ctx.lineTo(x + w * 0.85, y + h * 0.25);
+  ctx.lineTo(x + w * 0.75, y + h * 0.5);
+  ctx.lineTo(x + w * 0.45, y + h * 0.4);
+  ctx.closePath();
+  ctx.fill();
+  // Shadow patch (lower-left)
   ctx.fillStyle = c.rockShadow;
   ctx.beginPath();
-  ctx.ellipse(x + w * 0.35, y + h * 0.7, w * 0.28, h * 0.22, 0, 0, Math.PI * 2);
+  ctx.moveTo(x + w * 0.08, y + h * 0.6);
+  ctx.lineTo(x + w * 0.35, y + h * 0.55);
+  ctx.lineTo(x + w * 0.4, y + h * 0.85);
+  ctx.lineTo(x + w * 0.15, y + h * 0.9);
+  ctx.closePath();
   ctx.fill();
+  // Crack lines
+  ctx.strokeStyle = c.rockShadow;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.3, y + h * 0.3);
+  ctx.lineTo(x + w * 0.45, y + h * 0.55);
+  ctx.lineTo(x + w * 0.55, y + h * 0.5);
+  ctx.stroke();
+  // Outline
+  ctx.strokeStyle = c.rockShadow;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.15, y + h * 0.9);
+  ctx.lineTo(x + w * 0.02, y + h * 0.55);
+  ctx.lineTo(x + w * 0.2, y + h * 0.15);
+  ctx.lineTo(x + w * 0.55, y + h * 0.05);
+  ctx.lineTo(x + w * 0.88, y + h * 0.2);
+  ctx.lineTo(x + w * 0.98, y + h * 0.6);
+  ctx.lineTo(x + w * 0.82, y + h * 0.95);
+  ctx.closePath();
+  ctx.stroke();
 }
 
 function drawSmallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   const c = COLORS.obstacle;
-  // Trunk
+  const cx = x + w / 2;
+  // Trunk with bark texture
   ctx.fillStyle = c.treeTrunk;
-  ctx.fillRect(x + w * 0.38, y + h * 0.52, w * 0.24, h * 0.48);
-  // Canopy (two stacked triangles for a fuller look)
+  ctx.fillRect(cx - w * 0.1, y + h * 0.55, w * 0.2, h * 0.45);
+  // Bark lines
+  ctx.strokeStyle = c.treeTrunkShadow;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.04, y + h * 0.58);
+  ctx.lineTo(cx - w * 0.02, y + h * 0.95);
+  ctx.moveTo(cx + w * 0.05, y + h * 0.6);
+  ctx.lineTo(cx + w * 0.04, y + h * 0.9);
+  ctx.stroke();
+  // Canopy — three overlapping rounded blobs (lush deciduous, contrasts with background conifers)
+  // Bottom blob
   ctx.fillStyle = c.tree;
   ctx.beginPath();
-  ctx.moveTo(x, y + h * 0.58);
-  ctx.lineTo(x + w / 2, y);
-  ctx.lineTo(x + w, y + h * 0.58);
-  ctx.closePath();
+  ctx.ellipse(cx, y + h * 0.48, w * 0.5, h * 0.18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Middle blob
+  ctx.beginPath();
+  ctx.ellipse(cx - w * 0.08, y + h * 0.32, w * 0.42, h * 0.16, -0.15, 0, Math.PI * 2);
+  ctx.fill();
+  // Top blob
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.05, y + h * 0.18, w * 0.32, h * 0.14, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Highlight blobs (light-facing right side)
+  ctx.fillStyle = c.treeHighlight;
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.15, y + h * 0.44, w * 0.22, h * 0.1, 0.2, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(x + w * 0.1, y + h * 0.75);
-  ctx.lineTo(x + w / 2, y + h * 0.3);
-  ctx.lineTo(x + w * 0.9, y + h * 0.75);
+  ctx.ellipse(cx + w * 0.1, y + h * 0.26, w * 0.18, h * 0.08, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Outline
+  ctx.strokeStyle = c.treeTrunkShadow;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.48, w * 0.5, h * 0.18, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.05, y + h * 0.18, w * 0.32, h * 0.14, 0.1, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawTallTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const c = COLORS.obstacle;
+  const cx = x + w / 2;
+
+  // Slender trunk (narrower than small tree, takes ~25% of height)
+  ctx.fillStyle = c.treeTrunk;
+  ctx.fillRect(cx - w * 0.08, y + h * 0.75, w * 0.16, h * 0.25);
+  // Bark line
+  ctx.strokeStyle = c.treeTrunkShadow;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.02, y + h * 0.77);
+  ctx.lineTo(cx - w * 0.01, y + h * 0.98);
+  ctx.stroke();
+
+  // Tall narrow canopy — cypress/poplar silhouette (two elongated blobs)
+  // Main body: tall narrow oval
+  ctx.fillStyle = c.tree;
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.42, w * 0.38, h * 0.35, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Top pointed section
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.14, w * 0.22, h * 0.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Side wisps (small blobs left and right to break the silhouette)
+  ctx.beginPath();
+  ctx.ellipse(cx - w * 0.25, y + h * 0.5, w * 0.15, h * 0.1, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.25, y + h * 0.45, w * 0.15, h * 0.1, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Highlight (right-facing light)
+  ctx.fillStyle = c.treeHighlight;
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.12, y + h * 0.38, w * 0.16, h * 0.18, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.08, y + h * 0.12, w * 0.1, h * 0.1, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outline (just the outer body)
+  ctx.strokeStyle = c.treeTrunkShadow;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.42, w * 0.38, h * 0.35, 0, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawGiantTree(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const c = COLORS.obstacle;
+  const cx = x + w / 2;
+
+  // Thick trunk (stout, bushy tree)
+  ctx.fillStyle = c.giantTreeTrunk;
+  ctx.fillRect(cx - w * 0.14, y + h * 0.65, w * 0.28, h * 0.35);
+  // Bark lines
+  ctx.strokeStyle = "#4a3020";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.04, y + h * 0.67);
+  ctx.lineTo(cx - w * 0.02, y + h * 0.97);
+  ctx.moveTo(cx + w * 0.06, y + h * 0.69);
+  ctx.lineTo(cx + w * 0.05, y + h * 0.95);
+  ctx.stroke();
+
+  // Dense bushy canopy — wide oak-like crown (multiple overlapping blobs)
+  ctx.fillStyle = c.giantTreeCanopy;
+  // Bottom cluster (widest)
+  ctx.beginPath();
+  ctx.ellipse(cx - w * 0.15, y + h * 0.55, w * 0.38, h * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.15, y + h * 0.52, w * 0.38, h * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Middle canopy
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.40, w * 0.48, h * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx - w * 0.1, y + h * 0.30, w * 0.40, h * 0.14, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Upper canopy
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.05, y + h * 0.20, w * 0.32, h * 0.12, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Top crown
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.10, w * 0.22, h * 0.09, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Highlight blobs (right-facing light)
+  ctx.fillStyle = c.giantTreeCanopyHighlight;
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.2, y + h * 0.38, w * 0.20, h * 0.10, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.12, y + h * 0.22, w * 0.16, h * 0.08, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + w * 0.08, y + h * 0.50, w * 0.18, h * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outline (outer shape)
+  ctx.strokeStyle = "#1e5a24";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.ellipse(cx, y + h * 0.40, w * 0.48, h * 0.16, 0, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawStraightRamp(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const c = COLORS.obstacle;
+  // Ramp surface — wooden incline (triangle: flat bottom-left to top-right)
+  ctx.fillStyle = c.rampWood;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);       // bottom-left
+  ctx.lineTo(x + w, y);       // top-right
+  ctx.lineTo(x + w, y + h);   // bottom-right
   ctx.closePath();
   ctx.fill();
+
+  // Surface highlight (top face)
+  ctx.fillStyle = c.rampWoodHighlight;
+  ctx.beginPath();
+  ctx.moveTo(x + 2, y + h);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + 3);
+  ctx.lineTo(x + 3, y + h);
+  ctx.closePath();
+  ctx.fill();
+
+  // Wooden plank lines
+  ctx.strokeStyle = c.rampWoodDark;
+  ctx.lineWidth = 0.8;
+  for (let i = 1; i < 4; i++) {
+    const t = i / 4;
+    const lx = x + w * t;
+    ctx.beginPath();
+    ctx.moveTo(lx, y + h - h * t);
+    ctx.lineTo(lx, y + h);
+    ctx.stroke();
+  }
+
+  // Support strut
+  ctx.strokeStyle = c.rampWoodDark;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.55, y + h);
+  ctx.lineTo(x + w - 2, y + h * 0.45);
+  ctx.stroke();
+
+  // Outline
+  ctx.strokeStyle = c.rampWoodDark;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawCurvedRamp(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const c = COLORS.obstacle;
+  // Curved ramp surface with lip
+  ctx.fillStyle = c.rampMetal;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.quadraticCurveTo(x + w * 0.7, y + h, x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.fill();
+
+  // Surface stroke
+  ctx.strokeStyle = c.rampMetalDark;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.quadraticCurveTo(x + w * 0.7, y + h, x + w, y);
+  ctx.stroke();
+
+  // Lip at the top
+  ctx.fillStyle = c.rampMetalDark;
+  ctx.fillRect(x + w - 3, y, 3, 6);
+
+  // Reinforcement lines
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.lineWidth = 0.7;
+  for (let i = 1; i < 3; i++) {
+    const ly = y + h * (i / 3);
+    ctx.beginPath();
+    ctx.moveTo(x, ly + h * 0.1);
+    ctx.lineTo(x + w, ly);
+    ctx.stroke();
+  }
+
+  // Outline
+  ctx.strokeStyle = c.rampMetalDark;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.quadraticCurveTo(x + w * 0.7, y + h, x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.stroke();
 }
 
 function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
@@ -714,59 +1043,158 @@ function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number
   const basketBottom = y + h - 14;
   const basketLeft = x + 8;
   const basketRight = x + w;
+  const bw = basketRight - basketLeft;
+  const bh = basketBottom - basketTop;
 
-  // Handle bar
+  // Handle bar with orange grip
   ctx.strokeStyle = c.trolley;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(x, basketTop + 4);
   ctx.lineTo(basketLeft, basketTop);
   ctx.stroke();
-
-  // Basket frame (wireframe style)
-  ctx.strokeRect(basketLeft, basketTop, basketRight - basketLeft, basketBottom - basketTop);
-
-  // Basket cross-hatch lines (horizontal)
-  ctx.lineWidth = 1;
+  // Orange grip
+  ctx.strokeStyle = c.trolleyAccent;
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(basketLeft, basketTop + (basketBottom - basketTop) * 0.33);
-  ctx.lineTo(basketRight, basketTop + (basketBottom - basketTop) * 0.33);
-  ctx.moveTo(basketLeft, basketTop + (basketBottom - basketTop) * 0.66);
-  ctx.lineTo(basketRight, basketTop + (basketBottom - basketTop) * 0.66);
+  ctx.moveTo(x, basketTop + 2);
+  ctx.lineTo(x, basketTop + 10);
   ctx.stroke();
 
-  // Wheels
+  // Basket body (slight trapezoid — wider at top)
   ctx.fillStyle = c.trolleyBasket;
-  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(x + 14, y + h - 6, 6, 0, Math.PI * 2);
+  ctx.moveTo(basketLeft + 2, basketBottom);
+  ctx.lineTo(basketLeft, basketTop);
+  ctx.lineTo(basketRight, basketTop);
+  ctx.lineTo(basketRight - 2, basketBottom);
+  ctx.closePath();
   ctx.fill();
+
+  // Wire grid pattern
+  ctx.strokeStyle = c.trolley;
+  ctx.lineWidth = 0.8;
+  // Horizontal wires
+  for (let i = 1; i <= 3; i++) {
+    const gy = basketTop + bh * (i / 4);
+    ctx.beginPath();
+    ctx.moveTo(basketLeft, gy);
+    ctx.lineTo(basketRight, gy);
+    ctx.stroke();
+  }
+  // Vertical wires
+  for (let i = 1; i <= 3; i++) {
+    const gx = basketLeft + bw * (i / 4);
+    ctx.beginPath();
+    ctx.moveTo(gx, basketTop);
+    ctx.lineTo(gx, basketBottom);
+    ctx.stroke();
+  }
+
+  // Basket frame outline
+  ctx.strokeStyle = c.trolley;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(basketLeft + 2, basketBottom);
+  ctx.lineTo(basketLeft, basketTop);
+  ctx.lineTo(basketRight, basketTop);
+  ctx.lineTo(basketRight - 2, basketBottom);
+  ctx.closePath();
   ctx.stroke();
+
+  // Wheels with spokes
+  const wheelR = 5;
+  const wy = y + h - wheelR - 1;
+  for (const wx of [x + 14, x + w - 8]) {
+    ctx.fillStyle = c.trolleyBasket;
+    ctx.strokeStyle = c.trolley;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(wx, wy, wheelR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Spokes
+    ctx.lineWidth = 0.6;
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2;
+      ctx.beginPath();
+      ctx.moveTo(wx, wy);
+      ctx.lineTo(wx + Math.cos(a) * wheelR, wy + Math.sin(a) * wheelR);
+      ctx.stroke();
+    }
+  }
+
+  // Legs connecting basket to wheels
+  ctx.strokeStyle = c.trolley;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(x + w - 8, y + h - 6, 6, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(basketLeft + 4, basketBottom);
+  ctx.lineTo(x + 14, wy - wheelR);
+  ctx.moveTo(basketRight - 4, basketBottom);
+  ctx.lineTo(x + w - 8, wy - wheelR);
   ctx.stroke();
 }
 
 function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   const c = COLORS.obstacle;
 
-  // Body (lower)
+  // Body (lower) — terracotta red
   ctx.fillStyle = c.car;
-  ctx.fillRect(x, y + 14, w, h - 22);
+  ctx.beginPath();
+  ctx.moveTo(x + 4, y + 14);
+  ctx.lineTo(x + w - 4, y + 14);
+  ctx.quadraticCurveTo(x + w, y + 14, x + w, y + 18);
+  ctx.lineTo(x + w, y + h - 10);
+  ctx.quadraticCurveTo(x + w, y + h - 6, x + w - 4, y + h - 6);
+  ctx.lineTo(x + 4, y + h - 6);
+  ctx.quadraticCurveTo(x, y + h - 6, x, y + h - 10);
+  ctx.lineTo(x, y + 18);
+  ctx.quadraticCurveTo(x, y + 14, x + 4, y + 14);
+  ctx.fill();
 
-  // Roof
-  ctx.fillRect(x + 12, y, w - 24, 16);
+  // Roof — darker red with sloped profile
+  ctx.fillStyle = c.carRoof;
+  ctx.beginPath();
+  ctx.moveTo(x + 16, y + 14);
+  ctx.lineTo(x + 12, y + 4);
+  ctx.quadraticCurveTo(x + 14, y, x + 18, y);
+  ctx.lineTo(x + w - 18, y);
+  ctx.quadraticCurveTo(x + w - 14, y, x + w - 12, y + 4);
+  ctx.lineTo(x + w - 16, y + 14);
+  ctx.closePath();
+  ctx.fill();
 
-  // Windows
+  // Windows — light blue with reflective highlight
   ctx.fillStyle = c.carWindow;
-  ctx.fillRect(x + 14, y + 2, 20, 11);
-  ctx.fillRect(x + w - 34, y + 2, 20, 11);
+  ctx.fillRect(x + 16, y + 2, 18, 11);
+  ctx.fillRect(x + w - 34, y + 2, 18, 11);
+  // Window reflection
+  ctx.fillStyle = "rgba(255,255,255,0.2)";
+  ctx.fillRect(x + 17, y + 3, 6, 4);
+  ctx.fillRect(x + w - 33, y + 3, 6, 4);
+
+  // Door line
+  ctx.strokeStyle = c.carRoof;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.5, y + 14);
+  ctx.lineTo(x + w * 0.5, y + h - 10);
+  ctx.stroke();
 
   // Bumpers
-  ctx.fillStyle = c.rockShadow;
-  ctx.fillRect(x, y + h - 8, 6, 4);
-  ctx.fillRect(x + w - 6, y + h - 8, 6, 4);
+  ctx.fillStyle = c.carBumper;
+  ctx.fillRect(x - 1, y + h - 10, 6, 3);
+  ctx.fillRect(x + w - 5, y + h - 10, 6, 3);
+
+  // Headlight / Taillight
+  ctx.fillStyle = "#e8d06a";
+  ctx.beginPath();
+  ctx.arc(x + w - 3, y + 20, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#c44040";
+  ctx.beginPath();
+  ctx.arc(x + 3, y + 20, 2.5, 0, Math.PI * 2);
+  ctx.fill();
 
   // Wheels
   ctx.fillStyle = "#2e2e2c";
@@ -777,13 +1205,26 @@ function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.arc(x + w - 16, y + h - 7, 9, 0, Math.PI * 2);
   ctx.fill();
   // Hubcaps
-  ctx.fillStyle = "#6a6a68";
+  ctx.fillStyle = c.carBumper;
   ctx.beginPath();
   ctx.arc(x + 16, y + h - 7, 4, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
   ctx.arc(x + w - 16, y + h - 7, 4, 0, Math.PI * 2);
   ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = c.carRoof;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + 4, y + 14);
+  ctx.lineTo(x + w - 4, y + 14);
+  ctx.quadraticCurveTo(x + w, y + 14, x + w, y + 18);
+  ctx.lineTo(x + w, y + h - 10);
+  ctx.moveTo(x, y + h - 10);
+  ctx.lineTo(x, y + 18);
+  ctx.quadraticCurveTo(x, y + 14, x + 4, y + 14);
+  ctx.stroke();
 }
 
 function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
@@ -793,17 +1234,37 @@ function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w
   const frontWX = x + w - wheelR - 2;
   const wheelY = y + h - wheelR;
 
-  // Wheels
-  ctx.strokeStyle = c.bikeRider;
+  // Wheels with spokes
+  ctx.strokeStyle = c.bikeFrame;
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(rearWX, wheelY, wheelR, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(frontWX, wheelY, wheelR, 0, Math.PI * 2); ctx.stroke();
+  for (const wx of [rearWX, frontWX]) {
+    ctx.beginPath();
+    ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2);
+    ctx.stroke();
+    // Spokes
+    ctx.lineWidth = 0.7;
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI) / 3;
+      ctx.beginPath();
+      ctx.moveTo(wx + Math.cos(a) * 2, wheelY + Math.sin(a) * 2);
+      ctx.lineTo(wx + Math.cos(a) * wheelR, wheelY + Math.sin(a) * wheelR);
+      ctx.stroke();
+    }
+    // Center dot
+    ctx.fillStyle = c.bikeFrame;
+    ctx.beginPath();
+    ctx.arc(wx, wheelY, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 2;
+  }
 
-  // Frame (simplified diamond)
+  // Frame (diamond shape)
   const pedalX = x + w * 0.45;
   const pedalY = wheelY - 4;
   const seatX = x + w * 0.3;
   const seatY = y + h * 0.52;
+  ctx.strokeStyle = c.bikeFrame;
+  ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(rearWX, wheelY);
   ctx.lineTo(pedalX, pedalY);
@@ -814,37 +1275,181 @@ function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.lineTo(frontWX - 2, seatY - 4);
   ctx.stroke();
 
-  // Rider torso
+  // Seat
+  ctx.fillStyle = c.bikeRider;
+  ctx.fillRect(seatX - 4, seatY - 2, 8, 3);
+
+  // Rider torso — plum/indigo shirt
   const shoulderX = seatX + 6;
   const shoulderY = seatY - 14;
   ctx.strokeStyle = c.bikeRider;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3.5;
   ctx.beginPath();
   ctx.moveTo(seatX + 2, seatY);
   ctx.lineTo(shoulderX, shoulderY);
   ctx.stroke();
 
   // Arms
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(shoulderX, shoulderY);
   ctx.lineTo(frontWX - 4, seatY - 6);
   ctx.stroke();
 
-  // Head
-  ctx.fillStyle = c.bikeRider;
+  // Legs (to pedals)
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(seatX + 2, seatY);
+  ctx.lineTo(pedalX - 3, pedalY);
+  ctx.moveTo(seatX + 2, seatY);
+  ctx.lineTo(pedalX + 3, pedalY);
+  ctx.stroke();
+
+  // Head — skin tone
+  ctx.fillStyle = COLORS.player.skin;
   ctx.beginPath();
   ctx.arc(shoulderX + 1, shoulderY - 7, 5, 0, Math.PI * 2);
   ctx.fill();
+  // Helmet
+  ctx.fillStyle = c.bikeRider;
+  ctx.beginPath();
+  ctx.arc(shoulderX + 1, shoulderY - 8, 5.5, Math.PI, 0);
+  ctx.fill();
+}
+
+function drawBusStop(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const c = COLORS.obstacle;
+  // Two vertical posts
+  ctx.fillStyle = c.busStopFrame;
+  ctx.fillRect(x + 4, y + 10, 4, h - 10);
+  ctx.fillRect(x + w - 8, y + 10, 4, h - 10);
+
+  // Roof (flat top — landing surface)
+  ctx.fillStyle = c.busStopRoof;
+  ctx.fillRect(x - 2, y, w + 4, 10);
+  // Roof overhang shadow
+  ctx.fillStyle = "rgba(0,0,0,0.1)";
+  ctx.fillRect(x, y + 10, w, 3);
+
+  // Glass back panel
+  ctx.save();
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = c.busStopGlass;
+  ctx.fillRect(x + 10, y + 14, w - 20, h - 22);
+  ctx.restore();
+  // Glass panel frame
+  ctx.strokeStyle = c.busStopFrame;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x + 10, y + 14, w - 20, h - 22);
+  // Glass divider
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + w / 2, y + 14);
+  ctx.lineTo(x + w / 2, y + h - 8);
+  ctx.stroke();
+
+  // Bench
+  ctx.fillStyle = c.busStopFrame;
+  ctx.fillRect(x + 12, y + h - 14, w - 24, 4);
+  // Bench legs
+  ctx.fillRect(x + 14, y + h - 10, 2, 6);
+  ctx.fillRect(x + w - 16, y + h - 10, 2, 6);
+
+  // Bus stop sign (circle on left post)
+  ctx.fillStyle = c.busStopSign;
+  ctx.beginPath();
+  ctx.arc(x + 6, y + 18, 5, 0, Math.PI * 2);
+  ctx.fill();
+  // Sign letter "B"
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 6px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("B", x + 6, y + 18);
+}
+
+function drawShippingContainer(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const c = COLORS.obstacle;
+  // Main body
+  ctx.fillStyle = c.container;
+  ctx.fillRect(x, y, w, h);
+
+  // Corrugated ridges (vertical lines)
+  ctx.strokeStyle = c.containerDark;
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 12; i++) {
+    const lx = x + (w / 12) * i;
+    ctx.beginPath();
+    ctx.moveTo(lx, y + 2);
+    ctx.lineTo(lx, y + h - 2);
+    ctx.stroke();
+  }
+
+  // Top edge highlight
+  ctx.fillStyle = "rgba(255,255,255,0.15)";
+  ctx.fillRect(x, y, w, 3);
+
+  // Door end (right side)
+  ctx.fillStyle = c.containerDoor;
+  ctx.fillRect(x + w - 16, y + 4, 14, h - 8);
+  // Door handle
+  ctx.fillStyle = c.containerDark;
+  ctx.fillRect(x + w - 10, y + h * 0.4, 3, 8);
+  // Door seam
+  ctx.strokeStyle = c.containerDark;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + w - 9, y + 4);
+  ctx.lineTo(x + w - 9, y + h - 4);
+  ctx.stroke();
+
+  // Bottom shadow
+  ctx.fillStyle = "rgba(0,0,0,0.12)";
+  ctx.fillRect(x, y + h - 3, w, 3);
+
+  // Outline
+  ctx.strokeStyle = c.containerDark;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x, y, w, h);
 }
 
 export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance) {
   const { type, x, y, width: w, height: h } = obstacle;
   switch (type) {
-    case ObstacleType.ROCK:             drawRock(ctx, x, y, w, h); break;
-    case ObstacleType.SMALL_TREE:       drawSmallTree(ctx, x, y, w, h); break;
-    case ObstacleType.SHOPPING_TROLLEY: drawShoppingTrolley(ctx, x, y, w, h); break;
-    case ObstacleType.CAR:              drawCar(ctx, x, y, w, h); break;
-    case ObstacleType.PERSON_ON_BIKE:   drawPersonOnBike(ctx, x, y, w, h); break;
+    case ObstacleType.ROCK:               drawRock(ctx, x, y, w, h); break;
+    case ObstacleType.SMALL_TREE:         drawSmallTree(ctx, x, y, w, h); break;
+    case ObstacleType.TALL_TREE:          drawTallTree(ctx, x, y, w, h); break;
+    case ObstacleType.SHOPPING_TROLLEY:   drawShoppingTrolley(ctx, x, y, w, h); break;
+    case ObstacleType.CAR:                drawCar(ctx, x, y, w, h); break;
+    case ObstacleType.PERSON_ON_BIKE:     drawPersonOnBike(ctx, x, y, w, h); break;
+    case ObstacleType.BUS_STOP:           drawBusStop(ctx, x, y, w, h); break;
+    case ObstacleType.SHIPPING_CONTAINER: drawShippingContainer(ctx, x, y, w, h); break;
+    case ObstacleType.GIANT_TREE:         drawGiantTree(ctx, x, y, w, h); break;
+    case ObstacleType.STRAIGHT_RAMP:      drawStraightRamp(ctx, x, y, w, h); break;
+    case ObstacleType.CURVED_RAMP:        drawCurvedRamp(ctx, x, y, w, h); break;
   }
+}
+
+// --- Floating bonus text ---
+
+export function drawFloatingText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  opacity: number
+) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, opacity);
+  ctx.font = "bold 21px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  // Dark outline
+  ctx.strokeStyle = "rgba(0,0,0,0.6)";
+  ctx.lineWidth = 3;
+  ctx.strokeText(text, x, y);
+  // Gold fill
+  ctx.fillStyle = "#f0c030";
+  ctx.fillText(text, x, y);
+  ctx.restore();
 }

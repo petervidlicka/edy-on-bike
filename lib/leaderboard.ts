@@ -44,13 +44,13 @@ async function getTopScoresRedis(
     });
   }
 
-  // Fetch skin metadata from companion hash
+  // Fetch skin metadata only for the entries we retrieved (avoids full hash scan)
   if (entries.length > 0) {
-    const skinMap = await redis.hgetall<Record<string, string>>(SKIN_HASH_KEY) ?? {};
+    const names = entries.map(e => e.name);
+    const skins = (await redis.hmget(SKIN_HASH_KEY, ...names)) as Record<string, string | null>;
     for (const entry of entries) {
-      if (skinMap[entry.name]) {
-        entry.skin = skinMap[entry.name];
-      }
+      const skin = skins[entry.name];
+      if (skin) entry.skin = skin;
     }
   }
 

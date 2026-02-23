@@ -2,11 +2,32 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Engine } from "@/game/Engine";
-import { GameState } from "@/game/types";
+import { GameState, SkinId } from "@/game/types";
 import { INITIAL_SPEED } from "@/game/constants";
+import { getSkinById } from "@/game/skins";
+import { loadSkinState, updateBestScore, selectSkin, activateCheat } from "@/game/storage";
 import StartScreen from "./StartScreen";
 import HUD from "./HUD";
 import GameOverScreen from "./GameOverScreen";
+
+function useCheatCode(code: string, onActivate: () => void) {
+  const bufferRef = useRef("");
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      bufferRef.current += e.key.toUpperCase();
+      if (bufferRef.current.length > code.length) {
+        bufferRef.current = bufferRef.current.slice(-code.length);
+      }
+      if (bufferRef.current === code) {
+        bufferRef.current = "";
+        onActivate();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [code, onActivate]);
+}
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -14,11 +35,22 @@ export default function GameCanvas() {
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   const [score, setScore] = useState(0);
   const [speed, setSpeed] = useState(INITIAL_SPEED);
-  const [bestScore, setBestScore] = useState(0);
   const [musicMuted, setMusicMuted] = useState(false);
   const [sfxMuted, setSfxMuted] = useState(false);
   const [trickFeedback, setTrickFeedback] = useState<{ name: string; points: number } | null>(null);
   const trickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Skin state — lazy initializer reads from localStorage (SSR-safe)
+  const [skinState, setSkinState] = useState(() => {
+    if (typeof window === "undefined") {
+      return { selectedSkinId: "default" as SkinId, bestScore: 0, cheatUnlocked: false };
+    }
+    return loadSkinState();
+  });
+
+  const bestScore = skinState.bestScore;
+  const cheatUnlocked = skinState.cheatUnlocked;
+  const selectedSkinId = skinState.selectedSkinId;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -30,7 +62,8 @@ export default function GameCanvas() {
       onGameOver: (finalScore) => {
         setScore(finalScore);
         setGameState(GameState.GAME_OVER);
-        setBestScore((prev) => Math.max(prev, finalScore));
+        const updated = updateBestScore(finalScore);
+        setSkinState(updated);
       },
       onStateChange: (state) => {
         setGameState(state);
@@ -46,6 +79,9 @@ export default function GameCanvas() {
     });
     engineRef.current = engine;
 
+    // Apply initial skin
+    engine.setSkin(getSkinById(skinState.selectedSkinId));
+
     const handleResize = () => {
       engine.resize(window.innerWidth, window.innerHeight);
     };
@@ -57,6 +93,17 @@ export default function GameCanvas() {
       window.removeEventListener("resize", handleResize);
       if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync skin to engine when selection changes
+  useEffect(() => {
+    engineRef.current?.setSkin(getSkinById(selectedSkinId));
+  }, [selectedSkinId]);
+
+  const handleSelectSkin = useCallback((id: SkinId) => {
+    const updated = selectSkin(id);
+    setSkinState(updated);
   }, []);
 
   const handleRestart = useCallback(() => {
@@ -65,7 +112,6 @@ export default function GameCanvas() {
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.code === "Space") {
-      // Don't intercept space when user is typing in an input
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
 
@@ -76,7 +122,6 @@ export default function GameCanvas() {
       if (state === GameState.IDLE || state === GameState.RUNNING) {
         engine.jump();
       }
-      // GAME_OVER is fully handled by GameOverScreen's own keydown listener
     }
     if (e.code === "ArrowDown") {
       e.preventDefault();
@@ -102,7 +147,6 @@ export default function GameCanvas() {
   }, [handleKeyDown]);
 
   const handleTouch = useCallback((e: TouchEvent) => {
-    // Don't intercept taps on interactive overlays (name input, submit button)
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "BUTTON") return;
     e.preventDefault();
@@ -112,7 +156,6 @@ export default function GameCanvas() {
     if (state === GameState.IDLE || state === GameState.RUNNING) {
       engine.jump();
     }
-    // GAME_OVER touch is handled by the "Play Again" button in GameOverScreen
   }, []);
 
   useEffect(() => {
@@ -130,8 +173,14 @@ export default function GameCanvas() {
     engineRef.current?.setSfxMuted(sfxMuted);
   }, [sfxMuted]);
 
-  // Pause when tab is hidden or device is in portrait (mobile) — resumes on the inverse.
-  // A single checkPause fn handles both triggers so they don't conflict.
+  // IDKFA cheat code
+  const handleCheat = useCallback(() => {
+    const updated = activateCheat();
+    setSkinState(updated);
+  }, []);
+  useCheatCode("IDKFA", handleCheat);
+
+  // Pause when tab is hidden or device is in portrait (mobile)
   const checkPause = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -169,11 +218,18 @@ export default function GameCanvas() {
           width: "100vw",
           height: "100vh",
           display: "block",
-          touchAction: "none", // prevent pull-to-refresh / swipe-back on mobile
+          touchAction: "none",
         }}
       />
 
-      {gameState === GameState.IDLE && <StartScreen />}
+      {gameState === GameState.IDLE && (
+        <StartScreen
+          bestScore={bestScore}
+          cheatUnlocked={cheatUnlocked}
+          selectedSkinId={selectedSkinId}
+          onSelectSkin={handleSelectSkin}
+        />
+      )}
 
       {gameState === GameState.RUNNING && (
         <HUD

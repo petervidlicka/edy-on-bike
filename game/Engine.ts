@@ -1,4 +1,4 @@
-import { GameState, ObstacleInstance, ObstacleType, TrickType } from "./types";
+import { GameState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
@@ -23,6 +23,7 @@ import { spawnObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision, checkRampCollision } from "./Collision";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
+import { getSkinById } from "./skins";
 
 function computeTrickScore(baseName: string, basePoints: number, count: number): { label: string; totalBonus: number } {
   if (count === 1) return { label: baseName, totalBonus: basePoints };
@@ -71,6 +72,7 @@ export class Engine {
   private groundY: number = 0;
   private callbacks: EngineCallbacks;
   private sound = new SoundManager();
+  private skin: SkinDefinition = getSkinById("default");
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -501,7 +503,7 @@ export class Engine {
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs, palette);
     }
-    drawPlayer(ctx, this.player, palette);
+    drawPlayer(ctx, this.player, this.skin);
     for (const ft of this.floatingTexts) {
       drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity);
     }
@@ -541,6 +543,10 @@ export class Engine {
 
   setSfxMuted(muted: boolean): void {
     this.sound.setSfxMuted(muted);
+  }
+
+  setSkin(skin: SkinDefinition): void {
+    this.skin = skin;
   }
 
   destroy(): void {

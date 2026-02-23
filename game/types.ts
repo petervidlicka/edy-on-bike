@@ -83,6 +83,38 @@ export interface BackgroundLayer {
   offset: number;
 }
 
+// --- Skin types ---
+
+export type SkinId = "default" | "racer" | "cowboy" | "royal" | "neon" | "stealth";
+
+export type HelmetStyle = "standard" | "aero" | "cowboy" | "crown" | "cap" | "goggles";
+
+export type BikeStyle = "bmx" | "racing" | "mtb" | "cruiser" | "fixie" | "fatTire";
+
+export interface SkinColors {
+  wheel: string;
+  frame: string;
+  helmet: string;
+  skin: string;
+  shirt: string;
+  pants: string;
+}
+
+export interface SkinDefinition {
+  id: SkinId;
+  name: string;
+  helmetStyle: HelmetStyle;
+  bikeStyle: BikeStyle;
+  unlockScore: number;
+  colors: SkinColors;
+}
+
+export interface SkinUnlockState {
+  selectedSkinId: SkinId;
+  bestScore: number;
+  cheatUnlocked: boolean;
+}
+
 export interface BackgroundElement {
   /** Element type — extensible per biome (e.g. "house", "skyscraper", "palm_tree") */
   type: string;

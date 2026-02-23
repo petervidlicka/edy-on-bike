@@ -8,7 +8,6 @@ import {
   BACKFLIP_BONUS,
   SUPERMAN_BONUS,
   NO_HANDER_BONUS,
-  TRICK_COMPLETION_THRESHOLD,
   DOUBLE_CHAIN_BONUS,
   TRIPLE_CHAIN_BONUS,
   JUMP_FORCE,
@@ -392,14 +391,10 @@ export class Engine {
   /** Handle pose trick landing. Returns true if game over (crash). */
   private handlePoseTrickLanding(): boolean {
     const completions = this.player.trickCompletions;
-    const progress = this.player.trickProgress;
-    const phase = this.player.trickPhase;
-    const safeProgress = 1 - TRICK_COMPLETION_THRESHOLD; // 0.1
 
-    // Award if at least one full cycle AND trick is near-neutral or retracting.
-    // This closes the old silent-failure gap (extend phase, progress > 0.1)
-    // while still preventing a jarring visual snap from a fully-extended pose.
-    const safeToLand = completions >= 1 && (progress <= safeProgress || phase === "return");
+    // Award if at least one full cycle completed — the player already demonstrated
+    // the trick regardless of where in a subsequent cycle they happen to land.
+    const safeToLand = completions >= 1;
 
     if (safeToLand) {
       const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;

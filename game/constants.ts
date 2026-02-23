@@ -16,7 +16,7 @@ export const BACKFLIP_SPEED = 0.18; // radians per dt unit (~0.58s for full rota
 export const MAX_FLIP_COUNT = 3; // maximum number of chained flips per airtime
 export const BACKFLIP_BONUS = 50;
 export const SUPERMAN_SPEED = 0.06; // progress per dt (~0.57s full cycle at 60fps)
-export const NO_HANDER_SPEED = 0.07;
+export const NO_HANDER_SPEED = 0.10;
 export const SUPERMAN_BONUS = 60;
 export const NO_HANDER_BONUS = 30;
 export const TRICK_COMPLETION_THRESHOLD = 0.9; // 90% = safe landing

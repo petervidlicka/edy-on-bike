@@ -963,6 +963,7 @@ export function drawSkinPreview(ctx: CanvasRenderingContext2D, skin: SkinDefinit
     trickCompletions: 0,
     rampBoost: null,
     rampSurfaceAngle: 0,
+    targetFlipCount: 0,
   };
   drawPlayer(ctx, mockPlayer, skin);
   ctx.restore();

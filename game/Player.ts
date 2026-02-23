@@ -1,5 +1,5 @@
 import { PlayerState, TrickType } from "./types";
-import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED } from "./constants";
+import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED, MAX_FLIP_COUNT } from "./constants";
 
 export function createPlayer(groundY: number, canvasWidth: number): PlayerState {
   return {
@@ -19,6 +19,7 @@ export function createPlayer(groundY: number, canvasWidth: number): PlayerState 
     backflipAngle: 0,
     isBackflipping: false,
     flipDirection: 1,
+    targetFlipCount: 0,
     activeTrick: TrickType.NONE,
     trickProgress: 0,
     trickPhase: "extend",
@@ -49,20 +50,46 @@ export function jumpPlayer(player: PlayerState): void {
 }
 
 export function startBackflip(player: PlayerState): boolean {
-  if (player.isOnGround || player.isBackflipping || player.ridingObstacle) return false;
+  if (player.isOnGround || player.ridingObstacle) return false;
+
+  // If already backflipping, queue an additional flip
+  if (player.isBackflipping && player.flipDirection === 1) {
+    if (player.targetFlipCount < MAX_FLIP_COUNT) {
+      player.targetFlipCount++;
+      return true;
+    }
+    return false; // already at max
+  }
+  // Can't start a backflip while frontflipping
+  if (player.isBackflipping) return false;
+
   // Allow starting a flip while a pose trick is active (combo)
   player.isBackflipping = true;
   player.backflipAngle = 0;
   player.flipDirection = 1;
+  player.targetFlipCount = 1;
   return true;
 }
 
 export function startFrontflip(player: PlayerState): boolean {
-  if (player.isOnGround || player.isBackflipping || player.ridingObstacle) return false;
+  if (player.isOnGround || player.ridingObstacle) return false;
+
+  // If already frontflipping, queue an additional flip
+  if (player.isBackflipping && player.flipDirection === -1) {
+    if (player.targetFlipCount < MAX_FLIP_COUNT) {
+      player.targetFlipCount++;
+      return true;
+    }
+    return false; // already at max
+  }
+  // Can't start a frontflip while backflipping
+  if (player.isBackflipping) return false;
+
   // Allow starting a flip while a pose trick is active (combo)
   player.isBackflipping = true;
   player.backflipAngle = 0;
   player.flipDirection = -1;
+  player.targetFlipCount = 1;
   return true;
 }
 
@@ -124,7 +151,21 @@ export function updatePlayer(
 
   // --- Backflip / frontflip rotation ---
   if (player.isBackflipping) {
-    player.backflipAngle += BACKFLIP_SPEED * dt;
+    const targetAngle = player.targetFlipCount * Math.PI * 2;
+    const remaining = targetAngle - player.backflipAngle;
+
+    if (remaining > 0) {
+      // Decelerate as we approach the target angle
+      const decelZone = Math.PI * 0.6; // ~108° before target, start slowing
+      let speedFactor = 1.0;
+      if (remaining < decelZone) {
+        speedFactor = 0.3 + 0.7 * (remaining / decelZone);
+      }
+      player.backflipAngle = Math.min(
+        player.backflipAngle + BACKFLIP_SPEED * speedFactor * dt,
+        targetAngle,
+      );
+    }
   }
 
   // --- Pose trick animation (superman, no hander) ---
@@ -155,13 +196,18 @@ export function updatePlayer(
     } else {
       const normalizedVel = -player.velocityY / 12;
 
-      // Bike tilt: front wheel up while ascending, nose down while descending
-      const targetTilt = Math.max(-0.3, Math.min(0.45, -player.velocityY * 0.03));
-      player.bikeTilt += (targetTilt - player.bikeTilt) * 0.15 * dt;
+      // Bike tilt: mostly horizontal mid-jump.
+      // Slight front-up on ascent, nearly flat at peak, very slight nose-down on descent
+      // to promote flat or rear-wheel-first landings.
+      const ascentTilt = Math.max(0, normalizedVel) * 0.25;
+      const descentTilt = Math.min(0, normalizedVel) * 0.04;
+      const targetTilt = Math.max(-0.05, Math.min(0.25, ascentTilt + descentTilt));
+      player.bikeTilt += (targetTilt - player.bikeTilt) * 0.12 * dt;
 
-      // Rider lean: lean back on ascent, forward on descent (staggered phase 1)
-      const targetLean = normalizedVel * 0.35;
-      player.riderLean += (targetLean - player.riderLean) * 0.13 * dt;
+      // Rider lean: lean BACK on ascent, gradually straighten on descent.
+      // Never lean forward — rider stays neutral or slightly back.
+      const targetLean = Math.max(0, normalizedVel) * 0.4;
+      player.riderLean += (targetLean - player.riderLean) * 0.10 * dt;
 
       // Rider crouch/stand: peaks mid-ascent at normalizedVel ≈ 0.3 (staggered phase 2)
       const targetCrouch = Math.max(0, 1 - Math.abs(normalizedVel - 0.3) * 2.5);

@@ -50,6 +50,8 @@ export interface PlayerState {
   isBackflipping: boolean;
   /** Rotation direction: 1 = backflip (CCW), -1 = frontflip (CW). */
   flipDirection: number;
+  /** How many flips the player intends to complete. Starts at 1, incremented by additional input. */
+  targetFlipCount: number;
   /** Current active pose trick (mutually exclusive with flips). */
   activeTrick: TrickType;
   /** Progress of pose trick animation: 0 = neutral, 1 = fully extended. Animates 0→1→0. */

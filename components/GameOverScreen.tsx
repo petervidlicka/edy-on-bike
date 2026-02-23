@@ -5,15 +5,18 @@ import { useState, useEffect, useCallback } from "react";
 interface LeaderboardEntry {
   name: string;
   score: number;
+  skin?: string;
 }
 
 interface GameOverScreenProps {
   score: number;
   bestScore: number;
+  skinName: string;
+  newlyUnlockedSkins?: string[];
   onRestart: () => void;
 }
 
-export default function GameOverScreen({ score, bestScore, onRestart }: GameOverScreenProps) {
+export default function GameOverScreen({ score, bestScore, skinName, newlyUnlockedSkins, onRestart }: GameOverScreenProps) {
   const isNewBest = score > 0 && score >= bestScore;
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -44,7 +47,7 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
         await fetch("/api/leaderboard", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: trimmed, score }),
+          body: JSON.stringify({ name: trimmed, score, skin: skinName }),
         });
         localStorage.setItem("edy-player-name", trimmed);
       } catch {}
@@ -52,7 +55,7 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
     await fetchLeaderboard();
     setSubmitting(false);
     setStep(2);
-  }, [score, fetchLeaderboard]);
+  }, [score, skinName, fetchLeaderboard]);
 
   // Handle Save Score button — validates name first
   const handleSaveScore = async () => {
@@ -161,6 +164,21 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
             </p>
           ) : null}
 
+          {newlyUnlockedSkins && newlyUnlockedSkins.length > 0 && (
+            <div style={{
+              background: "rgba(234,179,8,0.15)",
+              border: "1.5px solid rgba(234,179,8,0.4)",
+              borderRadius: "12px",
+              padding: "0.4rem 1rem",
+              marginTop: "0.3rem",
+              textAlign: "center",
+            }}>
+              <p style={{ color: "#92400e", fontSize: "0.85rem", fontWeight: 700, margin: 0 }}>
+                New bike unlocked: {newlyUnlockedSkins.join(", ")}!
+              </p>
+            </div>
+          )}
+
           <div
             style={{
               marginTop: "0.6rem",
@@ -247,8 +265,8 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
                 background: "rgba(255,255,255,0.72)",
                 borderRadius: "10px",
                 padding: "0.65rem 1.1rem",
-                minWidth: "230px",
-                maxWidth: "290px",
+                minWidth: "260px",
+                maxWidth: "360px",
                 marginTop: "0.25rem",
                 pointerEvents: "auto",
               }}
@@ -277,9 +295,12 @@ export default function GameOverScreen({ score, bestScore, onRestart }: GameOver
                 }}
               >
                 {leaderboard.slice(0, 10).map((entry, i) => (
-                  <li key={i}>
-                    <span style={{ fontWeight: 600 }}>{entry.name}</span>
-                    <span style={{ float: "right", fontWeight: 400 }}>
+                  <li key={i} style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
+                    <span style={{ fontWeight: 600, flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
+                    {entry.skin && (
+                      <span style={{ fontSize: "0.65rem", color: "#64748b", whiteSpace: "nowrap" }}>{entry.skin}</span>
+                    )}
+                    <span style={{ fontWeight: 400, whiteSpace: "nowrap" }}>
                       {String(entry.score).padStart(5, "0")}
                     </span>
                   </li>

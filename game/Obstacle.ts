@@ -28,13 +28,11 @@ function weightedRandom(types: WeightedType[]): ObstacleType {
   return types[types.length - 1].type;
 }
 
-export function spawnObstacle(
+export function createObstacle(
+  type: ObstacleType,
   canvasWidth: number,
-  groundY: number,
-  elapsedMs: number,
-  envDef: EnvironmentDefinition
+  groundY: number
 ): ObstacleInstance {
-  const type = weightedRandom(envDef.obstaclePool.getWeightedTypes(elapsedMs));
   const spec = OBSTACLE_SPECS[type];
   return {
     type,
@@ -45,6 +43,16 @@ export function spawnObstacle(
     rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER || type === ObstacleType.CONTAINER_WITH_RAMP,
     ramp: type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP,
   };
+}
+
+export function spawnObstacle(
+  canvasWidth: number,
+  groundY: number,
+  elapsedMs: number,
+  envDef: EnvironmentDefinition
+): ObstacleInstance {
+  const type = weightedRandom(envDef.obstaclePool.getWeightedTypes(elapsedMs));
+  return createObstacle(type, canvasWidth, groundY);
 }
 
 // Returns the pixel distance to wait before spawning the next obstacle.

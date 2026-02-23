@@ -1,4 +1,4 @@
-import { GameState, ObstacleInstance, ObstacleType, TrickType } from "./types";
+import { GameState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
@@ -8,7 +8,6 @@ import {
   BACKFLIP_BONUS,
   SUPERMAN_BONUS,
   NO_HANDER_BONUS,
-  TRICK_COMPLETION_THRESHOLD,
   DOUBLE_CHAIN_BONUS,
   TRIPLE_CHAIN_BONUS,
   JUMP_FORCE,
@@ -23,6 +22,7 @@ import { spawnObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision, checkRampCollision } from "./Collision";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
+import { getSkinById } from "./skins";
 
 function computeTrickScore(baseName: string, basePoints: number, count: number): { label: string; totalBonus: number } {
   if (count === 1) return { label: baseName, totalBonus: basePoints };
@@ -71,6 +71,7 @@ export class Engine {
   private groundY: number = 0;
   private callbacks: EngineCallbacks;
   private sound = new SoundManager();
+  private skin: SkinDefinition = getSkinById("default");
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -390,14 +391,10 @@ export class Engine {
   /** Handle pose trick landing. Returns true if game over (crash). */
   private handlePoseTrickLanding(): boolean {
     const completions = this.player.trickCompletions;
-    const progress = this.player.trickProgress;
-    const phase = this.player.trickPhase;
-    const safeProgress = 1 - TRICK_COMPLETION_THRESHOLD; // 0.1
 
-    // Award if at least one full cycle AND trick is near-neutral or retracting.
-    // This closes the old silent-failure gap (extend phase, progress > 0.1)
-    // while still preventing a jarring visual snap from a fully-extended pose.
-    const safeToLand = completions >= 1 && (progress <= safeProgress || phase === "return");
+    // Award if at least one full cycle completed — the player already demonstrated
+    // the trick regardless of where in a subsequent cycle they happen to land.
+    const safeToLand = completions >= 1;
 
     if (safeToLand) {
       const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
@@ -501,7 +498,7 @@ export class Engine {
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs, palette);
     }
-    drawPlayer(ctx, this.player, palette);
+    drawPlayer(ctx, this.player, this.skin);
     for (const ft of this.floatingTexts) {
       drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity);
     }
@@ -541,6 +538,10 @@ export class Engine {
 
   setSfxMuted(muted: boolean): void {
     this.sound.setSfxMuted(muted);
+  }
+
+  setSkin(skin: SkinDefinition): void {
+    this.skin = skin;
   }
 
   destroy(): void {

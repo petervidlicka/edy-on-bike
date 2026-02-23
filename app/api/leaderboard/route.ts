@@ -9,7 +9,7 @@ const ALLOWED_ORIGINS = [
   "http://localhost",
 ];
 
-function corsHeaders(request: NextRequest) {
+function corsHeaders(request: NextRequest): Record<string, string> {
   const origin = request.headers.get("origin") ?? "";
   if (ALLOWED_ORIGINS.includes(origin)) {
     return {

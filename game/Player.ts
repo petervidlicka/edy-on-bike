@@ -52,13 +52,15 @@ export function jumpPlayer(player: PlayerState): void {
 export function startBackflip(player: PlayerState): boolean {
   if (player.isOnGround || player.ridingObstacle) return false;
 
-  // If already backflipping, queue an additional flip
+  // If already backflipping, queue an additional flip — but only after 90° of
+  // progress into the current target to prevent accidental double-queue
   if (player.isBackflipping && player.flipDirection === 1) {
-    if (player.targetFlipCount < MAX_FLIP_COUNT) {
+    const minAngle = (player.targetFlipCount - 1) * Math.PI * 2 + Math.PI / 2;
+    if (player.targetFlipCount < MAX_FLIP_COUNT && player.backflipAngle >= minAngle) {
       player.targetFlipCount++;
       return true;
     }
-    return false; // already at max
+    return false;
   }
   // Can't start a backflip while frontflipping
   if (player.isBackflipping) return false;
@@ -74,13 +76,15 @@ export function startBackflip(player: PlayerState): boolean {
 export function startFrontflip(player: PlayerState): boolean {
   if (player.isOnGround || player.ridingObstacle) return false;
 
-  // If already frontflipping, queue an additional flip
+  // If already frontflipping, queue an additional flip — but only after 90° of
+  // progress into the current target to prevent accidental double-queue
   if (player.isBackflipping && player.flipDirection === -1) {
-    if (player.targetFlipCount < MAX_FLIP_COUNT) {
+    const minAngle = (player.targetFlipCount - 1) * Math.PI * 2 + Math.PI / 2;
+    if (player.targetFlipCount < MAX_FLIP_COUNT && player.backflipAngle >= minAngle) {
       player.targetFlipCount++;
       return true;
     }
-    return false; // already at max
+    return false;
   }
   // Can't start a frontflip while backflipping
   if (player.isBackflipping) return false;
@@ -194,26 +198,30 @@ export function updatePlayer(
       player.riderCrouch += (0 - player.riderCrouch) * 0.3 * dt;
       player.legTuck += (0 - player.legTuck) * 0.3 * dt;
     } else {
+      // BMX bunnyhop phases driven by normalizedVel (1 = launch, 0 = peak, <0 = descent)
       const normalizedVel = -player.velocityY / 12;
 
-      // Bike tilt: mostly horizontal mid-jump.
-      // Slight front-up on ascent, nearly flat at peak, very slight nose-down on descent
-      // to promote flat or rear-wheel-first landings.
-      const ascentTilt = Math.max(0, normalizedVel) * 0.25;
-      const descentTilt = Math.min(0, normalizedVel) * 0.04;
-      const targetTilt = Math.max(-0.05, Math.min(0.25, ascentTilt + descentTilt));
-      player.bikeTilt += (targetTilt - player.bikeTilt) * 0.12 * dt;
+      // Phase 1 (early ascent): Rider leans back hard and crouches low — loading the rear
+      const leanBack = Math.max(0, normalizedVel) ** 0.7 * 0.55;
+      const targetLean = leanBack;
+      player.riderLean += (targetLean - player.riderLean) * 0.18 * dt;
 
-      // Rider lean: lean BACK on ascent, gradually straighten on descent.
-      // Never lean forward — rider stays neutral or slightly back.
-      const targetLean = Math.max(0, normalizedVel) * 0.4;
-      player.riderLean += (targetLean - player.riderLean) * 0.10 * dt;
+      // Rider crouch: LOW early (crouching into the jump), then extends/stands up at peak
+      // Negative normalizedVel-offset makes crouch peak during early ascent
+      const crouchDown = Math.max(0, normalizedVel - 0.2) * 1.2; // crouch in early ascent
+      const standUp = Math.max(0, 0.3 - Math.abs(normalizedVel)) * 2.5; // stand near peak
+      const targetCrouch = Math.min(1, Math.max(standUp - crouchDown * 0.5, -0.3));
+      player.riderCrouch += (targetCrouch - player.riderCrouch) * 0.15 * dt;
 
-      // Rider crouch/stand: peaks mid-ascent at normalizedVel ≈ 0.3 (staggered phase 2)
-      const targetCrouch = Math.max(0, 1 - Math.abs(normalizedVel - 0.3) * 2.5);
-      player.riderCrouch += (targetCrouch - player.riderCrouch) * 0.13 * dt;
+      // Phase 2 (slightly delayed): Bike tilts backward — front wheel lifts
+      // Delayed onset: only kicks in once normalizedVel drops below ~0.85
+      const tiltPhase = Math.max(0, Math.min(1, (1 - normalizedVel) * 2.5));
+      const ascentTilt = tiltPhase * Math.max(0, normalizedVel) * 0.35;
+      const descentTilt = Math.min(0, normalizedVel) * 0.03;
+      const targetTilt = Math.max(-0.04, Math.min(0.35, ascentTilt + descentTilt));
+      player.bikeTilt += (targetTilt - player.bikeTilt) * 0.14 * dt;
 
-      // Leg tuck: peaks just past peak at normalizedVel ≈ -0.15 (staggered phase 3)
+      // Phase 4 (descent): Leg tuck peaks just past peak
       const targetTuck = Math.max(0, 1 - Math.abs(normalizedVel + 0.15) * 2);
       player.legTuck += (targetTuck - player.legTuck) * 0.13 * dt;
     }

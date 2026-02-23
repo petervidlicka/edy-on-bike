@@ -842,10 +842,11 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
   }
 
   if (activeTrick === TrickType.NO_HANDER && trickProg > 0) {
-    elbowX = lerp(shoulderX + 6, shoulderX - 4, trickProg);
-    elbowY = lerp(shoulderY + 6, shoulderY - 8, trickProg);
-    drawGripX = lerp(gripX, shoulderX + 8, trickProg);
-    drawGripY = lerp(gripY, shoulderY - 14, trickProg);
+    // Hands move behind rider's back (simulating behind-the-back clap)
+    elbowX = lerp(shoulderX + 6, hipX - 5, trickProg);
+    elbowY = lerp(shoulderY + 6, (shoulderY + hipY) / 2, trickProg);
+    drawGripX = lerp(gripX, hipX - 8, trickProg);
+    drawGripY = lerp(gripY, hipY - 3, trickProg);
   }
 
   // Draw legs

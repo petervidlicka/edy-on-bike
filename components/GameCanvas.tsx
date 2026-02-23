@@ -123,21 +123,13 @@ export default function GameCanvas() {
         engine.jump();
       }
     }
-    if (e.code === "ArrowDown") {
+    if (e.code === "ArrowDown" || e.code === "ArrowUp" || e.code === "ArrowLeft" || e.code === "ArrowRight") {
       e.preventDefault();
-      engineRef.current?.backflip();
-    }
-    if (e.code === "ArrowUp") {
-      e.preventDefault();
-      engineRef.current?.frontflip();
-    }
-    if (e.code === "ArrowLeft") {
-      e.preventDefault();
-      engineRef.current?.superman();
-    }
-    if (e.code === "ArrowRight") {
-      e.preventDefault();
-      engineRef.current?.noHander();
+      if (e.repeat) return; // prevent key-repeat from queueing extra tricks
+      if (e.code === "ArrowDown") engineRef.current?.backflip();
+      else if (e.code === "ArrowUp") engineRef.current?.frontflip();
+      else if (e.code === "ArrowLeft") engineRef.current?.superman();
+      else if (e.code === "ArrowRight") engineRef.current?.noHander();
     }
   }, []);
 

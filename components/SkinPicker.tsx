@@ -12,8 +12,8 @@ interface SkinPickerProps {
   onSelectSkin: (id: SkinId) => void;
 }
 
-const PREVIEW_W = 60;
-const PREVIEW_H = 66;
+const PREVIEW_W = 72;
+const PREVIEW_H = 79;
 
 function SkinCard({
   skin,
@@ -52,8 +52,8 @@ function SkinCard({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: "0.25rem",
-        padding: "0.5rem",
+        gap: "0.3rem",
+        padding: "0.6rem",
         borderRadius: "14px",
         border: isSelected
           ? "2px solid rgba(255,255,255,0.9)"
@@ -68,7 +68,7 @@ function SkinCard({
           : "0 2px 16px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
         opacity: isUnlocked ? 1 : 0.45,
         cursor: isUnlocked ? "pointer" : "default",
-        minWidth: "80px",
+        minWidth: "96px",
         transition: "border-color 0.15s, background 0.15s, box-shadow 0.15s",
         pointerEvents: "auto",
       }}
@@ -85,7 +85,7 @@ function SkinCard({
       />
       <span
         style={{
-          fontSize: "0.65rem",
+          fontSize: "0.78rem",
           fontWeight: 700,
           color: "#1e293b",
           textAlign: "center",
@@ -97,7 +97,7 @@ function SkinCard({
       {!isUnlocked && (
         <span
           style={{
-            fontSize: "0.55rem",
+            fontSize: "0.66rem",
             fontWeight: 600,
             color: "#64748b",
           }}
@@ -129,10 +129,10 @@ export default function SkinPicker({
       onTouchEnd={handleContainerEvent}
       style={{
         display: "flex",
-        gap: "0.5rem",
+        gap: "0.6rem",
         overflowX: "auto",
-        padding: "0.5rem 0.25rem",
-        maxWidth: "min(90vw, 560px)",
+        padding: "0.6rem 0.3rem",
+        maxWidth: "min(90vw, 672px)",
         pointerEvents: "auto",
         WebkitOverflowScrolling: "touch",
       }}

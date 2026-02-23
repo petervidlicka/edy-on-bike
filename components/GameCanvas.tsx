@@ -2,9 +2,9 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Engine } from "@/game/Engine";
-import { GameState, SkinId } from "@/game/types";
+import { GameState, SkinId, ObstacleType } from "@/game/types";
 import { INITIAL_SPEED } from "@/game/constants";
-import { getSkinById } from "@/game/skins";
+import { getSkinById, SKINS } from "@/game/skins";
 import { loadSkinState, updateBestScore, selectSkin, activateCheat } from "@/game/storage";
 import StartScreen from "./StartScreen";
 import HUD from "./HUD";
@@ -29,6 +29,14 @@ function useCheatCode(code: string, onActivate: () => void) {
   }, [code, onActivate]);
 }
 
+const DEBUG_OBSTACLE_SEQUENCE = [
+  ObstacleType.STRAIGHT_RAMP, ObstacleType.STRAIGHT_RAMP,
+  ObstacleType.CURVED_RAMP, ObstacleType.CURVED_RAMP,
+  ObstacleType.SHIPPING_CONTAINER, ObstacleType.SHIPPING_CONTAINER,
+  ObstacleType.CONTAINER_WITH_RAMP, ObstacleType.CONTAINER_WITH_RAMP,
+  ObstacleType.BUS_STOP, ObstacleType.BUS_STOP,
+];
+
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
@@ -39,6 +47,11 @@ export default function GameCanvas() {
   const [sfxMuted, setSfxMuted] = useState(false);
   const [trickFeedback, setTrickFeedback] = useState<{ name: string; points: number } | null>(null);
   const trickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [newlyUnlockedSkins, setNewlyUnlockedSkins] = useState<string[]>([]);
+  const [debugObstacles, setDebugObstacles] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("obstacles") === "debug";
+  });
 
   // Skin state — lazy initializer reads from localStorage (SSR-safe)
   const [skinState, setSkinState] = useState(() => {
@@ -62,6 +75,13 @@ export default function GameCanvas() {
       onGameOver: (finalScore) => {
         setScore(finalScore);
         setGameState(GameState.GAME_OVER);
+        // Determine newly unlocked skins before updating best score
+        const currentState = loadSkinState();
+        const previousBest = currentState.bestScore;
+        const unlocked = SKINS.filter(
+          s => finalScore >= s.unlockScore && previousBest < s.unlockScore && s.unlockScore > 0
+        );
+        setNewlyUnlockedSkins(unlocked.map(s => s.name));
         const updated = updateBestScore(finalScore);
         setSkinState(updated);
       },
@@ -78,6 +98,11 @@ export default function GameCanvas() {
       },
     });
     engineRef.current = engine;
+
+    // Debug obstacle sequence — auto-enable from URL param
+    if (new URLSearchParams(window.location.search).get("obstacles") === "debug") {
+      engine.setDebugObstacles(DEBUG_OBSTACLE_SEQUENCE, 700);
+    }
 
     // Apply initial skin
     engine.setSkin(getSkinById(skinState.selectedSkinId));
@@ -172,6 +197,17 @@ export default function GameCanvas() {
   }, []);
   useCheatCode("IDKFA", handleCheat);
 
+  const toggleDebugObstacles = useCallback(() => {
+    setDebugObstacles((prev) => {
+      const next = !prev;
+      engineRef.current?.setDebugObstacles(
+        next ? DEBUG_OBSTACLE_SEQUENCE : null,
+        700,
+      );
+      return next;
+    });
+  }, []);
+
   // Pause when tab is hidden or device is in portrait (mobile)
   const checkPause = useCallback(() => {
     const engine = engineRef.current;
@@ -240,7 +276,36 @@ export default function GameCanvas() {
       )}
 
       {gameState === GameState.GAME_OVER && (
-        <GameOverScreen score={score} bestScore={bestScore} onRestart={handleRestart} />
+        <GameOverScreen
+          score={score}
+          bestScore={bestScore}
+          skinName={getSkinById(selectedSkinId).name}
+          newlyUnlockedSkins={newlyUnlockedSkins}
+          onRestart={handleRestart}
+        />
+      )}
+
+      {process.env.NODE_ENV !== "production" && (
+        <button
+          onClick={toggleDebugObstacles}
+          style={{
+            position: "fixed",
+            top: 8,
+            right: 8,
+            padding: "4px 10px",
+            fontSize: "0.7rem",
+            fontFamily: "monospace",
+            background: debugObstacles ? "#d44" : "#555",
+            color: "#fff",
+            border: "none",
+            borderRadius: 4,
+            cursor: "pointer",
+            opacity: 0.85,
+            zIndex: 9999,
+          }}
+        >
+          Debug: {debugObstacles ? "ON" : "OFF"}
+        </button>
       )}
     </>
   );

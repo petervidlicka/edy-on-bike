@@ -542,13 +542,13 @@ function getBikeGeometry(bikeStyle: BikeStyle, x: number, y: number): BikeGeom {
         headX: x + 43, headY: y + 24,
       };
     case "mtb":
-      // Mountain bike: bigger wheels, wider wheelbase
+      // Mountain bike: bigger wheels, wider wheelbase, taller frame
       return {
         wheelR: 14, rearWheelX: x + 10, frontWheelX: x + 54, wheelY: y + 44,
         pivotX: x + 27, pivotY: y + 41,
-        seatX: x + 22, seatY: y + 32,
+        seatX: x + 22, seatY: y + 30,
         bbX: x + 27, bbY: y + 42,
-        headX: x + 45, headY: y + 25,
+        headX: x + 45, headY: y + 22,
       };
     default: // bmx, cruiser, fixie, fatTire
       return {
@@ -568,7 +568,11 @@ function drawWheel(
   r: number,
   rotation: number,
   color: string,
-  glow: boolean
+  glow: boolean,
+  spokeCount: number = 6,
+  spokeWidth: number = 1.2,
+  spokeColor?: string,
+  knobby: boolean = false
 ) {
   // Glow halo for neon skin
   if (glow) {
@@ -589,15 +593,30 @@ function drawWheel(
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.stroke();
+  // Knobby tire treads (MTB)
+  if (knobby) {
+    ctx.lineWidth = 1.5;
+    const knobCount = 16;
+    for (let i = 0; i < knobCount; i++) {
+      const angle = rotation + (i * Math.PI * 2) / knobCount;
+      const innerR = r - 1;
+      const outerR = r + 2.5;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(angle) * innerR, cy + Math.sin(angle) * innerR);
+      ctx.lineTo(cx + Math.cos(angle) * outerR, cy + Math.sin(angle) * outerR);
+      ctx.stroke();
+    }
+  }
   // Center dot
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(cx, cy, 2, 0, Math.PI * 2);
   ctx.fill();
-  // 6 spokes
-  ctx.lineWidth = 1.2;
-  for (let i = 0; i < 6; i++) {
-    const angle = rotation + (i * Math.PI) / 3;
+  // Spokes
+  ctx.strokeStyle = spokeColor ?? color;
+  ctx.lineWidth = spokeWidth;
+  for (let i = 0; i < spokeCount; i++) {
+    const angle = rotation + (i * Math.PI * 2) / spokeCount;
     ctx.beginPath();
     ctx.moveTo(cx + Math.cos(angle) * 2, cy + Math.sin(angle) * 2);
     ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
@@ -703,15 +722,15 @@ function drawHandlebars(
     ctx.moveTo(headX, headY);
     ctx.lineTo(stemTopX, stemTopY);
     ctx.stroke();
-    // Drops: curved bar that goes forward then down
+    // Drops: curved bar that goes forward then down (lowered)
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(stemTopX - 1, stemTopY);
-    ctx.quadraticCurveTo(stemTopX + 6, stemTopY - 3, stemTopX + 5, stemTopY + 3);
-    ctx.quadraticCurveTo(stemTopX + 4, stemTopY + 8, stemTopX, stemTopY + 5);
+    ctx.quadraticCurveTo(stemTopX + 6, stemTopY - 1, stemTopX + 5, stemTopY + 5);
+    ctx.quadraticCurveTo(stemTopX + 4, stemTopY + 10, stemTopX, stemTopY + 7);
     ctx.stroke();
     // Hoods (grip position at top of drops)
-    return { gripX: stemTopX + 4, gripY: stemTopY + 1 };
+    return { gripX: stemTopX + 4, gripY: stemTopY + 3 };
   }
 
   if (skin.bikeStyle === "mtb") {
@@ -767,13 +786,32 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
     ctx.translate(-centerX, -centerY);
   }
 
+  const trickProg = player.trickProgress;
+  const activeTrick = player.activeTrick;
+
+  // Bike tilt — extra dip during superman (rear wheel drops)
+  let effectiveBikeTilt = bikeTilt;
+  if (activeTrick === TrickType.SUPERMAN && trickProg > 0) {
+    effectiveBikeTilt += 0.175 * trickProg;
+  }
+
   ctx.translate(g.pivotX, g.pivotY);
-  ctx.rotate(-bikeTilt);
+  ctx.rotate(-effectiveBikeTilt);
   ctx.translate(-g.pivotX, -g.pivotY);
 
   // ── Wheels ──
-  drawWheel(ctx, g.rearWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels);
-  drawWheel(ctx, g.frontWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels);
+  let spokeCount = 6;
+  let spokeWidth = 1.2;
+  let spokeColor: string | undefined;
+  let knobby = false;
+  switch (skin.bikeStyle) {
+    case "racing":  spokeCount = 5; break;
+    case "mtb":     knobby = true; break;
+    case "cruiser": spokeCount = 3; spokeWidth = 3.6; spokeColor = c.frame; break;
+    case "fatTire": spokeCount = 8; spokeColor = "#aaaaaa"; break;
+  }
+  drawWheel(ctx, g.rearWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby);
+  drawWheel(ctx, g.frontWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby);
 
   // ── Frame ──
   drawBikeFrame(ctx, skin, g, x, y);
@@ -786,9 +824,6 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
   const pedalLX = bbX - 8;
   const pedalRX = bbX + 8;
   const pedalY = bbY;
-
-  const trickProg = player.trickProgress;
-  const activeTrick = player.activeTrick;
 
   // Hip
   const standX = bbX;
@@ -893,14 +928,19 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
     ctx.stroke();
   }
 
-  // Draw arms
-  ctx.strokeStyle = c.skin;
+  // Draw arms — long sleeves (shirt color), skin-colored hands
+  ctx.strokeStyle = c.shirt;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(shoulderX, shoulderY);
   ctx.lineTo(elbowX, elbowY);
   ctx.lineTo(drawGripX, drawGripY);
   ctx.stroke();
+  // Hands
+  ctx.fillStyle = c.skin;
+  ctx.beginPath();
+  ctx.arc(drawGripX, drawGripY, 2, 0, Math.PI * 2);
+  ctx.fill();
 
   // Head
   const headPosX = shoulderX + 1;
@@ -965,6 +1005,7 @@ export function drawSkinPreview(ctx: CanvasRenderingContext2D, skin: SkinDefinit
     rampBoost: null,
     rampSurfaceAngle: 0,
     targetFlipCount: 0,
+    targetTrickCount: 0,
   };
   drawPlayer(ctx, mockPlayer, skin);
   ctx.restore();
@@ -1655,7 +1696,7 @@ export function drawFloatingText(
   ctx.strokeStyle = "rgba(0,0,0,0.6)";
   ctx.lineWidth = 3;
   ctx.strokeText(text, x, y);
-  ctx.fillStyle = "#f0c030";
+  ctx.fillStyle = "#1a7a2e";
   ctx.fillText(text, x, y);
   ctx.restore();
 }

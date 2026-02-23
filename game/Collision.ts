@@ -60,6 +60,7 @@ export function checkRideableCollision(
   // 1. Player must be falling (velocityY > 0)
   // 2. Player's bottom edge must be near the top of the obstacle
   // 3. At least 25% of the player's width overlaps the obstacle (allows rear-wheel landings)
+  //    Except when hitting the back edge (leaving the obstacle), where any overlap is fine.
   const playerBottom = py2;
   const obstacleTop = effectiveOy1;
   const overlapLeft = Math.max(px1, ox1);
@@ -67,11 +68,14 @@ export function checkRideableCollision(
   const overlapWidth = overlapRight - overlapLeft;
   const playerWidth = px2 - px1;
 
+  const isLeaving = px2 > ox2;
+  const requiredOverlapRatio = isLeaving ? 0 : 0.25;
+
   if (
     player.velocityY > 0 &&
     playerBottom >= obstacleTop &&
     playerBottom <= obstacleTop + TOP_LANDING_TOLERANCE &&
-    overlapWidth / playerWidth >= 0.25
+    overlapWidth / playerWidth >= requiredOverlapRatio
   ) {
     return "land_on_top";
   }

@@ -60,14 +60,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { name?: string; score?: number };
+  let body: { name?: string; score?: number; skin?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const { name, score } = body;
+  const { name, score, skin } = body;
 
   if (typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required." }, { status: 400 });
@@ -94,7 +94,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await addScore(name.trim(), Math.floor(score));
+  const skinStr = typeof skin === "string" && skin.trim().length <= 30 ? skin.trim() : undefined;
+  await addScore(name.trim(), Math.floor(score), skinStr);
 
   return NextResponse.json({ ok: true });
 }

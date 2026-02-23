@@ -5,9 +5,11 @@ import path from "path";
 export interface LeaderboardEntry {
   name: string;
   score: number;
+  skin?: string;
 }
 
 const LEADERBOARD_KEY = "edy-on-bike:leaderboard";
+const SKIN_HASH_KEY = "edy-on-bike:leaderboard:skins";
 
 // --- Upstash Redis store ---
 
@@ -41,6 +43,17 @@ async function getTopScoresRedis(
       score: Number(raw[i + 1]),
     });
   }
+
+  // Fetch skin metadata from companion hash
+  if (entries.length > 0) {
+    const skinMap = await redis.hgetall<Record<string, string>>(SKIN_HASH_KEY) ?? {};
+    for (const entry of entries) {
+      if (skinMap[entry.name]) {
+        entry.skin = skinMap[entry.name];
+      }
+    }
+  }
+
   return entries;
 }
 
@@ -48,9 +61,17 @@ async function addScoreRedis(
   redis: Redis,
   name: string,
   score: number,
+  skin?: string,
 ): Promise<void> {
   // Only update if the new score is greater than existing (GT flag)
   await redis.zadd(LEADERBOARD_KEY, { gt: true }, { score, member: name });
+  // Store skin in companion hash (always update — ZADD with GT may have accepted)
+  if (skin) {
+    const currentScore = await redis.zscore(LEADERBOARD_KEY, name);
+    if (currentScore !== null && Number(currentScore) <= score) {
+      await redis.hset(SKIN_HASH_KEY, { [name]: skin });
+    }
+  }
 }
 
 // --- File-based fallback store (persists across hot-reloads in local dev) ---
@@ -82,13 +103,16 @@ function getTopScoresFile(limit: number): LeaderboardEntry[] {
   return readFileStore().slice(0, limit);
 }
 
-function addScoreFile(name: string, score: number): void {
+function addScoreFile(name: string, score: number, skin?: string): void {
   const entries = readFileStore();
   const existing = entries.find((e) => e.name === name);
   if (existing) {
-    if (score > existing.score) existing.score = score;
+    if (score > existing.score) {
+      existing.score = score;
+      if (skin) existing.skin = skin;
+    }
   } else {
-    entries.push({ name, score });
+    entries.push({ name, score, skin });
   }
   entries.sort((a, b) => b.score - a.score);
   entries.splice(100); // keep top 100
@@ -107,10 +131,10 @@ export async function getTopScores(
   return getTopScoresFile(limit);
 }
 
-export async function addScore(name: string, score: number): Promise<void> {
+export async function addScore(name: string, score: number, skin?: string): Promise<void> {
   const redis = getRedis();
   if (redis) {
-    return addScoreRedis(redis, name, score);
+    return addScoreRedis(redis, name, score, skin);
   }
-  addScoreFile(name, score);
+  addScoreFile(name, score, skin);
 }

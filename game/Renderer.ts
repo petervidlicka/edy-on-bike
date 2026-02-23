@@ -932,13 +932,17 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
 
 export function drawSkinPreview(ctx: CanvasRenderingContext2D, skin: SkinDefinition, w: number, h: number) {
   ctx.clearRect(0, 0, w, h);
-  const scale = Math.min(w / 50, h / 55);
+  // Use a wider logical bounding box to capture the full bike geometry
+  // (e.g. MTB front wheel extends to ~x=68)
+  const logicalW = 75;
+  const logicalH = 50;
+  const scale = Math.min(w / logicalW, h / logicalH);
   ctx.save();
-  ctx.translate((w - 50 * scale) / 2, (h - 55 * scale) / 2);
+  ctx.translate((w - logicalW * scale) / 2, (h - logicalH * scale) / 2);
   ctx.scale(scale, scale);
   const mockPlayer: PlayerState = {
-    x: 0,
-    y: 0,
+    x: 6,
+    y: -8,
     width: 50,
     height: 55,
     velocityY: 0,

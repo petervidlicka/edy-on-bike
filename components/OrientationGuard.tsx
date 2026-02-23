@@ -247,76 +247,127 @@ export default function OrientationGuard({
             position: "fixed",
             inset: 0,
             zIndex: 9999,
-            background: "#1e293b",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            gap: "1.25rem",
+            gap: "1.5rem",
             fontFamily: "var(--font-nunito), Arial, sans-serif",
+            overflow: "hidden",
           }}
         >
-          {/* Rotation icon */}
-          <svg
-            width="72"
-            height="72"
-            viewBox="0 0 72 72"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            style={{ opacity: 0.85 }}
-          >
-            {/* Phone outline */}
-            <rect
-              x="22"
-              y="8"
-              width="28"
-              height="48"
-              rx="5"
-              stroke="#b8c6d4"
-              strokeWidth="3"
-              fill="none"
-            />
-            <circle cx="36" cy="50" r="2.5" fill="#b8c6d4" />
-            {/* Rotation arrow */}
-            <path
-              d="M52 36 C52 22 40 14 28 18"
-              stroke="#c4785a"
-              strokeWidth="3"
-              fill="none"
-              strokeLinecap="round"
-            />
-            <polyline
-              points="24,14 28,18 24,22"
-              stroke="#c4785a"
-              strokeWidth="3"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          {/* Background Blurred Image */}
+          <div
+            style={{
+              position: "absolute",
+              inset: -20, // Negative inset to prevent blurry edges
+              backgroundImage: "url(/icon-512x512.png)",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              filter: "blur(20px) brightness(0.2)",
+              zIndex: -1,
+            }}
+          />
 
-          <p
+          {/* App Icon */}
+          <div
             style={{
-              color: "#b8c6d4",
-              fontSize: "1.2rem",
-              fontWeight: 700,
-              margin: 0,
-              textAlign: "center",
-              letterSpacing: "0.03em",
+              width: "140px",
+              height: "140px",
+              backgroundImage: "url(/icon-512x512.png)",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              borderRadius: "28px",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+              border: "1px solid rgba(255,255,255,0.1)",
+            }}
+          />
+
+          {/* App Title */}
+          <h1
+            style={{
+              color: "#ffffff",
+              fontSize: "2rem",
+              fontWeight: 800,
+              margin: "0.5rem 0 0.5rem 0",
+              textShadow: "0 2px 10px rgba(0,0,0,0.8)",
+              letterSpacing: "0.02em",
             }}
           >
-            Please rotate your device
-          </p>
-          <p
+            Edy on Bike
+          </h1>
+
+          {/* Rotation instruction icon block */}
+          <div
             style={{
-              color: "#64748b",
-              fontSize: "0.9rem",
-              fontWeight: 600,
-              margin: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "1rem",
+              marginTop: "2rem",
             }}
           >
-            Edy rides best in landscape
-          </p>
+            <style>{`
+              @keyframes tiltPhoneAnim {
+                0% { transform: rotate(0deg); }
+                20% { transform: rotate(-90deg); }
+                60% { transform: rotate(-90deg); }
+                80% { transform: rotate(0deg); }
+                100% { transform: rotate(0deg); }
+              }
+            `}</style>
+
+            {/* Animated Phone Icon ONLY */}
+            <div style={{ animation: "tiltPhoneAnim 2.5s infinite ease-in-out", transformOrigin: "center" }}>
+              <svg
+                width="64"
+                height="64"
+                viewBox="0 0 72 72"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                style={{ opacity: 0.9 }}
+              >
+                {/* Phone outline */}
+                <rect
+                  x="22"
+                  y="8"
+                  width="28"
+                  height="48"
+                  rx="5"
+                  stroke="#ffffff"
+                  strokeWidth="3"
+                  fill="none"
+                />
+                <circle cx="36" cy="50" r="2.5" fill="#ffffff" />
+              </svg>
+            </div>
+
+            <div style={{ textAlign: "center" }}>
+              <p
+                style={{
+                  color: "#ffffff",
+                  fontSize: "1.2rem",
+                  fontWeight: 700,
+                  margin: 0,
+                  letterSpacing: "0.03em",
+                  textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+                }}
+              >
+                Please rotate your device
+              </p>
+              <p
+                style={{
+                  color: "rgba(255,255,255,0.7)",
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  margin: "0.25rem 0 0 0",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.6)",
+                }}
+              >
+                Edy rides best in landscape
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

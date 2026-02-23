@@ -1,0 +1,86 @@
+{
+  ".claude": {
+    "launch.json": "file",
+    "settings.local.json": "file"
+  },
+  ".gitignore": "file",
+  "README.md": "file",
+  "app": {
+    "api": {
+      "leaderboard": {
+        "route.ts": "file"
+      }
+    },
+    "apple-icon.png": "file",
+    "globals.css": "file",
+    "icon.png": "file",
+    "layout.tsx": "file",
+    "manifest.ts": "file",
+    "page.tsx": "file"
+  },
+  "comment.md": "file",
+  "components": {
+    "GameCanvas.tsx": "file",
+    "GameOverScreen.tsx": "file",
+    "HUD.tsx": "file",
+    "OrientationGuard.tsx": "file",
+    "SkinPicker.tsx": "file",
+    "StartScreen.tsx": "file"
+  },
+  "data": {
+    "leaderboard.json": "file"
+  },
+  "eslint.config.mjs": "file",
+  "game": {
+    "Background.ts": "file",
+    "Collision.ts": "file",
+    "Engine.ts": "file",
+    "Obstacle.ts": "file",
+    "Player.ts": "file",
+    "Renderer.ts": "file",
+    "SoundManager.ts": "file",
+    "constants.ts": "file",
+    "environments": {
+      "EnvironmentManager.ts": "file",
+      "colorLerp.ts": "file",
+      "index.ts": "file",
+      "suburban.ts": "file",
+      "types.ts": "file"
+    },
+    "skins.ts": "file",
+    "storage.ts": "file",
+    "types.ts": "file"
+  },
+  "get_structure.js": "file",
+  "implementation_plan.md.resolved": "file",
+  "lib": {
+    "leaderboard.ts": "file"
+  },
+  "next-env.d.ts": "file",
+  "next.config.ts": "file",
+  "package-lock.json": "file",
+  "package.json": "file",
+  "postcss.config.mjs": "file",
+  "pr11.diff": "file",
+  "pr11_review.txt": "file",
+  "pr12_diff.txt": "file",
+  "pr_16_diff.txt": "file",
+  "pr_16_review.md": "file",
+  "pr_comment.txt": "file",
+  "pr_diff.patch": "file",
+  "pr_diff.txt": "file",
+  "pr_info.json": "file",
+  "pr_review.md": "file",
+  "public": {
+    "file.svg": "file",
+    "globe.svg": "file",
+    "icon-192x192.png": "file",
+    "icon-512x512.png": "file",
+    "music.mp3": "file",
+    "next.svg": "file",
+    "vercel.svg": "file",
+    "window.svg": "file"
+  },
+  "tsconfig.json": "file",
+  "tsconfig.tsbuildinfo": "file"
+}

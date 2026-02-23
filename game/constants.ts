@@ -13,6 +13,7 @@ export const MIN_OBSTACLE_GAP = 300;
 export const MIN_OBSTACLE_GAP_LATE = 400;
 export const RIDEABLE_JUMP_MULTIPLIER = 1.5;
 export const BACKFLIP_SPEED = 0.18; // radians per dt unit (~0.58s for full rotation at 60fps)
+export const MAX_FLIP_COUNT = 3; // maximum number of chained flips per airtime
 export const BACKFLIP_BONUS = 50;
 export const SUPERMAN_SPEED = 0.06; // progress per dt (~0.57s full cycle at 60fps)
 export const NO_HANDER_SPEED = 0.07;

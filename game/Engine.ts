@@ -379,6 +379,7 @@ export class Engine {
       this.awardTrickBonus(label, totalBonus);
       this.player.backflipAngle = 0;
       this.player.isBackflipping = false;
+      this.player.targetFlipCount = 0;
       return false;
     }
     // Too incomplete — crash
@@ -390,9 +391,13 @@ export class Engine {
   private handlePoseTrickLanding(): boolean {
     const completions = this.player.trickCompletions;
     const progress = this.player.trickProgress;
+    const phase = this.player.trickPhase;
     const safeProgress = 1 - TRICK_COMPLETION_THRESHOLD; // 0.1
 
-    const safeToLand = completions >= 1 && progress <= safeProgress;
+    // Award if at least one full cycle AND trick is near-neutral or retracting.
+    // This closes the old silent-failure gap (extend phase, progress > 0.1)
+    // while still preventing a jarring visual snap from a fully-extended pose.
+    const safeToLand = completions >= 1 && (progress <= safeProgress || phase === "return");
 
     if (safeToLand) {
       const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
@@ -454,6 +459,7 @@ export class Engine {
       // Reset all trick state
       this.player.backflipAngle = 0;
       this.player.isBackflipping = false;
+      this.player.targetFlipCount = 0;
       this.player.activeTrick = TrickType.NONE;
       this.player.trickProgress = 0;
       this.player.trickCompletions = 0;
@@ -463,6 +469,7 @@ export class Engine {
     // Either component failed — crash
     this.player.backflipAngle = 0;
     this.player.isBackflipping = false;
+    this.player.targetFlipCount = 0;
     this.player.activeTrick = TrickType.NONE;
     this.player.trickProgress = 0;
     this.player.trickCompletions = 0;

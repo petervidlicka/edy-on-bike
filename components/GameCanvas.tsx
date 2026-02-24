@@ -204,6 +204,8 @@ export default function GameCanvas() {
         next ? DEBUG_OBSTACLE_SEQUENCE : null,
         700,
       );
+      const url = next ? "?obstacles=debug" : window.location.pathname;
+      window.history.replaceState(null, "", url);
       return next;
     });
   }, []);

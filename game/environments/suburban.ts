@@ -134,11 +134,12 @@ function generateSuburbanElements(
         lastType !== "walking_person"
       ) {
         const isAnimal = Math.random() > 0.45;
+        const vergeOffset = Math.random() * 18; // random depth within the 22px strip
         if (isAnimal) {
           elements.push({
             type: "deer",
             x: x - gap * 0.6,
-            y: groundY - 28,
+            y: groundY - 28 - vergeOffset,
             width: 30,
             height: 28,
             color: palette.creature,
@@ -148,7 +149,7 @@ function generateSuburbanElements(
           elements.push({
             type: "walking_person",
             x: x - gap * 0.5,
-            y: groundY - 32,
+            y: groundY - 32 - vergeOffset,
             width: 14,
             height: 32,
             color: palette.person,
@@ -169,10 +170,11 @@ function generateSuburbanElements(
         sizeTier < 0.33 ? 40 + Math.random() * 14  // small:  40-54
         : sizeTier < 0.66 ? 56 + Math.random() * 16 // medium: 56-72
         : 76 + Math.random() * 18;                  // large:  76-94
+      const treeVergeOffset = Math.random() * 18;
       elements.push({
         type: "tree_silhouette",
         x,
-        y: groundY - th,
+        y: groundY - th - treeVergeOffset,
         width: tw,
         height: th,
         color: palette.treeSilhouette,

@@ -262,16 +262,6 @@ export default function OrientationGuard({
             backgroundColor: "#b8c6d4",
           }}
         >
-          <style>{`
-            @keyframes tiltPhoneAnim {
-              0% { transform: rotate(0deg); }
-              20% { transform: rotate(-90deg); }
-              60% { transform: rotate(-90deg); }
-              80% { transform: rotate(0deg); }
-              100% { transform: rotate(0deg); }
-            }
-          `}</style>
-
           {/* Title at the top — above the rider's head */}
           <div
             style={{
@@ -317,7 +307,7 @@ export default function OrientationGuard({
             {/* Animated Phone Icon — 50% larger (72px) */}
             <div
               style={{
-                animation: "tiltPhoneAnim 2.5s infinite ease-in-out",
+                animation: "tiltPhone 2.5s infinite ease-in-out",
                 transformOrigin: "center",
               }}
             >

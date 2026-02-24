@@ -353,8 +353,11 @@ export function drawWalkingPerson(
 // --- Ground ---
 
 function drawGround(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, groundY: number, offset: number, palette: EnvironmentPalette) {
-  // Ground fill — stretches to bottom of canvas
+  // Grass verge — sits above the road, grounds the buildings
   ctx.fillStyle = palette.ground;
+  ctx.fillRect(0, groundY - 22, canvasW, 22);
+
+  // Ground fill — stretches to bottom of canvas
   ctx.fillRect(0, groundY, canvasW, canvasH - groundY);
 
   // Road surface

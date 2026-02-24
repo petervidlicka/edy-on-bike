@@ -35,6 +35,14 @@ export const CRASH_GRAVITY = 0.45;
 export const CRASH_BOUNCE_DAMPING = 0.35;
 export const CRASH_SHAKE_INITIAL = 8; // pixels
 
+// Ambulance
+export const AMBULANCE_CHANCE = 0.25;
+export const AMBULANCE_WIDTH = 120;
+export const AMBULANCE_HEIGHT = 55;
+export const AMBULANCE_DRIVE_SPEED = 8;
+export const AMBULANCE_STOP_MS = 800;
+export const AMBULANCE_REVIVE_MS = 600;
+
 // Player dimensions
 export const PLAYER_X_RATIO = 0.20; // 20% from the left of the canvas
 export const PLAYER_WIDTH = 64;

@@ -17,7 +17,7 @@ import {
 } from "./constants";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
-import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./Renderer";
+import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./rendering";
 import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision, checkRampCollision } from "./Collision";
 import { SoundManager } from "./SoundManager";

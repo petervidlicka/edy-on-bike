@@ -1,5 +1,5 @@
 import { ObstacleType, type BackgroundElement } from "../types";
-import { SUBURBAN_BACKGROUND_DRAWERS } from "../Renderer";
+import { SUBURBAN_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
   EnvironmentPalette,

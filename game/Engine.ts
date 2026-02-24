@@ -5,8 +5,6 @@ import {
   SPEED_INCREASE,
   SPEED_INTERVAL,
   SCORE_PER_PX,
-  JUMP_FORCE,
-  RAMP_HEIGHT_MULTIPLIER,
   MAX_SPEED_MULTIPLIER,
 } from "./constants";
 import {
@@ -24,7 +22,8 @@ import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, 
 import { createBackgroundLayers, updateLayers } from "./Background";
 import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./rendering";
 import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
-import { checkCollision, checkRideableCollision, checkRampCollision } from "./Collision";
+import { checkCollision, checkRideableCollision } from "./Collision";
+import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
@@ -250,77 +249,8 @@ export class Engine {
     }
 
     // Ramp interaction (before collision checks)
-    let onAnyRamp = false;
-    for (const obs of this.obstacles) {
-      if (!obs.ramp) continue;
-      if (!this.player.isOnGround && !this.player.ridingObstacle) continue;
-      const rampResult = checkRampCollision(this.player, obs);
-      if (rampResult.onRamp) {
-        onAnyRamp = true;
-        this.player.y = rampResult.surfaceY - this.player.height;
-        this.player.rampSurfaceAngle = rampResult.surfaceAngle;
-        this.player.rampBoost = rampResult.rampType;
-      }
-    }
-    if (!onAnyRamp) {
-      // Check if player just left a ramp (was elevated, now past the ramp end)
-      if (this.player.rampBoost && this.player.isOnGround) {
-        const groundPos = this.groundY - this.player.height;
-        if (this.player.y < groundPos - 2) {
-          // Auto-launch: player is above ground after riding off ramp
-          // Gentle boost for passive roll-off; active jump gives full boost
-          this.player.isOnGround = false;
-          this.player.jumpCount = 1; // can still double-jump
-          if (this.player.rampBoost === "curved") {
-            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.2;
-          } else {
-            this.player.velocityY = JUMP_FORCE * 0.2;
-          }
-        }
-      }
-      // Smooth angle decay
-      this.player.rampSurfaceAngle *= 0.85;
-      if (Math.abs(this.player.rampSurfaceAngle) < 0.01) {
-        this.player.rampSurfaceAngle = 0;
-      }
-    }
-
-    // Riding state: check if obstacle scrolled past player
-    if (this.player.ridingObstacle) {
-      const obs = this.player.ridingObstacle;
-      if (obs.x + obs.width < this.player.x + 8) {
-        // Apply gentle boost for passive roll-off from container ramp
-        if (this.player.rampBoost) {
-          this.player.jumpCount = 1;
-          if (this.player.rampBoost === "curved") {
-            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.2;
-          } else {
-            this.player.velocityY = JUMP_FORCE * 0.2;
-          }
-        }
-        this.player.ridingObstacle = null;
-      } else if (obs.type === ObstacleType.CONTAINER_WITH_RAMP) {
-        // Container with ramp: last 75px has a curved ramp on top
-        const rampW = 75;
-        const rampH = 36;
-        const rampX = obs.x + obs.width - rampW;
-        const playerCenterX = this.player.x + this.player.width / 2;
-        if (playerCenterX >= rampX) {
-          // Player is on the ramp section
-          const t = (playerCenterX - rampX) / rampW;
-          const curvedT = t * t;
-          const surfaceY = obs.y - curvedT * rampH;
-          this.player.y = surfaceY - this.player.height;
-          this.player.rampBoost = "curved";
-          this.player.rampSurfaceAngle = Math.atan2((-2 * t * rampH) / rampW, 1);
-          onAnyRamp = true;
-        } else {
-          this.player.y = obs.y - this.player.height;
-        }
-      } else {
-        this.player.y = obs.y - this.player.height;
-      }
-    }
+    processRampInteractions(this.player, this.obstacles, this.groundY);
+    processRidingState(this.player);
 
     // Collision detection
     for (const obs of this.obstacles) {

@@ -5,7 +5,8 @@ export function drawFloatingText(
   text: string,
   x: number,
   y: number,
-  opacity: number
+  opacity: number,
+  color: string = "#1a7a2e"
 ) {
   ctx.save();
   ctx.globalAlpha = Math.max(0, opacity);
@@ -15,7 +16,7 @@ export function drawFloatingText(
   ctx.strokeStyle = "rgba(0,0,0,0.6)";
   ctx.lineWidth = 3;
   ctx.strokeText(text, x, y);
-  ctx.fillStyle = "#1a7a2e";
+  ctx.fillStyle = color;
   ctx.fillText(text, x, y);
   ctx.restore();
 }

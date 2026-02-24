@@ -6,7 +6,11 @@ import {
   DOUBLE_CHAIN_BONUS,
   TRIPLE_CHAIN_BONUS,
   COMBO_MULTIPLIER,
+  SKETCHY_PENALTY,
 } from "./constants";
+
+export const TRICK_COLOR_CLEAN = "#1a7a2e";
+export const TRICK_COLOR_SKETCHY = "#d97706";
 
 export interface FloatingText {
   text: string;
@@ -14,12 +18,14 @@ export interface FloatingText {
   y: number;
   opacity: number;
   velocityY: number;
+  color: string;
 }
 
 export interface TrickResult {
   crashed: boolean;
   label?: string;
   bonus?: number;
+  sketchy?: boolean;
 }
 
 function computeTrickScore(baseName: string, basePoints: number, count: number): { label: string; totalBonus: number } {
@@ -36,16 +42,22 @@ function countPrefix(count: number): string {
   return `${count}x `;
 }
 
-/** Evaluate a flip-only landing. Returns crash or awarded label+bonus. */
-export function evaluateFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number): TrickResult {
+/** Evaluate a flip-only landing. Returns crash, clean success, or sketchy success. */
+export function evaluateFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): TrickResult {
   const completedFlips = Math.floor(angle / fullFlip);
   const remainder = angle - completedFlips * fullFlip;
-  const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
+  const cleanFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
+  const sketchyFlips = completedFlips + (remainder >= fullFlip - (tolerance + sketchyTolerance) ? 1 : 0);
 
-  if (totalFlips >= 1) {
+  if (cleanFlips >= 1) {
     const baseName = direction >= 0 ? "Backflip" : "Frontflip";
-    const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, totalFlips);
-    return { crashed: false, label, bonus: totalBonus };
+    const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, cleanFlips);
+    return { crashed: false, label, bonus: totalBonus, sketchy: false };
+  }
+  if (sketchyFlips >= 1) {
+    const baseName = direction >= 0 ? "Backflip" : "Frontflip";
+    const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, sketchyFlips);
+    return { crashed: false, label: `Sketchy ${label}`, bonus: Math.round(totalBonus * SKETCHY_PENALTY), sketchy: true };
   }
   return { crashed: true };
 }
@@ -59,7 +71,7 @@ export function evaluatePoseTrickLanding(player: PlayerState): TrickResult {
     const baseName = isSuperman ? "Superman" : "No Hander";
     const basePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
     const { label, totalBonus } = computeTrickScore(baseName, basePoints, completions);
-    return { crashed: false, label, bonus: totalBonus };
+    return { crashed: false, label, bonus: totalBonus, sketchy: false };
   }
   // Trick started but never completed — crash
   return { crashed: true };
@@ -71,20 +83,26 @@ export function evaluateComboLanding(
   angle: number,
   direction: number,
   fullFlip: number,
-  tolerance: number
+  tolerance: number,
+  sketchyTolerance: number
 ): TrickResult {
   const completedFlips = Math.floor(angle / fullFlip);
   const remainder = angle - completedFlips * fullFlip;
-  const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
+  const cleanFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
+  const sketchyFlips = completedFlips + (remainder >= fullFlip - (tolerance + sketchyTolerance) ? 1 : 0);
 
   const poseCompletions = player.trickCompletions;
   const posePhase = player.trickPhase;
   // Relaxed for combos: accept if ≥1 cycle done, or trick reached peak extension
   const poseSafe = poseCompletions >= 1 || posePhase === "return";
 
+  const flipClean = cleanFlips >= 1;
+  const totalFlips = flipClean ? cleanFlips : sketchyFlips;
+  const sketchy = !flipClean && sketchyFlips >= 1;
+
   if (totalFlips >= 1 && poseSafe) {
     const isSuperman = player.activeTrick === TrickType.SUPERMAN;
-    const poseName = isSuperman ? "Superman" : "No-Hander";
+    const poseName = isSuperman ? "Superman" : "No Hander";
     const flipName = direction >= 0 ? "Backflip" : "Frontflip";
     const posePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
     const effectivePoseCount = Math.max(poseCompletions, 1);
@@ -98,7 +116,9 @@ export function evaluateComboLanding(
     else if (totalTrickCount >= 3) chainBonus = TRIPLE_CHAIN_BONUS;
     const comboScore = (baseScore + chainBonus) * COMBO_MULTIPLIER;
 
-    return { crashed: false, label: comboLabel, bonus: comboScore };
+    const finalScore = sketchy ? Math.round(comboScore * SKETCHY_PENALTY) : comboScore;
+    const finalLabel = sketchy ? `Sketchy ${comboLabel}` : comboLabel;
+    return { crashed: false, label: finalLabel, bonus: finalScore, sketchy };
   }
 
   return { crashed: true };
@@ -131,7 +151,8 @@ export function createTrickFloatingText(
   bonus: number,
   playerX: number,
   playerY: number,
-  playerWidth: number
+  playerWidth: number,
+  sketchy: boolean = false
 ): FloatingText {
   return {
     text: `${label}! +${bonus}`,
@@ -139,6 +160,7 @@ export function createTrickFloatingText(
     y: playerY - 10,
     opacity: 1,
     velocityY: -1.5,
+    color: sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN,
   };
 }
 

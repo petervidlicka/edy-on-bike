@@ -6,6 +6,8 @@ import {
   SPEED_INTERVAL,
   SCORE_PER_PX,
   MAX_SPEED_MULTIPLIER,
+  FLIP_TOLERANCE,
+  SKETCHY_TOLERANCE,
 } from "./constants";
 import {
   FloatingText,
@@ -33,7 +35,7 @@ export type EngineCallbacks = {
   onGameOver: (score: number) => void;
   onStateChange: (state: GameState) => void;
   onSpeedUpdate?: (speed: number) => void;
-  onTrickLanded?: (trickName: string, points: number) => void;
+  onTrickLanded?: (trickName: string, points: number, sketchy?: boolean) => void;
 };
 
 export class Engine {
@@ -203,8 +205,6 @@ export class Engine {
     updatePlayer(this.player, dt, this.groundY, this.speed);
     updateLayers(this.layers, this.speed, dt);
 
-    // Flip landing tolerance: allow landing with up to 30° remaining
-    const FLIP_TOLERANCE = Math.PI / 6; // 30 degrees
     const FULL_FLIP = Math.PI * 2;
 
     // Trick landing checks — unified to support combos (pose + flip simultaneously)
@@ -212,9 +212,9 @@ export class Engine {
       const hadFlip = wasBackflipping;
       const hadPose = this.player.activeTrick !== TrickType.NONE;
       if (hadFlip && hadPose) {
-        if (this.handleComboLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+        if (this.handleComboLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
       } else if (hadFlip) {
-        if (this.handleFlipLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+        if (this.handleFlipLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
       } else if (hadPose) {
         if (this.handlePoseTrickLanding()) return;
       }
@@ -268,9 +268,9 @@ export class Engine {
           const landFlip = this.player.isBackflipping;
           const landPose = this.player.activeTrick !== TrickType.NONE;
           if (landFlip && landPose) {
-            if (this.handleComboLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+            if (this.handleComboLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
           } else if (landFlip) {
-            if (this.handleFlipLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+            if (this.handleFlipLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
           } else if (landPose) {
             if (this.handlePoseTrickLanding()) return;
           }
@@ -298,11 +298,11 @@ export class Engine {
   }
 
   /** Handle flip landing. Returns true if game over (crash). */
-  private handleFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number): boolean {
-    const result = evaluateFlipLanding(angle, direction, fullFlip, tolerance);
+  private handleFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): boolean {
+    const result = evaluateFlipLanding(angle, direction, fullFlip, tolerance, sketchyTolerance);
     resetFlipState(this.player);
     if (result.crashed) { this.gameOver(); return true; }
-    this.awardTrickBonus(result.label!, result.bonus!);
+    this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
     return false;
   }
 
@@ -311,26 +311,26 @@ export class Engine {
     const result = evaluatePoseTrickLanding(this.player);
     resetPoseState(this.player);
     if (result.crashed) { this.gameOver(); return true; }
-    this.awardTrickBonus(result.label!, result.bonus!);
+    this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
     return false;
   }
 
   /** Handle combo landing (pose trick + flip simultaneously). Returns true if crash. */
-  private handleComboLanding(angle: number, direction: number, fullFlip: number, tolerance: number): boolean {
-    const result = evaluateComboLanding(this.player, angle, direction, fullFlip, tolerance);
+  private handleComboLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): boolean {
+    const result = evaluateComboLanding(this.player, angle, direction, fullFlip, tolerance, sketchyTolerance);
     resetAllTrickState(this.player);
     if (result.crashed) { this.gameOver(); return true; }
-    this.awardTrickBonus(result.label!, result.bonus!);
+    this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
     return false;
   }
 
-  private awardTrickBonus(label: string, bonus: number): void {
+  private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): void {
     this.score += bonus;
     this.distance = this.score * SCORE_PER_PX;
     this.callbacks.onScoreUpdate(this.score);
     this.sound.playBackflipSuccess();
-    this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width));
-    this.callbacks.onTrickLanded?.(label, bonus);
+    this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width, sketchy ?? false));
+    this.callbacks.onTrickLanded?.(label, bonus, sketchy);
   }
 
   private render(): void {
@@ -344,7 +344,7 @@ export class Engine {
     }
     drawPlayer(ctx, this.player, this.skin);
     for (const ft of this.floatingTexts) {
-      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity);
+      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color);
     }
   }
 

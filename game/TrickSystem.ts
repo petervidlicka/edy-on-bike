@@ -42,22 +42,22 @@ function countPrefix(count: number): string {
   return `${count}x `;
 }
 
-/** Evaluate a flip-only landing. Returns crash, clean success, or sketchy success. */
+/** Evaluate a flip-only landing. Returns crash, clean success, or sketchy success.
+ *  Uses Math.round to find the nearest target flip count, then checks the absolute
+ *  distance from that target. This correctly handles both over-rotation and under-rotation. */
 export function evaluateFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): TrickResult {
-  const completedFlips = Math.floor(angle / fullFlip);
-  const remainder = angle - completedFlips * fullFlip;
-  const cleanFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
-  const sketchyFlips = completedFlips + (remainder >= fullFlip - (tolerance + sketchyTolerance) ? 1 : 0);
-
-  if (cleanFlips >= 1) {
+  const targetFlips = Math.round(angle / fullFlip);
+  if (targetFlips >= 1) {
+    const diff = Math.abs(angle - targetFlips * fullFlip);
     const baseName = direction >= 0 ? "Backflip" : "Frontflip";
-    const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, cleanFlips);
-    return { crashed: false, label, bonus: totalBonus, sketchy: false };
-  }
-  if (sketchyFlips >= 1) {
-    const baseName = direction >= 0 ? "Backflip" : "Frontflip";
-    const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, sketchyFlips);
-    return { crashed: false, label: `Sketchy ${label}`, bonus: Math.round(totalBonus * SKETCHY_PENALTY), sketchy: true };
+    if (diff <= tolerance) {
+      const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, targetFlips);
+      return { crashed: false, label, bonus: totalBonus, sketchy: false };
+    }
+    if (diff <= tolerance + sketchyTolerance) {
+      const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, targetFlips);
+      return { crashed: false, label: `Sketchy ${label}`, bonus: Math.round(totalBonus * SKETCHY_PENALTY), sketchy: true };
+    }
   }
   return { crashed: true };
 }
@@ -77,7 +77,8 @@ export function evaluatePoseTrickLanding(player: PlayerState): TrickResult {
   return { crashed: true };
 }
 
-/** Evaluate a combo landing (flip + pose simultaneously). */
+/** Evaluate a combo landing (flip + pose simultaneously).
+ *  Uses Math.round for flip detection to handle over/under-rotation correctly. */
 export function evaluateComboLanding(
   player: PlayerState,
   angle: number,
@@ -86,31 +87,28 @@ export function evaluateComboLanding(
   tolerance: number,
   sketchyTolerance: number
 ): TrickResult {
-  const completedFlips = Math.floor(angle / fullFlip);
-  const remainder = angle - completedFlips * fullFlip;
-  const cleanFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
-  const sketchyFlips = completedFlips + (remainder >= fullFlip - (tolerance + sketchyTolerance) ? 1 : 0);
+  const targetFlips = Math.round(angle / fullFlip);
+  const diff = targetFlips >= 1 ? Math.abs(angle - targetFlips * fullFlip) : Infinity;
+  const flipClean = targetFlips >= 1 && diff <= tolerance;
+  const flipSketchy = !flipClean && targetFlips >= 1 && diff <= tolerance + sketchyTolerance;
+  const sketchy = flipSketchy;
 
   const poseCompletions = player.trickCompletions;
   const posePhase = player.trickPhase;
   // Relaxed for combos: accept if ≥1 cycle done, or trick reached peak extension
   const poseSafe = poseCompletions >= 1 || posePhase === "return";
 
-  const flipClean = cleanFlips >= 1;
-  const totalFlips = flipClean ? cleanFlips : sketchyFlips;
-  const sketchy = !flipClean && sketchyFlips >= 1;
-
-  if (totalFlips >= 1 && poseSafe) {
+  if ((flipClean || flipSketchy) && poseSafe) {
     const isSuperman = player.activeTrick === TrickType.SUPERMAN;
     const poseName = isSuperman ? "Superman" : "No Hander";
     const flipName = direction >= 0 ? "Backflip" : "Frontflip";
     const posePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
     const effectivePoseCount = Math.max(poseCompletions, 1);
 
-    const comboLabel = `${countPrefix(effectivePoseCount)}${poseName} ${countPrefix(totalFlips)}${flipName}`;
+    const comboLabel = `${countPrefix(effectivePoseCount)}${poseName} ${countPrefix(targetFlips)}${flipName}`;
 
-    const baseScore = posePoints * effectivePoseCount + BACKFLIP_BONUS * totalFlips;
-    const totalTrickCount = effectivePoseCount + totalFlips;
+    const baseScore = posePoints * effectivePoseCount + BACKFLIP_BONUS * targetFlips;
+    const totalTrickCount = effectivePoseCount + targetFlips;
     let chainBonus = 0;
     if (totalTrickCount === 2) chainBonus = DOUBLE_CHAIN_BONUS;
     else if (totalTrickCount >= 3) chainBonus = TRIPLE_CHAIN_BONUS;

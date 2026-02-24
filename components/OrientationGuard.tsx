@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
+// --- Fullscreen helpers ---
+
 function getFullscreenElement(): Element | null {
   return (
     document.fullscreenElement ||
@@ -250,84 +252,83 @@ export default function OrientationGuard({
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            justifyContent: "center",
-            gap: "1.5rem",
+            justifyContent: "space-between",
             fontFamily: "var(--font-nunito), Arial, sans-serif",
             overflow: "hidden",
+            backgroundImage: "url(/splash-bg.png)",
+            backgroundSize: "cover",
+            backgroundPosition: "center center",
+            backgroundRepeat: "no-repeat",
+            backgroundColor: "#b8c6d4",
           }}
         >
-          {/* Background Blurred Image */}
+          <style>{`
+            @keyframes tiltPhoneAnim {
+              0% { transform: rotate(0deg); }
+              20% { transform: rotate(-90deg); }
+              60% { transform: rotate(-90deg); }
+              80% { transform: rotate(0deg); }
+              100% { transform: rotate(0deg); }
+            }
+          `}</style>
+
+          {/* Title at the top — above the rider's head */}
           <div
             style={{
-              position: "absolute",
-              inset: -20, // Negative inset to prevent blurry edges
-              backgroundImage: "url(/icon-512x512.png)",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              filter: "blur(20px) brightness(0.2)",
-              zIndex: -1,
-            }}
-          />
-
-          {/* App Icon */}
-          <div
-            style={{
-              width: "140px",
-              height: "140px",
-              backgroundImage: "url(/icon-512x512.png)",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              borderRadius: "28px",
-              boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
-              border: "1px solid rgba(255,255,255,0.1)",
-            }}
-          />
-
-          {/* App Title */}
-          <h1
-            style={{
-              color: "#ffffff",
-              fontSize: "2rem",
-              fontWeight: 800,
-              margin: "0.5rem 0 0.5rem 0",
-              textShadow: "0 2px 10px rgba(0,0,0,0.8)",
-              letterSpacing: "0.02em",
-            }}
-          >
-            Edy on Bike
-          </h1>
-
-          {/* Rotation instruction icon block */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "1rem",
+              paddingTop: "env(safe-area-inset-top, 2rem)",
               marginTop: "2rem",
             }}
           >
-            <style>{`
-              @keyframes tiltPhoneAnim {
-                0% { transform: rotate(0deg); }
-                20% { transform: rotate(-90deg); }
-                60% { transform: rotate(-90deg); }
-                80% { transform: rotate(0deg); }
-                100% { transform: rotate(0deg); }
-              }
-            `}</style>
+            <h1
+              style={{
+                color: "#27435E",
+                fontSize: "2.2rem",
+                fontFamily: "var(--font-fredoka), sans-serif",
+                fontWeight: 600,
+                margin: 0,
+                textShadow:
+                  "0 2px 12px rgba(255,255,255,0.4), 0 0 20px rgba(255,255,255,0.2)",
+                letterSpacing: "0.03em",
+                textAlign: "center",
+              }}
+            >
+              Edy on Bike
+            </h1>
+          </div>
 
-            {/* Animated Phone Icon ONLY */}
-            <div style={{ animation: "tiltPhoneAnim 2.5s infinite ease-in-out", transformOrigin: "center" }}>
+          {/* Liquid glass bubble — in the road/grass area */}
+          <div
+            style={{
+              marginBottom: "clamp(3rem, 8vh, 5rem)",
+              padding: "1.5rem 2.5rem",
+              borderRadius: "1.5rem",
+              background: "rgba(255, 255, 255, 0.15)",
+              backdropFilter: "blur(16px) saturate(1.4)",
+              WebkitBackdropFilter: "blur(16px) saturate(1.4)",
+              border: "1px solid rgba(255, 255, 255, 0.3)",
+              boxShadow:
+                "0 8px 32px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.25)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "0.8rem",
+            }}
+          >
+            {/* Animated Phone Icon — 50% larger (72px) */}
+            <div
+              style={{
+                animation: "tiltPhoneAnim 2.5s infinite ease-in-out",
+                transformOrigin: "center",
+              }}
+            >
               <svg
-                width="64"
-                height="64"
+                width="72"
+                height="72"
                 viewBox="0 0 72 72"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
-                style={{ opacity: 0.9 }}
+                style={{ opacity: 0.95 }}
               >
-                {/* Phone outline */}
                 <rect
                   x="22"
                   y="8"
@@ -346,22 +347,22 @@ export default function OrientationGuard({
               <p
                 style={{
                   color: "#ffffff",
-                  fontSize: "1.2rem",
+                  fontSize: "1.15rem",
                   fontWeight: 700,
                   margin: 0,
                   letterSpacing: "0.03em",
-                  textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.3)",
                 }}
               >
                 Please rotate your device
               </p>
               <p
                 style={{
-                  color: "rgba(255,255,255,0.7)",
-                  fontSize: "0.95rem",
+                  color: "rgba(255,255,255,0.85)",
+                  fontSize: "0.9rem",
                   fontWeight: 600,
-                  margin: "0.25rem 0 0 0",
-                  textShadow: "0 1px 4px rgba(0,0,0,0.6)",
+                  margin: "0.3rem 0 0 0",
+                  textShadow: "0 1px 3px rgba(0,0,0,0.25)",
                 }}
               >
                 Edy rides best in landscape

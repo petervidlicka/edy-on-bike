@@ -136,9 +136,10 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
     >
       <h2
         style={{
-          color: "#9a3412",
+          color: "#27435E",
           fontSize: "2.5rem",
-          fontWeight: 800,
+          fontFamily: "var(--font-fredoka), sans-serif",
+          fontWeight: 600,
           margin: "0 0 0.5rem",
           letterSpacing: "0.08em",
           textShadow: "0 2px 6px rgba(255,255,255,0.3)",

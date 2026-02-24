@@ -15,7 +15,7 @@ export const SUBURBAN_PALETTE: EnvironmentPalette = {
   cloud: "#cdd5dc",
 
   // Ground & road
-  ground: "#8a9a7c",
+  ground: "#96bc6a",
   road: "#7a7a78",
   roadLine: "#a3a39f",
 

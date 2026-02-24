@@ -60,6 +60,8 @@ export interface PlayerState {
   trickPhase: "extend" | "return";
   /** Number of completed pose trick cycles in current airtime. */
   trickCompletions: number;
+  /** How many pose trick cycles the player intends to complete. Starts at 1, incremented by additional input. */
+  targetTrickCount: number;
   /** Pending ramp boost type. 'straight' = more distance, 'curved' = more height. */
   rampBoost: "straight" | "curved" | null;
   /** Current ramp surface angle in radians for bike tilt matching. */

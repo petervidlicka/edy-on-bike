@@ -18,7 +18,7 @@ import {
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
 import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./Renderer";
-import { spawnObstacle, nextSpawnGap } from "./Obstacle";
+import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision, checkRampCollision } from "./Collision";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
@@ -29,6 +29,13 @@ function computeTrickScore(baseName: string, basePoints: number, count: number):
   if (count === 2) return { label: `Double ${baseName}`, totalBonus: 2 * basePoints + DOUBLE_CHAIN_BONUS };
   const prefix = count === 3 ? "Triple" : `${count}x`;
   return { label: `${prefix} ${baseName}`, totalBonus: count * basePoints + TRIPLE_CHAIN_BONUS };
+}
+
+function countPrefix(count: number): string {
+  if (count <= 1) return "";
+  if (count === 2) return "Double ";
+  if (count === 3) return "Triple ";
+  return `${count}x `;
 }
 
 interface FloatingText {
@@ -72,6 +79,9 @@ export class Engine {
   private callbacks: EngineCallbacks;
   private sound = new SoundManager();
   private skin: SkinDefinition = getSkinById("default");
+  private debugSequence: ObstacleType[] | null = null;
+  private debugIndex: number = 0;
+  private debugGap: number = 500;
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -115,6 +125,7 @@ export class Engine {
     this.lastTime = 0;
     this.distanceSinceLastObstacle = 0;
     this.nextObstacleGap = 0;
+    this.debugIndex = 0;
     this.obstacles = [];
     this.floatingTexts = [];
     this.envManager.reset();
@@ -242,12 +253,21 @@ export class Engine {
 
     // Obstacle spawning
     this.distanceSinceLastObstacle += this.speed * dt;
-    if (this.distanceSinceLastObstacle >= this.nextObstacleGap) {
-      this.obstacles.push(
-        spawnObstacle(this.canvasW, this.groundY, this.elapsedMs, this.envManager.getCurrentEnvironment())
-      );
+    const gap = this.debugSequence ? this.debugGap : this.nextObstacleGap;
+    if (this.distanceSinceLastObstacle >= gap) {
+      if (this.debugSequence) {
+        const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
+        this.obstacles.push(createObstacle(type, this.canvasW, this.groundY));
+        this.debugIndex++;
+      } else {
+        this.obstacles.push(
+          spawnObstacle(this.canvasW, this.groundY, this.elapsedMs, this.envManager.getCurrentEnvironment())
+        );
+      }
       this.distanceSinceLastObstacle = 0;
-      this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs);
+      if (!this.debugSequence) {
+        this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs);
+      }
     }
 
     // Ramp interaction (before collision checks)
@@ -269,13 +289,13 @@ export class Engine {
         const groundPos = this.groundY - this.player.height;
         if (this.player.y < groundPos - 2) {
           // Auto-launch: player is above ground after riding off ramp
-          // Half boost for passive roll-off; active jump gives full boost
+          // Gentle boost for passive roll-off; active jump gives full boost
           this.player.isOnGround = false;
           this.player.jumpCount = 1; // can still double-jump
           if (this.player.rampBoost === "curved") {
-            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.5;
+            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.2;
           } else {
-            this.player.velocityY = JUMP_FORCE * 0.5;
+            this.player.velocityY = JUMP_FORCE * 0.2;
           }
         }
       }
@@ -290,13 +310,13 @@ export class Engine {
     if (this.player.ridingObstacle) {
       const obs = this.player.ridingObstacle;
       if (obs.x + obs.width < this.player.x + 8) {
-        // Apply half-boost for passive roll-off from container ramp
+        // Apply gentle boost for passive roll-off from container ramp
         if (this.player.rampBoost) {
           this.player.jumpCount = 1;
           if (this.player.rampBoost === "curved") {
-            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.5;
+            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.2;
           } else {
-            this.player.velocityY = JUMP_FORCE * 0.5;
+            this.player.velocityY = JUMP_FORCE * 0.2;
           }
         }
         this.player.ridingObstacle = null;
@@ -407,6 +427,7 @@ export class Engine {
       this.player.activeTrick = TrickType.NONE;
       this.player.trickProgress = 0;
       this.player.trickCompletions = 0;
+      this.player.targetTrickCount = 0;
       this.gameOver();
       return true;
     }
@@ -414,6 +435,7 @@ export class Engine {
     this.player.activeTrick = TrickType.NONE;
     this.player.trickProgress = 0;
     this.player.trickCompletions = 0;
+    this.player.targetTrickCount = 0;
     return false;
   }
 
@@ -426,32 +448,29 @@ export class Engine {
 
     // Validate pose trick — relaxed for combos:
     // Accept if at least one full cycle completed, OR if the trick reached peak extension
-    // (trickPhase === "return" means it extended fully and started returning)
     const poseCompletions = this.player.trickCompletions;
     const posePhase = this.player.trickPhase;
     const poseSafe = poseCompletions >= 1 || posePhase === "return";
 
     if (totalFlips >= 1 && poseSafe) {
-      const flipName = direction >= 0 ? "backflip" : "frontflip";
       const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
-      const poseName = isSuperman ? "superman" : "no-hander";
+      const poseName = isSuperman ? "Superman" : "No-Hander";
+      const flipName = direction >= 0 ? "Backflip" : "Frontflip";
       const posePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
-      const effectivePoseCount = Math.max(poseCompletions, 1); // at least 1 since combo validated
-      const baseScore = BACKFLIP_BONUS * totalFlips + posePoints * effectivePoseCount;
-      const comboScore = baseScore * COMBO_MULTIPLIER;
+      const effectivePoseCount = Math.max(poseCompletions, 1);
 
-      this.score += comboScore;
-      this.distance = this.score * SCORE_PER_PX;
-      this.callbacks.onScoreUpdate(this.score);
-      this.sound.playBackflipSuccess();
-      this.floatingTexts.push({
-        text: `Combo: ${poseName} ${flipName}, ${comboScore} pts!`,
-        x: this.player.x + this.player.width / 2,
-        y: this.player.y - 10,
-        opacity: 1,
-        velocityY: -1.5,
-      });
-      this.callbacks.onTrickLanded?.(`Combo: ${poseName} ${flipName}`, comboScore);
+      // Build combo label with count prefixes
+      const comboLabel = `${countPrefix(effectivePoseCount)}${poseName} ${countPrefix(totalFlips)}${flipName}`;
+
+      // Scoring: base points + chain bonus based on total trick count
+      const baseScore = posePoints * effectivePoseCount + BACKFLIP_BONUS * totalFlips;
+      const totalTrickCount = effectivePoseCount + totalFlips;
+      let chainBonus = 0;
+      if (totalTrickCount === 2) chainBonus = DOUBLE_CHAIN_BONUS;
+      else if (totalTrickCount >= 3) chainBonus = TRIPLE_CHAIN_BONUS;
+      const comboScore = (baseScore + chainBonus) * COMBO_MULTIPLIER;
+
+      this.awardTrickBonus(comboLabel, comboScore);
 
       // Reset all trick state
       this.player.backflipAngle = 0;
@@ -460,6 +479,7 @@ export class Engine {
       this.player.activeTrick = TrickType.NONE;
       this.player.trickProgress = 0;
       this.player.trickCompletions = 0;
+      this.player.targetTrickCount = 0;
       return false;
     }
 
@@ -470,6 +490,7 @@ export class Engine {
     this.player.activeTrick = TrickType.NONE;
     this.player.trickProgress = 0;
     this.player.trickCompletions = 0;
+    this.player.targetTrickCount = 0;
     this.gameOver();
     return true;
   }
@@ -542,6 +563,12 @@ export class Engine {
 
   setSkin(skin: SkinDefinition): void {
     this.skin = skin;
+  }
+
+  setDebugObstacles(sequence: ObstacleType[] | null, gap?: number): void {
+    this.debugSequence = sequence;
+    this.debugIndex = 0;
+    if (gap !== undefined) this.debugGap = gap;
   }
 
   destroy(): void {

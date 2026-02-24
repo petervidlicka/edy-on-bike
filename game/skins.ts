@@ -21,7 +21,7 @@ export const SKINS: SkinDefinition[] = [
     name: "Road Racer",
     helmetStyle: "aero",
     bikeStyle: "racing",
-    unlockScore: 50,
+    unlockScore: 300,
     colors: {
       wheel: "#3a3a3a",
       frame: "#cc3333",
@@ -36,10 +36,10 @@ export const SKINS: SkinDefinition[] = [
     name: "Trail Rider",
     helmetStyle: "standard",
     bikeStyle: "mtb",
-    unlockScore: 150,
+    unlockScore: 400,
     colors: {
       wheel: "#3a3a3a",
-      frame: "#4a6a4a",
+      frame: "#d4722a",
       helmet: "#f5f0e8",
       skin: "#c8a882",
       shirt: "#6a8a5a",
@@ -51,7 +51,7 @@ export const SKINS: SkinDefinition[] = [
     name: "Royal Rider",
     helmetStyle: "crown",
     bikeStyle: "cruiser",
-    unlockScore: 300,
+    unlockScore: 550,
     colors: {
       wheel: "#4a4a48",
       frame: "#6a5aaa",
@@ -66,7 +66,7 @@ export const SKINS: SkinDefinition[] = [
     name: "Neon Night",
     helmetStyle: "cap",
     bikeStyle: "fixie",
-    unlockScore: 500,
+    unlockScore: 750,
     colors: {
       wheel: "#ff8800",
       frame: "#00ccff",
@@ -81,7 +81,7 @@ export const SKINS: SkinDefinition[] = [
     name: "Shadow Ops",
     helmetStyle: "goggles",
     bikeStyle: "fatTire",
-    unlockScore: 800,
+    unlockScore: 1050,
     colors: {
       wheel: "#2a2a2a",
       frame: "#3a3a3a",

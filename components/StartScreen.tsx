@@ -30,9 +30,10 @@ export default function StartScreen({
     >
       <h1
         style={{
-          color: "#1e293b",
+          color: "#27435E",
           fontSize: "3rem",
-          fontWeight: 800,
+          fontFamily: "var(--font-fredoka), sans-serif",
+          fontWeight: 600,
           margin: 0,
           letterSpacing: "0.04em",
           textShadow: "0 2px 6px rgba(255,255,255,0.4)",

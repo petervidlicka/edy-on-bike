@@ -1,5 +1,5 @@
 import { PlayerState, TrickType } from "./types";
-import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED, MAX_FLIP_COUNT } from "./constants";
+import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, RAMP_GRAVITY_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED, MAX_FLIP_COUNT } from "./constants";
 
 export function createPlayer(groundY: number, canvasWidth: number): PlayerState {
   return {
@@ -24,6 +24,7 @@ export function createPlayer(groundY: number, canvasWidth: number): PlayerState 
     trickProgress: 0,
     trickPhase: "extend",
     trickCompletions: 0,
+    targetTrickCount: 0,
     rampBoost: null,
     rampSurfaceAngle: 0,
   };
@@ -99,21 +100,53 @@ export function startFrontflip(player: PlayerState): boolean {
 
 export function startSuperman(player: PlayerState): boolean {
   if (player.isOnGround || player.ridingObstacle) return false;
+
+  // If already doing a superman, queue an additional cycle
+  if (player.activeTrick === TrickType.SUPERMAN) {
+    const cycleProgress = player.trickPhase === "extend"
+      ? player.trickProgress * 0.5
+      : 0.5 + (1 - player.trickProgress) * 0.5;
+    const totalProgress = player.trickCompletions + cycleProgress;
+    const minProgress = (player.targetTrickCount - 1) + 0.5;
+    if (player.targetTrickCount < MAX_FLIP_COUNT && totalProgress >= minProgress) {
+      player.targetTrickCount++;
+      return true;
+    }
+    return false;
+  }
+
   if (player.activeTrick !== TrickType.NONE) return false; // can't switch pose tricks
-  // Allow starting a pose trick while flipping (combo)
   player.activeTrick = TrickType.SUPERMAN;
   player.trickProgress = 0;
   player.trickPhase = "extend";
+  player.targetTrickCount = 1;
+  player.trickCompletions = 0;
   return true;
 }
 
 export function startNoHander(player: PlayerState): boolean {
   if (player.isOnGround || player.ridingObstacle) return false;
-  if (player.activeTrick !== TrickType.NONE) return false; // can't switch pose tricks
-  // Allow starting a pose trick while flipping (combo)
+
+  // If already doing a no-hander, queue an additional cycle
+  if (player.activeTrick === TrickType.NO_HANDER) {
+    const cycleProgress = player.trickPhase === "extend"
+      ? player.trickProgress * 0.5
+      : 0.5 + (1 - player.trickProgress) * 0.5;
+    const totalProgress = player.trickCompletions + cycleProgress;
+    const minProgress = (player.targetTrickCount - 1) + 0.5;
+    if (player.targetTrickCount < MAX_FLIP_COUNT && totalProgress >= minProgress) {
+      player.targetTrickCount++;
+      return true;
+    }
+    return false;
+  }
+
+  if (player.activeTrick !== TrickType.NONE) return false;
   player.activeTrick = TrickType.NO_HANDER;
   player.trickProgress = 0;
   player.trickPhase = "extend";
+  player.targetTrickCount = 1;
+  player.trickCompletions = 0;
   return true;
 }
 
@@ -135,8 +168,10 @@ export function updatePlayer(
   }
 
   if (!player.isOnGround) {
-    // Straight ramp boost: reduced gravity for more horizontal distance
-    const effectiveGravity = player.rampBoost === "straight" ? GRAVITY * 0.5 : GRAVITY;
+    // Ramp boost: reduced gravity for more airtime
+    const effectiveGravity =
+      player.rampBoost ? GRAVITY * RAMP_GRAVITY_MULTIPLIER :
+      GRAVITY;
     player.velocityY += effectiveGravity * dt;
     player.y += player.velocityY * dt;
 
@@ -173,18 +208,21 @@ export function updatePlayer(
   }
 
   // --- Pose trick animation (superman, no hander) ---
-  if (player.activeTrick !== TrickType.NONE) {
-    const speed = player.activeTrick === TrickType.SUPERMAN ? SUPERMAN_SPEED : NO_HANDER_SPEED;
+  if (player.activeTrick !== TrickType.NONE && player.trickCompletions < player.targetTrickCount) {
+    const trickSpeed = player.activeTrick === TrickType.SUPERMAN ? SUPERMAN_SPEED : NO_HANDER_SPEED;
     if (player.trickPhase === "extend") {
-      player.trickProgress = Math.min(1, player.trickProgress + speed * dt);
+      player.trickProgress = Math.min(1, player.trickProgress + trickSpeed * dt);
       if (player.trickProgress >= 1) {
         player.trickPhase = "return";
       }
     } else {
-      player.trickProgress = Math.max(0, player.trickProgress - speed * dt);
+      player.trickProgress = Math.max(0, player.trickProgress - trickSpeed * dt);
       if (player.trickProgress <= 0) {
         player.trickCompletions++;
-        player.trickPhase = "extend"; // ready for next chain
+        // Only start a new cycle if the player has queued more
+        if (player.trickCompletions < player.targetTrickCount) {
+          player.trickPhase = "extend";
+        }
       }
     }
   }

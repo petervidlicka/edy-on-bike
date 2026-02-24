@@ -138,7 +138,7 @@ export default function HUD({
       >
         <span
           style={{
-            color: trickFeedback ? "#f0c030" : "#1e293b",
+            color: trickFeedback ? "#1a7a2e" : "#1e293b",
             fontFamily: "var(--font-space-mono), monospace",
             fontSize: "1.25rem",
             fontWeight: "bold",
@@ -159,7 +159,7 @@ export default function HUD({
         {trickFeedback && (
           <span
             style={{
-              color: "#f0c030",
+              color: "#1a7a2e",
               fontFamily: "var(--font-space-mono), monospace",
               fontSize: "0.7rem",
               fontWeight: "bold",

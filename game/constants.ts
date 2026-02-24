@@ -29,6 +29,12 @@ export const DOUBLE_CHAIN_BONUS = 100;
 export const TRIPLE_CHAIN_BONUS = 200;
 export const COMBO_MULTIPLIER = 2;
 
+// Crash animation
+export const CRASH_DURATION = 1.2; // seconds
+export const CRASH_GRAVITY = 0.45;
+export const CRASH_BOUNCE_DAMPING = 0.35;
+export const CRASH_SHAKE_INITIAL = 8; // pixels
+
 // Player dimensions
 export const PLAYER_X_RATIO = 0.20; // 20% from the left of the canvas
 export const PLAYER_WIDTH = 64;

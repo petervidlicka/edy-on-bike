@@ -2,3 +2,4 @@ export { drawBackground, drawHouse, drawTreeSilhouette, drawDeer, drawWalkingPer
 export { drawPlayer, drawSkinPreview } from "./PlayerRenderer";
 export { drawObstacle } from "./ObstacleRenderer";
 export { drawFloatingText } from "./FloatingTextRenderer";
+export { drawCrashBike, drawCrashRider } from "./CrashRenderer";

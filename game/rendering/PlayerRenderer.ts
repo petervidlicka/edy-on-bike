@@ -10,7 +10,7 @@ function lerp(a: number, b: number, t: number): number {
 
 // --- Helmet styles (skin-specific headwear) ---
 
-function drawHelmet(
+export function drawHelmet(
   ctx: CanvasRenderingContext2D,
   headX: number,
   headY: number,
@@ -97,7 +97,7 @@ function drawHelmet(
 
 // --- Bike geometry per style ---
 
-interface BikeGeom {
+export interface BikeGeom {
   wheelR: number;
   rearWheelX: number;
   frontWheelX: number;
@@ -112,7 +112,7 @@ interface BikeGeom {
   headY: number;
 }
 
-function getBikeGeometry(bikeStyle: BikeStyle, x: number, y: number): BikeGeom {
+export function getBikeGeometry(bikeStyle: BikeStyle, x: number, y: number): BikeGeom {
   switch (bikeStyle) {
     case "racing":
       // Road bike: shorter wheelbase, taller frame
@@ -143,7 +143,7 @@ function getBikeGeometry(bikeStyle: BikeStyle, x: number, y: number): BikeGeom {
   }
 }
 
-function drawWheel(
+export function drawWheel(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
@@ -206,7 +206,7 @@ function drawWheel(
   }
 }
 
-function drawBikeFrame(
+export function drawBikeFrame(
   ctx: CanvasRenderingContext2D,
   skin: SkinDefinition,
   g: BikeGeom,
@@ -285,7 +285,7 @@ function drawBikeFrame(
   ctx.fillRect(pedalRX - 3, pedalY - 1, 6, 3);
 }
 
-function drawHandlebars(
+export function drawHandlebars(
   ctx: CanvasRenderingContext2D,
   skin: SkinDefinition,
   g: BikeGeom
@@ -351,6 +351,19 @@ function drawHandlebars(
   return { gripX: stemTopX - 2, gripY: stemTopY };
 }
 
+export function getWheelParams(skin: SkinDefinition): {
+  spokeCount: number; spokeWidth: number; spokeColor?: string; knobby: boolean;
+} {
+  let spokeCount = 6, spokeWidth = 1.2, spokeColor: string | undefined, knobby = false;
+  switch (skin.bikeStyle) {
+    case "racing":  spokeCount = 5; break;
+    case "mtb":     knobby = true; break;
+    case "cruiser": spokeCount = 3; spokeWidth = 3.6; spokeColor = skin.colors.frame; break;
+    case "fatTire": spokeCount = 8; spokeColor = "#aaaaaa"; break;
+  }
+  return { spokeCount, spokeWidth, spokeColor, knobby };
+}
+
 export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, skin: SkinDefinition) {
   const { x, y, wheelRotation, bikeTilt, riderLean, riderCrouch, legTuck, backflipAngle, flipDirection } = player;
   const c = skin.colors;
@@ -382,16 +395,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
   ctx.translate(-g.pivotX, -g.pivotY);
 
   // ── Wheels ──
-  let spokeCount = 6;
-  let spokeWidth = 1.2;
-  let spokeColor: string | undefined;
-  let knobby = false;
-  switch (skin.bikeStyle) {
-    case "racing":  spokeCount = 5; break;
-    case "mtb":     knobby = true; break;
-    case "cruiser": spokeCount = 3; spokeWidth = 3.6; spokeColor = c.frame; break;
-    case "fatTire": spokeCount = 8; spokeColor = "#aaaaaa"; break;
-  }
+  const { spokeCount, spokeWidth, spokeColor, knobby } = getWheelParams(skin);
   drawWheel(ctx, g.rearWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby);
   drawWheel(ctx, g.frontWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby);
 

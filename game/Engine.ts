@@ -5,16 +5,21 @@ import {
   SPEED_INCREASE,
   SPEED_INTERVAL,
   SCORE_PER_PX,
-  BACKFLIP_BONUS,
-  SUPERMAN_BONUS,
-  NO_HANDER_BONUS,
-  DOUBLE_CHAIN_BONUS,
-  TRIPLE_CHAIN_BONUS,
   JUMP_FORCE,
   RAMP_HEIGHT_MULTIPLIER,
   MAX_SPEED_MULTIPLIER,
-  COMBO_MULTIPLIER,
 } from "./constants";
+import {
+  FloatingText,
+  evaluateFlipLanding,
+  evaluatePoseTrickLanding,
+  evaluateComboLanding,
+  resetFlipState,
+  resetPoseState,
+  resetAllTrickState,
+  createTrickFloatingText,
+  updateFloatingTexts,
+} from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
 import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./rendering";
@@ -23,28 +28,6 @@ import { checkCollision, checkRideableCollision, checkRampCollision } from "./Co
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
-
-function computeTrickScore(baseName: string, basePoints: number, count: number): { label: string; totalBonus: number } {
-  if (count === 1) return { label: baseName, totalBonus: basePoints };
-  if (count === 2) return { label: `Double ${baseName}`, totalBonus: 2 * basePoints + DOUBLE_CHAIN_BONUS };
-  const prefix = count === 3 ? "Triple" : `${count}x`;
-  return { label: `${prefix} ${baseName}`, totalBonus: count * basePoints + TRIPLE_CHAIN_BONUS };
-}
-
-function countPrefix(count: number): string {
-  if (count <= 1) return "";
-  if (count === 2) return "Double ";
-  if (count === 3) return "Triple ";
-  return `${count}x `;
-}
-
-interface FloatingText {
-  text: string;
-  x: number;
-  y: number;
-  opacity: number;
-  velocityY: number;
-}
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
@@ -239,11 +222,7 @@ export class Engine {
     }
 
     // Update floating texts (float up + fade out)
-    for (const ft of this.floatingTexts) {
-      ft.y += ft.velocityY * dt;
-      ft.opacity -= 0.01333 * dt;
-    }
-    this.floatingTexts = this.floatingTexts.filter((ft) => ft.opacity > 0);
+    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
 
     // Move obstacles and cull off-screen ones
     for (const obs of this.obstacles) {
@@ -390,109 +369,29 @@ export class Engine {
 
   /** Handle flip landing. Returns true if game over (crash). */
   private handleFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number): boolean {
-    const completedFlips = Math.floor(angle / fullFlip);
-    const remainder = angle - completedFlips * fullFlip;
-    const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
-
-    if (totalFlips >= 1) {
-      const baseName = direction >= 0 ? "Backflip" : "Frontflip";
-      const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, totalFlips);
-      this.awardTrickBonus(label, totalBonus);
-      this.player.backflipAngle = 0;
-      this.player.isBackflipping = false;
-      this.player.targetFlipCount = 0;
-      return false;
-    }
-    // Too incomplete — crash
-    this.gameOver();
-    return true;
+    const result = evaluateFlipLanding(angle, direction, fullFlip, tolerance);
+    resetFlipState(this.player);
+    if (result.crashed) { this.gameOver(); return true; }
+    this.awardTrickBonus(result.label!, result.bonus!);
+    return false;
   }
 
   /** Handle pose trick landing. Returns true if game over (crash). */
   private handlePoseTrickLanding(): boolean {
-    const completions = this.player.trickCompletions;
-
-    // Award if at least one full cycle completed — the player already demonstrated
-    // the trick regardless of where in a subsequent cycle they happen to land.
-    const safeToLand = completions >= 1;
-
-    if (safeToLand) {
-      const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
-      const baseName = isSuperman ? "Superman" : "No Hander";
-      const basePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
-      const { label, totalBonus } = computeTrickScore(baseName, basePoints, completions);
-      this.awardTrickBonus(label, totalBonus);
-    } else if (completions === 0) {
-      // Trick started but never completed — crash
-      this.player.activeTrick = TrickType.NONE;
-      this.player.trickProgress = 0;
-      this.player.trickCompletions = 0;
-      this.player.targetTrickCount = 0;
-      this.gameOver();
-      return true;
-    }
-
-    this.player.activeTrick = TrickType.NONE;
-    this.player.trickProgress = 0;
-    this.player.trickCompletions = 0;
-    this.player.targetTrickCount = 0;
+    const result = evaluatePoseTrickLanding(this.player);
+    resetPoseState(this.player);
+    if (result.crashed) { this.gameOver(); return true; }
+    this.awardTrickBonus(result.label!, result.bonus!);
     return false;
   }
 
   /** Handle combo landing (pose trick + flip simultaneously). Returns true if crash. */
   private handleComboLanding(angle: number, direction: number, fullFlip: number, tolerance: number): boolean {
-    // Validate flip
-    const completedFlips = Math.floor(angle / fullFlip);
-    const remainder = angle - completedFlips * fullFlip;
-    const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
-
-    // Validate pose trick — relaxed for combos:
-    // Accept if at least one full cycle completed, OR if the trick reached peak extension
-    const poseCompletions = this.player.trickCompletions;
-    const posePhase = this.player.trickPhase;
-    const poseSafe = poseCompletions >= 1 || posePhase === "return";
-
-    if (totalFlips >= 1 && poseSafe) {
-      const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
-      const poseName = isSuperman ? "Superman" : "No-Hander";
-      const flipName = direction >= 0 ? "Backflip" : "Frontflip";
-      const posePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
-      const effectivePoseCount = Math.max(poseCompletions, 1);
-
-      // Build combo label with count prefixes
-      const comboLabel = `${countPrefix(effectivePoseCount)}${poseName} ${countPrefix(totalFlips)}${flipName}`;
-
-      // Scoring: base points + chain bonus based on total trick count
-      const baseScore = posePoints * effectivePoseCount + BACKFLIP_BONUS * totalFlips;
-      const totalTrickCount = effectivePoseCount + totalFlips;
-      let chainBonus = 0;
-      if (totalTrickCount === 2) chainBonus = DOUBLE_CHAIN_BONUS;
-      else if (totalTrickCount >= 3) chainBonus = TRIPLE_CHAIN_BONUS;
-      const comboScore = (baseScore + chainBonus) * COMBO_MULTIPLIER;
-
-      this.awardTrickBonus(comboLabel, comboScore);
-
-      // Reset all trick state
-      this.player.backflipAngle = 0;
-      this.player.isBackflipping = false;
-      this.player.targetFlipCount = 0;
-      this.player.activeTrick = TrickType.NONE;
-      this.player.trickProgress = 0;
-      this.player.trickCompletions = 0;
-      this.player.targetTrickCount = 0;
-      return false;
-    }
-
-    // Either component failed — crash
-    this.player.backflipAngle = 0;
-    this.player.isBackflipping = false;
-    this.player.targetFlipCount = 0;
-    this.player.activeTrick = TrickType.NONE;
-    this.player.trickProgress = 0;
-    this.player.trickCompletions = 0;
-    this.player.targetTrickCount = 0;
-    this.gameOver();
-    return true;
+    const result = evaluateComboLanding(this.player, angle, direction, fullFlip, tolerance);
+    resetAllTrickState(this.player);
+    if (result.crashed) { this.gameOver(); return true; }
+    this.awardTrickBonus(result.label!, result.bonus!);
+    return false;
   }
 
   private awardTrickBonus(label: string, bonus: number): void {
@@ -500,13 +399,7 @@ export class Engine {
     this.distance = this.score * SCORE_PER_PX;
     this.callbacks.onScoreUpdate(this.score);
     this.sound.playBackflipSuccess();
-    this.floatingTexts.push({
-      text: `${label}! +${bonus}`,
-      x: this.player.x + this.player.width / 2,
-      y: this.player.y - 10,
-      opacity: 1,
-      velocityY: -1.5,
-    });
+    this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width));
     this.callbacks.onTrickLanded?.(label, bonus);
   }
 

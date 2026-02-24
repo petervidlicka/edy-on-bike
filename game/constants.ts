@@ -39,7 +39,8 @@ export const CRASH_SHAKE_INITIAL = 8; // pixels
 export const AMBULANCE_CHANCE = 0.25;
 export const AMBULANCE_WIDTH = 120;
 export const AMBULANCE_HEIGHT = 55;
-export const AMBULANCE_DRIVE_SPEED = 8;
+export const AMBULANCE_DRIVE_SPEED = 9;
+export const AMBULANCE_DRIVE_OUT_SPEED = 14;
 export const AMBULANCE_STOP_MS = 800;
 export const AMBULANCE_REVIVE_MS = 600;
 

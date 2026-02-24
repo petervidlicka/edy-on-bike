@@ -16,6 +16,7 @@ import {
   AMBULANCE_WIDTH,
   AMBULANCE_HEIGHT,
   AMBULANCE_DRIVE_SPEED,
+  AMBULANCE_DRIVE_OUT_SPEED,
   AMBULANCE_STOP_MS,
   AMBULANCE_REVIVE_MS,
 } from "./constants";
@@ -194,6 +195,11 @@ export class Engine {
       this.updateAmbulance(dt, rawDt);
     }
 
+    // Continue driving out ambulance after game resumes
+    if (this.state === GameState.RUNNING && this.ambulance) {
+      this.updateAmbulance(dt, rawDt);
+    }
+
     this.render();
     this.rafId = requestAnimationFrame(this.loop);
   }
@@ -358,6 +364,8 @@ export class Engine {
       reviveFlashOpacity: 0,
     };
 
+    this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
+
     this.sound.playSiren();
     this.callbacks.onStateChange(this.state);
   }
@@ -405,7 +413,7 @@ export class Engine {
         break;
 
       case AmbulancePhase.DRIVING_OUT:
-        amb.x += AMBULANCE_DRIVE_SPEED * dt;
+        amb.x += AMBULANCE_DRIVE_OUT_SPEED * dt;
         if (amb.x > this.canvasW + 20) {
           this.ambulance = null;
         }
@@ -605,7 +613,11 @@ export class Engine {
       drawObstacle(ctx, obs, palette);
     }
 
-    if (crashing) {
+    const ambulancePreRevive = this.state === GameState.AMBULANCE
+      && this.ambulance
+      && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
+
+    if (crashing || ambulancePreRevive) {
       drawCrashBike(ctx, this.crashState, this.skin);
       drawCrashRider(ctx, this.crashState, this.skin);
     } else {

@@ -380,7 +380,7 @@ export class Engine {
     cs.riderX += cs.riderVX * dt;
     if (!riderSettled) cs.riderY += cs.riderVY * dt;
     cs.riderAngle += cs.riderAngularVel * dt;
-    cs.riderVX *= friction;
+    cs.riderVX *= Math.pow(friction, dt);
 
     if (cs.riderY >= riderGroundY && cs.riderVY > 0 && !riderSettled) {
       cs.riderY = riderGroundY;
@@ -402,7 +402,7 @@ export class Engine {
     cs.bikeX += cs.bikeVX * dt;
     if (!bikeSettled) cs.bikeY += cs.bikeVY * dt;
     cs.bikeAngle += cs.bikeAngularVel * dt;
-    cs.bikeVX *= friction;
+    cs.bikeVX *= Math.pow(friction, dt);
 
     if (cs.bikeY >= bikeGroundY && cs.bikeVY > 0 && !bikeSettled) {
       cs.bikeY = bikeGroundY;

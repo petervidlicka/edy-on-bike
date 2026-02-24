@@ -1,4 +1,4 @@
-import { GameState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
+import { GameState, CrashState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
@@ -8,6 +8,10 @@ import {
   MAX_SPEED_MULTIPLIER,
   FLIP_TOLERANCE,
   SKETCHY_TOLERANCE,
+  CRASH_DURATION,
+  CRASH_GRAVITY,
+  CRASH_BOUNCE_DAMPING,
+  CRASH_SHAKE_INITIAL,
 } from "./constants";
 import {
   FloatingText,
@@ -22,7 +26,7 @@ import {
 } from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
-import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./rendering";
+import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider } from "./rendering";
 import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
@@ -66,6 +70,15 @@ export class Engine {
   private debugSequence: ObstacleType[] | null = null;
   private debugIndex: number = 0;
   private debugGap: number = 500;
+  private crashState: CrashState = {
+    elapsed: 0, duration: CRASH_DURATION,
+    shakeIntensity: 0, shakeOffsetX: 0, shakeOffsetY: 0,
+    riderX: 0, riderY: 0, riderVX: 0, riderVY: 0,
+    riderAngle: 0, riderAngularVel: 0, riderBounceCount: 0,
+    bikeX: 0, bikeY: 0, bikeVX: 0, bikeVY: 0,
+    bikeAngle: 0, bikeAngularVel: 0, bikeBounceCount: 0,
+    bikeWheelRotation: 0,
+  };
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -162,6 +175,8 @@ export class Engine {
 
     if (this.state === GameState.RUNNING) {
       this.update(dt, rawDt);
+    } else if (this.state === GameState.CRASHING) {
+      this.updateCrash(dt, rawDt);
     }
 
     this.render();
@@ -260,7 +275,7 @@ export class Engine {
       if (obs.rideable) {
         const result = checkRideableCollision(this.player, obs);
         if (result === "crash") {
-          this.gameOver();
+          this.startCrash();
           return;
         }
         if (result === "land_on_top") {
@@ -282,26 +297,135 @@ export class Engine {
         }
       } else {
         if (checkCollision(this.player, obs)) {
-          this.gameOver();
+          this.startCrash();
           return;
         }
       }
     }
   }
 
-  private gameOver(): void {
-    this.state = GameState.GAME_OVER;
+  private startCrash(): void {
+    this.state = GameState.CRASHING;
     this.sound.stopMusic();
     this.sound.playCrash();
+    this.initCrashState();
+    this.callbacks.onStateChange(this.state);
+  }
+
+  private gameOver(): void {
+    this.state = GameState.GAME_OVER;
     this.callbacks.onStateChange(this.state);
     this.callbacks.onGameOver(this.score);
+  }
+
+  private initCrashState(): void {
+    const cs = this.crashState;
+    const p = this.player;
+    const speedFactor = this.speed / INITIAL_SPEED;
+
+    cs.elapsed = 0;
+    cs.duration = CRASH_DURATION;
+    cs.shakeIntensity = CRASH_SHAKE_INITIAL;
+    cs.shakeOffsetX = 0;
+    cs.shakeOffsetY = 0;
+
+    // Rider: ejected forward and upward
+    cs.riderX = p.x + 10;
+    cs.riderY = p.y - 5;
+    cs.riderVX = this.speed * 0.6 + 1.5;
+    cs.riderVY = -6 - speedFactor * 2;
+    cs.riderAngle = 0;
+    cs.riderAngularVel = 0.15 + speedFactor * 0.08;
+    cs.riderBounceCount = 0;
+
+    // Carry upward momentum if player was still rising
+    if (p.velocityY < 0) {
+      cs.riderVY += p.velocityY * 0.5;
+    }
+
+    // Bike: slides forward, slight upward kick
+    cs.bikeX = p.x;
+    cs.bikeY = p.y + p.height * 0.3;
+    cs.bikeVX = this.speed * 0.3;
+    cs.bikeVY = -2;
+    cs.bikeAngle = 0;
+    cs.bikeAngularVel = -0.08;
+    cs.bikeBounceCount = 0;
+    cs.bikeWheelRotation = p.wheelRotation;
+  }
+
+  private updateCrash(dt: number, rawDt: number): void {
+    const cs = this.crashState;
+    cs.elapsed += rawDt / 1000;
+
+    if (cs.elapsed >= cs.duration) {
+      this.gameOver();
+      return;
+    }
+
+    const groundY = this.groundY;
+    const friction = 0.95;
+    const angularDamping = 0.7;
+
+    // Screen shake — exponential decay
+    cs.shakeIntensity *= 1 - 0.06 * dt;
+    if (cs.shakeIntensity < 0.3) cs.shakeIntensity = 0;
+    cs.shakeOffsetX = (Math.random() - 0.5) * 2 * cs.shakeIntensity;
+    cs.shakeOffsetY = (Math.random() - 0.5) * 2 * cs.shakeIntensity;
+
+    // Rider physics
+    const riderGroundY = groundY - 15;
+    const riderSettled = cs.riderBounceCount >= 2;
+    if (!riderSettled) cs.riderVY += CRASH_GRAVITY * dt;
+    cs.riderX += cs.riderVX * dt;
+    if (!riderSettled) cs.riderY += cs.riderVY * dt;
+    cs.riderAngle += cs.riderAngularVel * dt;
+    cs.riderVX *= Math.pow(friction, dt);
+
+    if (cs.riderY >= riderGroundY && cs.riderVY > 0 && !riderSettled) {
+      cs.riderY = riderGroundY;
+      cs.riderBounceCount++;
+      if (cs.riderBounceCount >= 2) {
+        cs.riderVY = 0;
+        cs.riderAngularVel = 0;
+      } else {
+        cs.riderVY = -cs.riderVY * CRASH_BOUNCE_DAMPING;
+        cs.riderAngularVel *= angularDamping;
+      }
+      cs.riderVX *= 0.7;
+    }
+
+    // Bike physics
+    const bikeGroundY = groundY - 12;
+    const bikeSettled = cs.bikeBounceCount >= 2;
+    if (!bikeSettled) cs.bikeVY += CRASH_GRAVITY * dt;
+    cs.bikeX += cs.bikeVX * dt;
+    if (!bikeSettled) cs.bikeY += cs.bikeVY * dt;
+    cs.bikeAngle += cs.bikeAngularVel * dt;
+    cs.bikeVX *= Math.pow(friction, dt);
+
+    if (cs.bikeY >= bikeGroundY && cs.bikeVY > 0 && !bikeSettled) {
+      cs.bikeY = bikeGroundY;
+      cs.bikeBounceCount++;
+      if (cs.bikeBounceCount >= 2) {
+        cs.bikeVY = 0;
+        cs.bikeAngularVel = 0;
+      } else {
+        cs.bikeVY = -cs.bikeVY * CRASH_BOUNCE_DAMPING;
+        cs.bikeAngularVel *= angularDamping;
+      }
+      cs.bikeVX *= 0.6;
+    }
+
+    // Decelerating wheel spin
+    cs.bikeWheelRotation += cs.bikeVX * dt * 0.08;
   }
 
   /** Handle flip landing. Returns true if game over (crash). */
   private handleFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): boolean {
     const result = evaluateFlipLanding(angle, direction, fullFlip, tolerance, sketchyTolerance);
     resetFlipState(this.player);
-    if (result.crashed) { this.gameOver(); return true; }
+    if (result.crashed) { this.startCrash(); return true; }
     this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
     return false;
   }
@@ -310,7 +434,7 @@ export class Engine {
   private handlePoseTrickLanding(): boolean {
     const result = evaluatePoseTrickLanding(this.player);
     resetPoseState(this.player);
-    if (result.crashed) { this.gameOver(); return true; }
+    if (result.crashed) { this.startCrash(); return true; }
     this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
     return false;
   }
@@ -319,7 +443,7 @@ export class Engine {
   private handleComboLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): boolean {
     const result = evaluateComboLanding(this.player, angle, direction, fullFlip, tolerance, sketchyTolerance);
     resetAllTrickState(this.player);
-    if (result.crashed) { this.gameOver(); return true; }
+    if (result.crashed) { this.startCrash(); return true; }
     this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
     return false;
   }
@@ -338,13 +462,31 @@ export class Engine {
     const palette = this.envManager.getCurrentPalette();
     const drawers = this.envManager.getBackgroundDrawers();
     ctx.clearRect(0, 0, canvasW, canvasH);
+
+    const crashing = this.state === GameState.CRASHING;
+    if (crashing) {
+      ctx.save();
+      ctx.translate(this.crashState.shakeOffsetX, this.crashState.shakeOffsetY);
+    }
+
     drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs, palette);
     }
-    drawPlayer(ctx, this.player, this.skin);
+
+    if (crashing) {
+      drawCrashBike(ctx, this.crashState, this.skin);
+      drawCrashRider(ctx, this.crashState, this.skin);
+    } else {
+      drawPlayer(ctx, this.player, this.skin);
+    }
+
     for (const ft of this.floatingTexts) {
       drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color);
+    }
+
+    if (crashing) {
+      ctx.restore();
     }
   }
 

@@ -1,5 +1,5 @@
 import { ObstacleType, type BackgroundElement } from "../types";
-import { SUBURBAN_BACKGROUND_DRAWERS } from "../Renderer";
+import { SUBURBAN_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
   EnvironmentPalette,
@@ -15,7 +15,7 @@ export const SUBURBAN_PALETTE: EnvironmentPalette = {
   cloud: "#cdd5dc",
 
   // Ground & road
-  ground: "#8a9a7c",
+  ground: "#96bc6a",
   road: "#7a7a78",
   roadLine: "#a3a39f",
 
@@ -116,7 +116,7 @@ function generateSuburbanElements(
       elements.push({
         type: "house",
         x,
-        y: groundY - h - 20,
+        y: groundY - h - 16,
         width: w,
         height: h,
         color: scheme.wall,
@@ -134,11 +134,12 @@ function generateSuburbanElements(
         lastType !== "walking_person"
       ) {
         const isAnimal = Math.random() > 0.45;
+        const vergeOffset = Math.random() * 18; // random depth within the 22px strip
         if (isAnimal) {
           elements.push({
             type: "deer",
             x: x - gap * 0.6,
-            y: groundY - 32 - Math.random() * 5,
+            y: groundY - 28 - vergeOffset,
             width: 30,
             height: 28,
             color: palette.creature,
@@ -148,7 +149,7 @@ function generateSuburbanElements(
           elements.push({
             type: "walking_person",
             x: x - gap * 0.5,
-            y: groundY - 38 - Math.random() * 3,
+            y: groundY - 32 - vergeOffset,
             width: 14,
             height: 32,
             color: palette.person,
@@ -159,16 +160,26 @@ function generateSuburbanElements(
         lastType = "house";
       }
     } else {
-      // Tree (35% chance)
+      // Tree — 3 size tiers: small / medium / large
+      const sizeTier = Math.random();
+      const tw =
+        sizeTier < 0.33 ? 18 + Math.random() * 6   // small:  18-24
+        : sizeTier < 0.66 ? 26 + Math.random() * 8  // medium: 26-34
+        : 34 + Math.random() * 10;                  // large:  34-44
+      const th =
+        sizeTier < 0.33 ? 40 + Math.random() * 14  // small:  40-54
+        : sizeTier < 0.66 ? 56 + Math.random() * 16 // medium: 56-72
+        : 76 + Math.random() * 18;                  // large:  76-94
+      const treeVergeOffset = Math.random() * 18;
       elements.push({
         type: "tree_silhouette",
         x,
-        y: groundY - 65 - Math.random() * 15,
-        width: 22 + Math.random() * 12,
-        height: 55 + Math.random() * 20,
+        y: groundY - th - treeVergeOffset,
+        width: tw,
+        height: th,
         color: palette.treeSilhouette,
       });
-      x += 35 + Math.random() * 25;
+      x += tw + 12 + Math.random() * 20;
       lastType = "tree";
     }
   }

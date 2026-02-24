@@ -45,7 +45,7 @@ export default function GameCanvas() {
   const [speed, setSpeed] = useState(INITIAL_SPEED);
   const [musicMuted, setMusicMuted] = useState(false);
   const [sfxMuted, setSfxMuted] = useState(false);
-  const [trickFeedback, setTrickFeedback] = useState<{ name: string; points: number } | null>(null);
+  const [trickFeedback, setTrickFeedback] = useState<{ name: string; points: number; sketchy?: boolean } | null>(null);
   const trickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newlyUnlockedSkins, setNewlyUnlockedSkins] = useState<string[]>([]);
   const [debugObstacles, setDebugObstacles] = useState(() => {
@@ -91,9 +91,9 @@ export default function GameCanvas() {
           setSpeed(INITIAL_SPEED);
         }
       },
-      onTrickLanded: (trickName, points) => {
+      onTrickLanded: (trickName, points, sketchy) => {
         if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
-        setTrickFeedback({ name: trickName, points });
+        setTrickFeedback({ name: trickName, points, sketchy });
         trickTimeoutRef.current = setTimeout(() => setTrickFeedback(null), 2000);
       },
     });

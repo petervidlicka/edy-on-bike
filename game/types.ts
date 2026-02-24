@@ -1,7 +1,34 @@
 export enum GameState {
   IDLE = "IDLE",
   RUNNING = "RUNNING",
+  CRASHING = "CRASHING",
   GAME_OVER = "GAME_OVER",
+}
+
+export interface CrashState {
+  elapsed: number;
+  duration: number;
+
+  shakeIntensity: number;
+  shakeOffsetX: number;
+  shakeOffsetY: number;
+
+  riderX: number;
+  riderY: number;
+  riderVX: number;
+  riderVY: number;
+  riderAngle: number;
+  riderAngularVel: number;
+  riderBounceCount: number;
+
+  bikeX: number;
+  bikeY: number;
+  bikeVX: number;
+  bikeVY: number;
+  bikeAngle: number;
+  bikeAngularVel: number;
+  bikeBounceCount: number;
+  bikeWheelRotation: number;
 }
 
 export enum ObstacleType {

@@ -1,57 +1,45 @@
-import { GameState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
+import { GameState, CrashState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
   SPEED_INCREASE,
   SPEED_INTERVAL,
   SCORE_PER_PX,
-  BACKFLIP_BONUS,
-  SUPERMAN_BONUS,
-  NO_HANDER_BONUS,
-  DOUBLE_CHAIN_BONUS,
-  TRIPLE_CHAIN_BONUS,
-  JUMP_FORCE,
-  RAMP_HEIGHT_MULTIPLIER,
   MAX_SPEED_MULTIPLIER,
-  COMBO_MULTIPLIER,
+  FLIP_TOLERANCE,
+  SKETCHY_TOLERANCE,
+  CRASH_DURATION,
+  CRASH_GRAVITY,
+  CRASH_BOUNCE_DAMPING,
+  CRASH_SHAKE_INITIAL,
 } from "./constants";
+import {
+  FloatingText,
+  evaluateFlipLanding,
+  evaluatePoseTrickLanding,
+  evaluateComboLanding,
+  resetFlipState,
+  resetPoseState,
+  resetAllTrickState,
+  createTrickFloatingText,
+  updateFloatingTexts,
+} from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
-import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./Renderer";
+import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider } from "./rendering";
 import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
-import { checkCollision, checkRideableCollision, checkRampCollision } from "./Collision";
+import { checkCollision, checkRideableCollision } from "./Collision";
+import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
-
-function computeTrickScore(baseName: string, basePoints: number, count: number): { label: string; totalBonus: number } {
-  if (count === 1) return { label: baseName, totalBonus: basePoints };
-  if (count === 2) return { label: `Double ${baseName}`, totalBonus: 2 * basePoints + DOUBLE_CHAIN_BONUS };
-  const prefix = count === 3 ? "Triple" : `${count}x`;
-  return { label: `${prefix} ${baseName}`, totalBonus: count * basePoints + TRIPLE_CHAIN_BONUS };
-}
-
-function countPrefix(count: number): string {
-  if (count <= 1) return "";
-  if (count === 2) return "Double ";
-  if (count === 3) return "Triple ";
-  return `${count}x `;
-}
-
-interface FloatingText {
-  text: string;
-  x: number;
-  y: number;
-  opacity: number;
-  velocityY: number;
-}
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
   onGameOver: (score: number) => void;
   onStateChange: (state: GameState) => void;
   onSpeedUpdate?: (speed: number) => void;
-  onTrickLanded?: (trickName: string, points: number) => void;
+  onTrickLanded?: (trickName: string, points: number, sketchy?: boolean) => void;
 };
 
 export class Engine {
@@ -82,6 +70,15 @@ export class Engine {
   private debugSequence: ObstacleType[] | null = null;
   private debugIndex: number = 0;
   private debugGap: number = 500;
+  private crashState: CrashState = {
+    elapsed: 0, duration: CRASH_DURATION,
+    shakeIntensity: 0, shakeOffsetX: 0, shakeOffsetY: 0,
+    riderX: 0, riderY: 0, riderVX: 0, riderVY: 0,
+    riderAngle: 0, riderAngularVel: 0, riderBounceCount: 0,
+    bikeX: 0, bikeY: 0, bikeVX: 0, bikeVY: 0,
+    bikeAngle: 0, bikeAngularVel: 0, bikeBounceCount: 0,
+    bikeWheelRotation: 0,
+  };
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -178,6 +175,8 @@ export class Engine {
 
     if (this.state === GameState.RUNNING) {
       this.update(dt, rawDt);
+    } else if (this.state === GameState.CRASHING) {
+      this.updateCrash(dt, rawDt);
     }
 
     this.render();
@@ -221,8 +220,6 @@ export class Engine {
     updatePlayer(this.player, dt, this.groundY, this.speed);
     updateLayers(this.layers, this.speed, dt);
 
-    // Flip landing tolerance: allow landing with up to 30° remaining
-    const FLIP_TOLERANCE = Math.PI / 6; // 30 degrees
     const FULL_FLIP = Math.PI * 2;
 
     // Trick landing checks — unified to support combos (pose + flip simultaneously)
@@ -230,20 +227,16 @@ export class Engine {
       const hadFlip = wasBackflipping;
       const hadPose = this.player.activeTrick !== TrickType.NONE;
       if (hadFlip && hadPose) {
-        if (this.handleComboLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+        if (this.handleComboLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
       } else if (hadFlip) {
-        if (this.handleFlipLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+        if (this.handleFlipLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
       } else if (hadPose) {
         if (this.handlePoseTrickLanding()) return;
       }
     }
 
     // Update floating texts (float up + fade out)
-    for (const ft of this.floatingTexts) {
-      ft.y += ft.velocityY * dt;
-      ft.opacity -= 0.01333 * dt;
-    }
-    this.floatingTexts = this.floatingTexts.filter((ft) => ft.opacity > 0);
+    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
 
     // Move obstacles and cull off-screen ones
     for (const obs of this.obstacles) {
@@ -271,77 +264,8 @@ export class Engine {
     }
 
     // Ramp interaction (before collision checks)
-    let onAnyRamp = false;
-    for (const obs of this.obstacles) {
-      if (!obs.ramp) continue;
-      if (!this.player.isOnGround && !this.player.ridingObstacle) continue;
-      const rampResult = checkRampCollision(this.player, obs);
-      if (rampResult.onRamp) {
-        onAnyRamp = true;
-        this.player.y = rampResult.surfaceY - this.player.height;
-        this.player.rampSurfaceAngle = rampResult.surfaceAngle;
-        this.player.rampBoost = rampResult.rampType;
-      }
-    }
-    if (!onAnyRamp) {
-      // Check if player just left a ramp (was elevated, now past the ramp end)
-      if (this.player.rampBoost && this.player.isOnGround) {
-        const groundPos = this.groundY - this.player.height;
-        if (this.player.y < groundPos - 2) {
-          // Auto-launch: player is above ground after riding off ramp
-          // Gentle boost for passive roll-off; active jump gives full boost
-          this.player.isOnGround = false;
-          this.player.jumpCount = 1; // can still double-jump
-          if (this.player.rampBoost === "curved") {
-            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.2;
-          } else {
-            this.player.velocityY = JUMP_FORCE * 0.2;
-          }
-        }
-      }
-      // Smooth angle decay
-      this.player.rampSurfaceAngle *= 0.85;
-      if (Math.abs(this.player.rampSurfaceAngle) < 0.01) {
-        this.player.rampSurfaceAngle = 0;
-      }
-    }
-
-    // Riding state: check if obstacle scrolled past player
-    if (this.player.ridingObstacle) {
-      const obs = this.player.ridingObstacle;
-      if (obs.x + obs.width < this.player.x + 8) {
-        // Apply gentle boost for passive roll-off from container ramp
-        if (this.player.rampBoost) {
-          this.player.jumpCount = 1;
-          if (this.player.rampBoost === "curved") {
-            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.2;
-          } else {
-            this.player.velocityY = JUMP_FORCE * 0.2;
-          }
-        }
-        this.player.ridingObstacle = null;
-      } else if (obs.type === ObstacleType.CONTAINER_WITH_RAMP) {
-        // Container with ramp: last 75px has a curved ramp on top
-        const rampW = 75;
-        const rampH = 36;
-        const rampX = obs.x + obs.width - rampW;
-        const playerCenterX = this.player.x + this.player.width / 2;
-        if (playerCenterX >= rampX) {
-          // Player is on the ramp section
-          const t = (playerCenterX - rampX) / rampW;
-          const curvedT = t * t;
-          const surfaceY = obs.y - curvedT * rampH;
-          this.player.y = surfaceY - this.player.height;
-          this.player.rampBoost = "curved";
-          this.player.rampSurfaceAngle = Math.atan2((-2 * t * rampH) / rampW, 1);
-          onAnyRamp = true;
-        } else {
-          this.player.y = obs.y - this.player.height;
-        }
-      } else {
-        this.player.y = obs.y - this.player.height;
-      }
-    }
+    processRampInteractions(this.player, this.obstacles, this.groundY);
+    processRidingState(this.player);
 
     // Collision detection
     for (const obs of this.obstacles) {
@@ -351,7 +275,7 @@ export class Engine {
       if (obs.rideable) {
         const result = checkRideableCollision(this.player, obs);
         if (result === "crash") {
-          this.gameOver();
+          this.startCrash();
           return;
         }
         if (result === "land_on_top") {
@@ -359,9 +283,9 @@ export class Engine {
           const landFlip = this.player.isBackflipping;
           const landPose = this.player.activeTrick !== TrickType.NONE;
           if (landFlip && landPose) {
-            if (this.handleComboLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+            if (this.handleComboLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
           } else if (landFlip) {
-            if (this.handleFlipLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
+            if (this.handleFlipLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
           } else if (landPose) {
             if (this.handlePoseTrickLanding()) return;
           }
@@ -373,141 +297,164 @@ export class Engine {
         }
       } else {
         if (checkCollision(this.player, obs)) {
-          this.gameOver();
+          this.startCrash();
           return;
         }
       }
     }
   }
 
-  private gameOver(): void {
-    this.state = GameState.GAME_OVER;
+  private startCrash(): void {
+    this.state = GameState.CRASHING;
     this.sound.stopMusic();
     this.sound.playCrash();
+    this.initCrashState();
+    this.callbacks.onStateChange(this.state);
+  }
+
+  private gameOver(): void {
+    this.state = GameState.GAME_OVER;
     this.callbacks.onStateChange(this.state);
     this.callbacks.onGameOver(this.score);
   }
 
-  /** Handle flip landing. Returns true if game over (crash). */
-  private handleFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number): boolean {
-    const completedFlips = Math.floor(angle / fullFlip);
-    const remainder = angle - completedFlips * fullFlip;
-    const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
+  private initCrashState(): void {
+    const cs = this.crashState;
+    const p = this.player;
+    const speedFactor = this.speed / INITIAL_SPEED;
 
-    if (totalFlips >= 1) {
-      const baseName = direction >= 0 ? "Backflip" : "Frontflip";
-      const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, totalFlips);
-      this.awardTrickBonus(label, totalBonus);
-      this.player.backflipAngle = 0;
-      this.player.isBackflipping = false;
-      this.player.targetFlipCount = 0;
-      return false;
+    cs.elapsed = 0;
+    cs.duration = CRASH_DURATION;
+    cs.shakeIntensity = CRASH_SHAKE_INITIAL;
+    cs.shakeOffsetX = 0;
+    cs.shakeOffsetY = 0;
+
+    // Rider: ejected forward and upward
+    cs.riderX = p.x + 10;
+    cs.riderY = p.y - 5;
+    cs.riderVX = this.speed * 0.6 + 1.5;
+    cs.riderVY = -6 - speedFactor * 2;
+    cs.riderAngle = 0;
+    cs.riderAngularVel = 0.15 + speedFactor * 0.08;
+    cs.riderBounceCount = 0;
+
+    // Carry upward momentum if player was still rising
+    if (p.velocityY < 0) {
+      cs.riderVY += p.velocityY * 0.5;
     }
-    // Too incomplete — crash
-    this.gameOver();
-    return true;
+
+    // Bike: slides forward, slight upward kick
+    cs.bikeX = p.x;
+    cs.bikeY = p.y + p.height * 0.3;
+    cs.bikeVX = this.speed * 0.3;
+    cs.bikeVY = -2;
+    cs.bikeAngle = 0;
+    cs.bikeAngularVel = -0.08;
+    cs.bikeBounceCount = 0;
+    cs.bikeWheelRotation = p.wheelRotation;
+  }
+
+  private updateCrash(dt: number, rawDt: number): void {
+    const cs = this.crashState;
+    cs.elapsed += rawDt / 1000;
+
+    if (cs.elapsed >= cs.duration) {
+      this.gameOver();
+      return;
+    }
+
+    const groundY = this.groundY;
+    const friction = 0.95;
+    const angularDamping = 0.7;
+
+    // Screen shake — exponential decay
+    cs.shakeIntensity *= 1 - 0.06 * dt;
+    if (cs.shakeIntensity < 0.3) cs.shakeIntensity = 0;
+    cs.shakeOffsetX = (Math.random() - 0.5) * 2 * cs.shakeIntensity;
+    cs.shakeOffsetY = (Math.random() - 0.5) * 2 * cs.shakeIntensity;
+
+    // Rider physics
+    const riderGroundY = groundY - 15;
+    const riderSettled = cs.riderBounceCount >= 2;
+    if (!riderSettled) cs.riderVY += CRASH_GRAVITY * dt;
+    cs.riderX += cs.riderVX * dt;
+    if (!riderSettled) cs.riderY += cs.riderVY * dt;
+    cs.riderAngle += cs.riderAngularVel * dt;
+    cs.riderVX *= Math.pow(friction, dt);
+
+    if (cs.riderY >= riderGroundY && cs.riderVY > 0 && !riderSettled) {
+      cs.riderY = riderGroundY;
+      cs.riderBounceCount++;
+      if (cs.riderBounceCount >= 2) {
+        cs.riderVY = 0;
+        cs.riderAngularVel = 0;
+      } else {
+        cs.riderVY = -cs.riderVY * CRASH_BOUNCE_DAMPING;
+        cs.riderAngularVel *= angularDamping;
+      }
+      cs.riderVX *= 0.7;
+    }
+
+    // Bike physics
+    const bikeGroundY = groundY - 12;
+    const bikeSettled = cs.bikeBounceCount >= 2;
+    if (!bikeSettled) cs.bikeVY += CRASH_GRAVITY * dt;
+    cs.bikeX += cs.bikeVX * dt;
+    if (!bikeSettled) cs.bikeY += cs.bikeVY * dt;
+    cs.bikeAngle += cs.bikeAngularVel * dt;
+    cs.bikeVX *= Math.pow(friction, dt);
+
+    if (cs.bikeY >= bikeGroundY && cs.bikeVY > 0 && !bikeSettled) {
+      cs.bikeY = bikeGroundY;
+      cs.bikeBounceCount++;
+      if (cs.bikeBounceCount >= 2) {
+        cs.bikeVY = 0;
+        cs.bikeAngularVel = 0;
+      } else {
+        cs.bikeVY = -cs.bikeVY * CRASH_BOUNCE_DAMPING;
+        cs.bikeAngularVel *= angularDamping;
+      }
+      cs.bikeVX *= 0.6;
+    }
+
+    // Decelerating wheel spin
+    cs.bikeWheelRotation += cs.bikeVX * dt * 0.08;
+  }
+
+  /** Handle flip landing. Returns true if game over (crash). */
+  private handleFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): boolean {
+    const result = evaluateFlipLanding(angle, direction, fullFlip, tolerance, sketchyTolerance);
+    resetFlipState(this.player);
+    if (result.crashed) { this.startCrash(); return true; }
+    this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
+    return false;
   }
 
   /** Handle pose trick landing. Returns true if game over (crash). */
   private handlePoseTrickLanding(): boolean {
-    const completions = this.player.trickCompletions;
-
-    // Award if at least one full cycle completed — the player already demonstrated
-    // the trick regardless of where in a subsequent cycle they happen to land.
-    const safeToLand = completions >= 1;
-
-    if (safeToLand) {
-      const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
-      const baseName = isSuperman ? "Superman" : "No Hander";
-      const basePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
-      const { label, totalBonus } = computeTrickScore(baseName, basePoints, completions);
-      this.awardTrickBonus(label, totalBonus);
-    } else if (completions === 0) {
-      // Trick started but never completed — crash
-      this.player.activeTrick = TrickType.NONE;
-      this.player.trickProgress = 0;
-      this.player.trickCompletions = 0;
-      this.player.targetTrickCount = 0;
-      this.gameOver();
-      return true;
-    }
-
-    this.player.activeTrick = TrickType.NONE;
-    this.player.trickProgress = 0;
-    this.player.trickCompletions = 0;
-    this.player.targetTrickCount = 0;
+    const result = evaluatePoseTrickLanding(this.player);
+    resetPoseState(this.player);
+    if (result.crashed) { this.startCrash(); return true; }
+    this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
     return false;
   }
 
   /** Handle combo landing (pose trick + flip simultaneously). Returns true if crash. */
-  private handleComboLanding(angle: number, direction: number, fullFlip: number, tolerance: number): boolean {
-    // Validate flip
-    const completedFlips = Math.floor(angle / fullFlip);
-    const remainder = angle - completedFlips * fullFlip;
-    const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
-
-    // Validate pose trick — relaxed for combos:
-    // Accept if at least one full cycle completed, OR if the trick reached peak extension
-    const poseCompletions = this.player.trickCompletions;
-    const posePhase = this.player.trickPhase;
-    const poseSafe = poseCompletions >= 1 || posePhase === "return";
-
-    if (totalFlips >= 1 && poseSafe) {
-      const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
-      const poseName = isSuperman ? "Superman" : "No-Hander";
-      const flipName = direction >= 0 ? "Backflip" : "Frontflip";
-      const posePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
-      const effectivePoseCount = Math.max(poseCompletions, 1);
-
-      // Build combo label with count prefixes
-      const comboLabel = `${countPrefix(effectivePoseCount)}${poseName} ${countPrefix(totalFlips)}${flipName}`;
-
-      // Scoring: base points + chain bonus based on total trick count
-      const baseScore = posePoints * effectivePoseCount + BACKFLIP_BONUS * totalFlips;
-      const totalTrickCount = effectivePoseCount + totalFlips;
-      let chainBonus = 0;
-      if (totalTrickCount === 2) chainBonus = DOUBLE_CHAIN_BONUS;
-      else if (totalTrickCount >= 3) chainBonus = TRIPLE_CHAIN_BONUS;
-      const comboScore = (baseScore + chainBonus) * COMBO_MULTIPLIER;
-
-      this.awardTrickBonus(comboLabel, comboScore);
-
-      // Reset all trick state
-      this.player.backflipAngle = 0;
-      this.player.isBackflipping = false;
-      this.player.targetFlipCount = 0;
-      this.player.activeTrick = TrickType.NONE;
-      this.player.trickProgress = 0;
-      this.player.trickCompletions = 0;
-      this.player.targetTrickCount = 0;
-      return false;
-    }
-
-    // Either component failed — crash
-    this.player.backflipAngle = 0;
-    this.player.isBackflipping = false;
-    this.player.targetFlipCount = 0;
-    this.player.activeTrick = TrickType.NONE;
-    this.player.trickProgress = 0;
-    this.player.trickCompletions = 0;
-    this.player.targetTrickCount = 0;
-    this.gameOver();
-    return true;
+  private handleComboLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): boolean {
+    const result = evaluateComboLanding(this.player, angle, direction, fullFlip, tolerance, sketchyTolerance);
+    resetAllTrickState(this.player);
+    if (result.crashed) { this.startCrash(); return true; }
+    this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
+    return false;
   }
 
-  private awardTrickBonus(label: string, bonus: number): void {
+  private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): void {
     this.score += bonus;
     this.distance = this.score * SCORE_PER_PX;
     this.callbacks.onScoreUpdate(this.score);
     this.sound.playBackflipSuccess();
-    this.floatingTexts.push({
-      text: `${label}! +${bonus}`,
-      x: this.player.x + this.player.width / 2,
-      y: this.player.y - 10,
-      opacity: 1,
-      velocityY: -1.5,
-    });
-    this.callbacks.onTrickLanded?.(label, bonus);
+    this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width, sketchy ?? false));
+    this.callbacks.onTrickLanded?.(label, bonus, sketchy);
   }
 
   private render(): void {
@@ -515,13 +462,31 @@ export class Engine {
     const palette = this.envManager.getCurrentPalette();
     const drawers = this.envManager.getBackgroundDrawers();
     ctx.clearRect(0, 0, canvasW, canvasH);
+
+    const crashing = this.state === GameState.CRASHING;
+    if (crashing) {
+      ctx.save();
+      ctx.translate(this.crashState.shakeOffsetX, this.crashState.shakeOffsetY);
+    }
+
     drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs, palette);
     }
-    drawPlayer(ctx, this.player, this.skin);
+
+    if (crashing) {
+      drawCrashBike(ctx, this.crashState, this.skin);
+      drawCrashRider(ctx, this.crashState, this.skin);
+    } else {
+      drawPlayer(ctx, this.player, this.skin);
+    }
+
     for (const ft of this.floatingTexts) {
-      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity);
+      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color);
+    }
+
+    if (crashing) {
+      ctx.restore();
     }
   }
 

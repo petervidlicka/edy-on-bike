@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Nunito, Space_Mono } from "next/font/google";
+import { Nunito, Space_Mono, Fredoka } from "next/font/google";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -12,6 +12,12 @@ const spaceMono = Space_Mono({
   variable: "--font-space-mono",
   subsets: ["latin"],
   weight: ["400", "700"],
+});
+
+const fredoka = Fredoka({
+  variable: "--font-fredoka",
+  subsets: ["latin"],
+  weight: "600",
 });
 
 export const viewport: Viewport = {
@@ -39,7 +45,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${nunito.variable} ${spaceMono.variable} antialiased bg-zinc-900 text-zinc-100`}>
+      <body className={`${nunito.variable} ${spaceMono.variable} ${fredoka.variable} antialiased bg-zinc-900 text-zinc-100`}>
         {children}
       </body>
     </html>

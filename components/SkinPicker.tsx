@@ -3,7 +3,7 @@
 import { useRef, useEffect, useCallback } from "react";
 import { SkinId, SkinDefinition } from "@/game/types";
 import { SKINS, isSkinUnlocked } from "@/game/skins";
-import { drawSkinPreview } from "@/game/Renderer";
+import { drawSkinPreview } from "@/game/rendering";
 
 interface SkinPickerProps {
   selectedSkinId: SkinId;

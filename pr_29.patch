@@ -1,0 +1,636 @@
+diff --git a/components/GameCanvas.tsx b/components/GameCanvas.tsx
+index bd808d2..a2d0d4d 100644
+--- a/components/GameCanvas.tsx
++++ b/components/GameCanvas.tsx
+@@ -190,13 +190,19 @@ export default function GameCanvas() {
+     engineRef.current?.setSfxMuted(sfxMuted);
+   }, [sfxMuted]);
+ 
+-  // IDKFA cheat code
++  // IDKFA cheat code — unlock all skins
+   const handleCheat = useCallback(() => {
+     const updated = activateCheat();
+     setSkinState(updated);
+   }, []);
+   useCheatCode("IDKFA", handleCheat);
+ 
++  // IDDQD cheat code — guaranteed ambulance resurrection
++  const handleIddqd = useCallback(() => {
++    engineRef.current?.activateIddqd();
++  }, []);
++  useCheatCode("IDDQD", handleIddqd);
++
+   const toggleDebugObstacles = useCallback(() => {
+     setDebugObstacles((prev) => {
+       const next = !prev;
+diff --git a/game/Engine.ts b/game/Engine.ts
+index a91764d..aeb4684 100644
+--- a/game/Engine.ts
++++ b/game/Engine.ts
+@@ -1,4 +1,4 @@
+-import { GameState, CrashState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
++import { GameState, AmbulancePhase, AmbulanceState, CrashState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
+ import {
+   GROUND_RATIO,
+   INITIAL_SPEED,
+@@ -12,6 +12,13 @@ import {
+   CRASH_GRAVITY,
+   CRASH_BOUNCE_DAMPING,
+   CRASH_SHAKE_INITIAL,
++  AMBULANCE_CHANCE,
++  AMBULANCE_WIDTH,
++  AMBULANCE_HEIGHT,
++  AMBULANCE_DRIVE_SPEED,
++  AMBULANCE_DRIVE_OUT_SPEED,
++  AMBULANCE_STOP_MS,
++  AMBULANCE_REVIVE_MS,
+ } from "./constants";
+ import {
+   FloatingText,
+@@ -26,7 +33,7 @@ import {
+ } from "./TrickSystem";
+ import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
+ import { createBackgroundLayers, updateLayers } from "./Background";
+-import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider } from "./rendering";
++import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider, drawAmbulance, drawReviveFlash } from "./rendering";
+ import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
+ import { checkCollision, checkRideableCollision } from "./Collision";
+ import { processRampInteractions, processRidingState } from "./RampPhysics";
+@@ -66,6 +73,9 @@ export class Engine {
+   private groundY: number = 0;
+   private callbacks: EngineCallbacks;
+   private sound = new SoundManager();
++  private ambulance: AmbulanceState | null = null;
++  private hasBeenResurrected = false;
++  private iddqdActive = false;
+   private skin: SkinDefinition = getSkinById("default");
+   private debugSequence: ObstacleType[] | null = null;
+   private debugIndex: number = 0;
+@@ -96,7 +106,7 @@ export class Engine {
+     this.canvas.width = w;
+     this.canvas.height = h;
+     this.layers = createBackgroundLayers(w, this.groundY, this.envManager.getCurrentEnvironment());
+-    if (this.state !== GameState.RUNNING) {
++    if (this.state !== GameState.RUNNING && this.state !== GameState.AMBULANCE) {
+       this.player = createPlayer(this.groundY, w);
+     } else {
+       this.player.y = Math.min(this.player.y, this.groundY - this.player.height);
+@@ -112,7 +122,11 @@ export class Engine {
+   }
+ 
+   restart(): void {
++    this.sound.stopSiren();
+     this.sound.stopMusic();
++    this.ambulance = null;
++    this.hasBeenResurrected = false;
++    this.iddqdActive = false;
+     this.state = GameState.IDLE;
+     this.speed = INITIAL_SPEED;
+     this.score = 0;
+@@ -177,6 +191,13 @@ export class Engine {
+       this.update(dt, rawDt);
+     } else if (this.state === GameState.CRASHING) {
+       this.updateCrash(dt, rawDt);
++    } else if (this.state === GameState.AMBULANCE) {
++      this.updateAmbulance(dt, rawDt);
++    }
++
++    // Continue driving out ambulance after game resumes
++    if (this.state === GameState.RUNNING && this.ambulance) {
++      this.updateAmbulance(dt, rawDt);
+     }
+ 
+     this.render();
+@@ -313,11 +334,129 @@ export class Engine {
+   }
+ 
+   private gameOver(): void {
++    if (!this.hasBeenResurrected && (this.iddqdActive || Math.random() < AMBULANCE_CHANCE)) {
++      this.hasBeenResurrected = true;
++      this.iddqdActive = false;
++      this.startAmbulanceSequence();
++    } else {
++      this.finalGameOver();
++    }
++  }
++
++  private finalGameOver(): void {
+     this.state = GameState.GAME_OVER;
+     this.callbacks.onStateChange(this.state);
+     this.callbacks.onGameOver(this.score);
+   }
+ 
++  private startAmbulanceSequence(): void {
++    this.state = GameState.AMBULANCE;
++
++    this.ambulance = {
++      x: this.canvasW + 140,
++      y: this.groundY - AMBULANCE_HEIGHT,
++      width: AMBULANCE_WIDTH,
++      height: AMBULANCE_HEIGHT,
++      phase: AmbulancePhase.DRIVING_IN,
++      phaseTimer: 0,
++      targetX: this.player.x + this.player.width + 10,
++      sirenFlash: 0,
++      reviveFlashOpacity: 0,
++    };
++
++    this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
++
++    this.sound.playSiren();
++    this.callbacks.onStateChange(this.state);
++  }
++
++  private updateAmbulance(dt: number, rawDt: number): void {
++    const amb = this.ambulance;
++    if (!amb) return;
++
++    amb.phaseTimer += rawDt;
++    amb.sirenFlash += rawDt;
++
++    // Update floating texts
++    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
++
++    switch (amb.phase) {
++      case AmbulancePhase.DRIVING_IN:
++        amb.x -= AMBULANCE_DRIVE_SPEED * dt;
++        if (amb.x <= amb.targetX) {
++          amb.x = amb.targetX;
++          amb.phase = AmbulancePhase.STOPPED;
++          amb.phaseTimer = 0;
++          this.sound.stopSiren();
++        }
++        break;
++
++      case AmbulancePhase.STOPPED:
++        if (amb.phaseTimer >= AMBULANCE_STOP_MS) {
++          amb.phase = AmbulancePhase.REVIVING;
++          amb.phaseTimer = 0;
++          amb.reviveFlashOpacity = 1;
++          this.revivePlayer();
++          this.sound.playRevive();
++        }
++        break;
++
++      case AmbulancePhase.REVIVING:
++        amb.reviveFlashOpacity = Math.max(0, 1 - amb.phaseTimer / AMBULANCE_REVIVE_MS);
++        if (amb.phaseTimer >= AMBULANCE_REVIVE_MS) {
++          amb.phase = AmbulancePhase.DRIVING_OUT;
++          amb.phaseTimer = 0;
++          this.state = GameState.RUNNING;
++          this.sound.startMusic();
++          this.callbacks.onStateChange(this.state);
++        }
++        break;
++
++      case AmbulancePhase.DRIVING_OUT:
++        amb.x += AMBULANCE_DRIVE_OUT_SPEED * dt;
++        if (amb.x > this.canvasW + 20) {
++          this.ambulance = null;
++        }
++        break;
++    }
++  }
++
++  private revivePlayer(): void {
++    // Clear obstacles near the player
++    const clearZone = this.player.x + this.player.width + 200;
++    this.obstacles = this.obstacles.filter((obs) => obs.x > clearZone);
++
++    // Reset player state to ground
++    this.player.y = this.groundY - this.player.height;
++    this.player.velocityY = 0;
++    this.player.isOnGround = true;
++    this.player.jumpCount = 0;
++    this.player.bikeTilt = 0;
++    this.player.riderLean = 0;
++    this.player.riderCrouch = 0;
++    this.player.legTuck = 0;
++    this.player.ridingObstacle = null;
++    this.player.backflipAngle = 0;
++    this.player.isBackflipping = false;
++
++    // Mercy slowdown
++    this.speed *= 0.85;
++    this.callbacks.onSpeedUpdate?.(this.speed);
++
++    // Big gap after revive
++    this.distanceSinceLastObstacle = 0;
++    this.nextObstacleGap = 500;
++
++    this.floatingTexts.push({
++      text: "REVIVED!",
++      x: this.player.x + this.player.width / 2,
++      y: this.player.y - 20,
++      opacity: 1,
++      velocityY: -1.2,
++      color: "#00ff88",
++    });
++  }
++
+   private initCrashState(): void {
+     const cs = this.crashState;
+     const p = this.player;
+@@ -474,13 +613,24 @@ export class Engine {
+       drawObstacle(ctx, obs, palette);
+     }
+ 
+-    if (crashing) {
++    const ambulancePreRevive = this.state === GameState.AMBULANCE
++      && this.ambulance
++      && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
++
++    if (crashing || ambulancePreRevive) {
+       drawCrashBike(ctx, this.crashState, this.skin);
+       drawCrashRider(ctx, this.crashState, this.skin);
+     } else {
+       drawPlayer(ctx, this.player, this.skin);
+     }
+ 
++    if (this.ambulance) {
++      drawAmbulance(ctx, this.ambulance);
++      if (this.ambulance.reviveFlashOpacity > 0) {
++        drawReviveFlash(ctx, this.ambulance.reviveFlashOpacity, canvasW, canvasH);
++      }
++    }
++
+     for (const ft of this.floatingTexts) {
+       drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color);
+     }
+@@ -499,12 +649,26 @@ export class Engine {
+   getState(): GameState {
+     return this.state;
+   }
++  activateIddqd(): void {
++    this.iddqdActive = true;
++    this.floatingTexts.push({
++      text: "GOD MODE",
++      x: this.canvasW / 2,
++      y: this.canvasH * 0.35,
++      opacity: 1,
++      velocityY: -0.8,
++      color: "#ff4444",
++    });
++  }
++
+   pause(): void {
+     if (this.isPaused) return;
+     this.isPaused = true;
+     cancelAnimationFrame(this.rafId);
+     if (this.state === GameState.RUNNING) {
+       this.sound.pauseMusic();
++    } else if (this.state === GameState.AMBULANCE) {
++      this.sound.stopSiren();
+     }
+   }
+ 
+@@ -515,6 +679,8 @@ export class Engine {
+     this.rafId = requestAnimationFrame(this.loop);
+     if (this.state === GameState.RUNNING) {
+       this.sound.resumeMusic();
++    } else if (this.state === GameState.AMBULANCE && this.ambulance?.phase === AmbulancePhase.DRIVING_IN) {
++      this.sound.playSiren();
+     }
+   }
+ 
+diff --git a/game/SoundManager.ts b/game/SoundManager.ts
+index 7a579e3..111e9f1 100644
+--- a/game/SoundManager.ts
++++ b/game/SoundManager.ts
+@@ -4,6 +4,10 @@ export class SoundManager {
+   private musicMuted = false;
+   private sfxMuted = false;
+   private musicPlaying = false;
++  // Siren oscillators for ambulance
++  private sirenOsc1: OscillatorNode | null = null;
++  private sirenOsc2: OscillatorNode | null = null;
++  private sirenGain: GainNode | null = null;
+ 
+   // Dual-slot music system for crossfading between biome tracks
+   private musicAudioA: HTMLAudioElement | null = null;
+@@ -253,7 +257,100 @@ export class SoundManager {
+     });
+   }
+ 
++  playSiren(): void {
++    if (this.sfxMuted) return;
++    const ctx = this.getCtx();
++    const now = ctx.currentTime;
++
++    const gain = ctx.createGain();
++    gain.gain.setValueAtTime(0.18, now);
++    gain.connect(ctx.destination);
++    this.sirenGain = gain;
++
++    // Two-tone wee-woo siren — alternating 600/800 Hz
++    const osc1 = ctx.createOscillator();
++    osc1.type = "sine";
++    osc1.frequency.setValueAtTime(600, now);
++    for (let i = 0; i < 30; i++) {
++      const t = now + i * 0.3;
++      osc1.frequency.setValueAtTime(i % 2 === 0 ? 600 : 800, t);
++    }
++    osc1.connect(gain);
++    osc1.start(now);
++    this.sirenOsc1 = osc1;
++
++    // Slight detuned second oscillator for richness
++    const osc2 = ctx.createOscillator();
++    osc2.type = "sine";
++    osc2.frequency.setValueAtTime(603, now);
++    for (let i = 0; i < 30; i++) {
++      const t = now + i * 0.3;
++      osc2.frequency.setValueAtTime(i % 2 === 0 ? 603 : 803, t);
++    }
++    const gain2 = ctx.createGain();
++    gain2.gain.setValueAtTime(0.08, now);
++    osc2.connect(gain2);
++    gain2.connect(ctx.destination);
++    osc2.start(now);
++    this.sirenOsc2 = osc2;
++  }
++
++  stopSiren(): void {
++    const ctx = this.ctx;
++    if (!ctx) return;
++    const now = ctx.currentTime;
++
++    if (this.sirenGain) {
++      this.sirenGain.gain.linearRampToValueAtTime(0, now + 0.15);
++    }
++    if (this.sirenOsc1) {
++      this.sirenOsc1.stop(now + 0.2);
++      this.sirenOsc1 = null;
++    }
++    if (this.sirenOsc2) {
++      this.sirenOsc2.stop(now + 0.2);
++      this.sirenOsc2 = null;
++    }
++    this.sirenGain = null;
++  }
++
++  playRevive(): void {
++    if (this.sfxMuted) return;
++    const ctx = this.getCtx();
++    const now = ctx.currentTime;
++
++    // Ascending major chord arpeggio: C5 → E5 → G5 → C6
++    const notes = [523.25, 659.25, 783.99, 1046.50];
++    notes.forEach((freq, i) => {
++      const osc = ctx.createOscillator();
++      const gain = ctx.createGain();
++      osc.connect(gain);
++      gain.connect(ctx.destination);
++      osc.type = "sine";
++      osc.frequency.value = freq;
++      const t = now + i * 0.08;
++      gain.gain.setValueAtTime(0.25, t);
++      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
++      osc.start(t);
++      osc.stop(t + 0.25);
++    });
++
++    // Shimmer — high frequency sparkle
++    const shimmer = ctx.createOscillator();
++    const shimmerGain = ctx.createGain();
++    shimmer.type = "sine";
++    shimmer.frequency.setValueAtTime(2093, now + 0.32);
++    shimmer.frequency.exponentialRampToValueAtTime(3000, now + 0.6);
++    shimmerGain.gain.setValueAtTime(0.1, now + 0.32);
++    shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
++    shimmer.connect(shimmerGain);
++    shimmerGain.connect(ctx.destination);
++    shimmer.start(now + 0.32);
++    shimmer.stop(now + 0.6);
++  }
++
+   destroy(): void {
++    this.stopSiren();
+     this.stopMusic();
+     if (this.musicAudioA) {
+       this.musicAudioA.src = "";
+diff --git a/game/constants.ts b/game/constants.ts
+index e1b4052..f9b4060 100644
+--- a/game/constants.ts
++++ b/game/constants.ts
+@@ -35,6 +35,15 @@ export const CRASH_GRAVITY = 0.45;
+ export const CRASH_BOUNCE_DAMPING = 0.35;
+ export const CRASH_SHAKE_INITIAL = 8; // pixels
+ 
++// Ambulance
++export const AMBULANCE_CHANCE = 0.25;
++export const AMBULANCE_WIDTH = 120;
++export const AMBULANCE_HEIGHT = 55;
++export const AMBULANCE_DRIVE_SPEED = 9;
++export const AMBULANCE_DRIVE_OUT_SPEED = 14;
++export const AMBULANCE_STOP_MS = 800;
++export const AMBULANCE_REVIVE_MS = 600;
++
+ // Player dimensions
+ export const PLAYER_X_RATIO = 0.20; // 20% from the left of the canvas
+ export const PLAYER_WIDTH = 64;
+diff --git a/game/rendering/AmbulanceRenderer.ts b/game/rendering/AmbulanceRenderer.ts
+new file mode 100644
+index 0000000..a9cb0fe
+--- /dev/null
++++ b/game/rendering/AmbulanceRenderer.ts
+@@ -0,0 +1,152 @@
++import { AmbulanceState } from "../types";
++
++export function drawAmbulance(ctx: CanvasRenderingContext2D, amb: AmbulanceState) {
++  const { x, y, width: w, height: h } = amb;
++
++  ctx.save();
++
++  // Shadow under ambulance
++  ctx.fillStyle = "rgba(0,0,0,0.15)";
++  ctx.beginPath();
++  ctx.ellipse(x + w * 0.5, y + h + 2, w * 0.45, 4, 0, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Main body — white van
++  ctx.fillStyle = "#f0f0f0";
++  ctx.beginPath();
++  ctx.moveTo(x + 4, y + 8);
++  ctx.lineTo(x + w - 20, y + 8);
++  ctx.quadraticCurveTo(x + w - 16, y + 8, x + w - 16, y + 12);
++  ctx.lineTo(x + w - 16, y + h - 12);
++  ctx.lineTo(x + 4, y + h - 12);
++  ctx.quadraticCurveTo(x, y + h - 12, x, y + h - 16);
++  ctx.lineTo(x, y + 12);
++  ctx.quadraticCurveTo(x, y + 8, x + 4, y + 8);
++  ctx.fill();
++
++  // Cabin (front section) — slightly darker
++  ctx.fillStyle = "#e4e4e4";
++  ctx.fillRect(x + w - 35, y + 10, 19, h - 22);
++
++  // Windshield
++  ctx.fillStyle = "#8abcd4";
++  ctx.beginPath();
++  ctx.moveTo(x + w - 16, y + 12);
++  ctx.lineTo(x + w - 8, y + 16);
++  ctx.lineTo(x + w - 8, y + h - 22);
++  ctx.lineTo(x + w - 16, y + h - 18);
++  ctx.closePath();
++  ctx.fill();
++  // Windshield reflection
++  ctx.fillStyle = "rgba(255,255,255,0.3)";
++  ctx.fillRect(x + w - 15, y + 14, 4, 8);
++
++  // Red stripe along the side
++  ctx.fillStyle = "#c44040";
++  ctx.fillRect(x + 6, y + h * 0.45, w - 42, 6);
++
++  // Red cross
++  const crossX = x + w * 0.3;
++  const crossY = y + h * 0.28;
++  ctx.fillStyle = "#c44040";
++  ctx.fillRect(crossX - 6, crossY - 2, 12, 4);
++  ctx.fillRect(crossX - 2, crossY - 6, 4, 12);
++
++  // "AMBULANCE" text
++  ctx.fillStyle = "#c44040";
++  ctx.font = "bold 7px sans-serif";
++  ctx.textAlign = "center";
++  ctx.textBaseline = "middle";
++  ctx.fillText("AMBULANCE", x + w * 0.35, y + h * 0.65);
++
++  // Roof light bar
++  ctx.fillStyle = "#d0d0d0";
++  ctx.fillRect(x + w * 0.3, y + 4, 30, 5);
++
++  // Flashing sirens on roof — red/blue alternate
++  const flash = amb.sirenFlash;
++  const isRedPhase = Math.floor(flash / 150) % 2 === 0;
++  // Left siren
++  ctx.fillStyle = isRedPhase ? "#ff2020" : "#2040ff";
++  ctx.beginPath();
++  ctx.arc(x + w * 0.33, y + 6, 4, 0, Math.PI * 2);
++  ctx.fill();
++  // Right siren (opposite color)
++  ctx.fillStyle = isRedPhase ? "#2040ff" : "#ff2020";
++  ctx.beginPath();
++  ctx.arc(x + w * 0.33 + 22, y + 6, 4, 0, Math.PI * 2);
++  ctx.fill();
++  // Siren glow
++  ctx.save();
++  ctx.globalAlpha = 0.25;
++  ctx.fillStyle = isRedPhase ? "#ff2020" : "#2040ff";
++  ctx.beginPath();
++  ctx.arc(x + w * 0.33, y + 6, 8, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.fillStyle = isRedPhase ? "#2040ff" : "#ff2020";
++  ctx.beginPath();
++  ctx.arc(x + w * 0.33 + 22, y + 6, 8, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.restore();
++
++  // Wheels
++  const wheelR = 7;
++  const wheelY = y + h - 10;
++  ctx.fillStyle = "#2e2e2e";
++  ctx.beginPath();
++  ctx.arc(x + 22, wheelY, wheelR, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.beginPath();
++  ctx.arc(x + w - 28, wheelY, wheelR, 0, Math.PI * 2);
++  ctx.fill();
++  // Hubcaps
++  ctx.fillStyle = "#8a8a8a";
++  ctx.beginPath();
++  ctx.arc(x + 22, wheelY, 3.5, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.beginPath();
++  ctx.arc(x + w - 28, wheelY, 3.5, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Headlights
++  ctx.fillStyle = "#e8d06a";
++  ctx.beginPath();
++  ctx.arc(x + w - 8, y + h - 20, 2.5, 0, Math.PI * 2);
++  ctx.fill();
++  // Taillights
++  ctx.fillStyle = "#c44040";
++  ctx.beginPath();
++  ctx.arc(x + 3, y + h - 20, 2.5, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Front bumper
++  ctx.fillStyle = "#8a8a8a";
++  ctx.fillRect(x + w - 10, y + h - 14, 6, 3);
++  // Rear bumper
++  ctx.fillRect(x - 2, y + h - 14, 6, 3);
++
++  // Body outline
++  ctx.strokeStyle = "#aaa";
++  ctx.lineWidth = 1;
++  ctx.beginPath();
++  ctx.moveTo(x + 4, y + 8);
++  ctx.lineTo(x + w - 20, y + 8);
++  ctx.quadraticCurveTo(x + w - 16, y + 8, x + w - 16, y + 12);
++  ctx.lineTo(x + w - 16, y + h - 12);
++  ctx.lineTo(x + 4, y + h - 12);
++  ctx.quadraticCurveTo(x, y + h - 12, x, y + h - 16);
++  ctx.lineTo(x, y + 12);
++  ctx.quadraticCurveTo(x, y + 8, x + 4, y + 8);
++  ctx.stroke();
++
++  ctx.restore();
++}
++
++export function drawReviveFlash(ctx: CanvasRenderingContext2D, opacity: number, w: number, h: number) {
++  if (opacity <= 0) return;
++  ctx.save();
++  ctx.globalAlpha = opacity;
++  ctx.fillStyle = "#ffffff";
++  ctx.fillRect(0, 0, w, h);
++  ctx.restore();
++}
+diff --git a/game/rendering/index.ts b/game/rendering/index.ts
+index 7d1763e..11dcada 100644
+--- a/game/rendering/index.ts
++++ b/game/rendering/index.ts
+@@ -3,3 +3,4 @@ export { drawPlayer, drawSkinPreview } from "./PlayerRenderer";
+ export { drawObstacle } from "./ObstacleRenderer";
+ export { drawFloatingText } from "./FloatingTextRenderer";
+ export { drawCrashBike, drawCrashRider } from "./CrashRenderer";
++export { drawAmbulance, drawReviveFlash } from "./AmbulanceRenderer";
+diff --git a/game/types.ts b/game/types.ts
+index 22ef1b5..a5f8713 100644
+--- a/game/types.ts
++++ b/game/types.ts
+@@ -2,6 +2,7 @@ export enum GameState {
+   IDLE = "IDLE",
+   RUNNING = "RUNNING",
+   CRASHING = "CRASHING",
++  AMBULANCE = "AMBULANCE",
+   GAME_OVER = "GAME_OVER",
+ }
+ 
+@@ -31,6 +32,25 @@ export interface CrashState {
+   bikeWheelRotation: number;
+ }
+ 
++export enum AmbulancePhase {
++  DRIVING_IN = "DRIVING_IN",
++  STOPPED = "STOPPED",
++  REVIVING = "REVIVING",
++  DRIVING_OUT = "DRIVING_OUT",
++}
++
++export interface AmbulanceState {
++  x: number;
++  y: number;
++  width: number;
++  height: number;
++  phase: AmbulancePhase;
++  phaseTimer: number;
++  targetX: number;
++  sirenFlash: number;
++  reviveFlashOpacity: number;
++}
++
+ export enum ObstacleType {
+   ROCK = "ROCK",
+   SMALL_TREE = "SMALL_TREE",

@@ -170,3 +170,76 @@ export function updateFloatingTexts(texts: FloatingText[], dt: number): Floating
   }
   return texts.filter((ft) => ft.opacity > 0);
 }
+
+export interface TrickContext {
+  player: PlayerState;
+  onCrash: () => void;
+  onAwardBonus: (label: string, bonus: number, sketchy: boolean) => void;
+}
+
+export function handleFlipLanding(
+  ctx: TrickContext,
+  angle: number,
+  direction: number,
+  fullFlip: number,
+  tolerance: number,
+  sketchyTolerance: number
+): boolean {
+  const result = evaluateFlipLanding(angle, direction, fullFlip, tolerance, sketchyTolerance);
+  resetFlipState(ctx.player);
+  if (result.crashed) {
+    ctx.onCrash();
+    return true;
+  }
+  ctx.onAwardBonus(result.label!, result.bonus!, result.sketchy ?? false);
+  return false;
+}
+
+export function handlePoseTrickLanding(ctx: TrickContext): boolean {
+  const result = evaluatePoseTrickLanding(ctx.player);
+  resetPoseState(ctx.player);
+  if (result.crashed) {
+    ctx.onCrash();
+    return true;
+  }
+  ctx.onAwardBonus(result.label!, result.bonus!, result.sketchy ?? false);
+  return false;
+}
+
+export function handleComboLanding(
+  ctx: TrickContext,
+  angle: number,
+  direction: number,
+  fullFlip: number,
+  tolerance: number,
+  sketchyTolerance: number
+): boolean {
+  const result = evaluateComboLanding(ctx.player, angle, direction, fullFlip, tolerance, sketchyTolerance);
+  resetAllTrickState(ctx.player);
+  if (result.crashed) {
+    ctx.onCrash();
+    return true;
+  }
+  ctx.onAwardBonus(result.label!, result.bonus!, result.sketchy ?? false);
+  return false;
+}
+
+export function processTrickLanding(
+  ctx: TrickContext,
+  hadFlip: boolean,
+  hadPose: boolean,
+  prevBackflipAngle: number,
+  prevFlipDirection: number,
+  fullFlip: number,
+  tolerance: number,
+  sketchyTolerance: number
+): boolean {
+  if (hadFlip && hadPose) {
+    return handleComboLanding(ctx, prevBackflipAngle, prevFlipDirection, fullFlip, tolerance, sketchyTolerance);
+  } else if (hadFlip) {
+    return handleFlipLanding(ctx, prevBackflipAngle, prevFlipDirection, fullFlip, tolerance, sketchyTolerance);
+  } else if (hadPose) {
+    return handlePoseTrickLanding(ctx);
+  }
+  return false;
+}

@@ -1,0 +1,2661 @@
+diff --git a/app/api/leaderboard/route.ts b/app/api/leaderboard/route.ts
+index 7a3cda6..8a3f308 100644
+--- a/app/api/leaderboard/route.ts
++++ b/app/api/leaderboard/route.ts
+@@ -1,7 +1,7 @@
+ import { NextRequest, NextResponse } from "next/server";
+ import { Ratelimit } from "@upstash/ratelimit";
+ import { Redis } from "@upstash/redis";
+-import { getTopScores, addScore } from "@/lib/leaderboard";
++import { getTopScores, getTotalPlayers, addScore } from "@/lib/leaderboard";
+ 
+ // --- Rate limiting ---
+ // Production: Redis-backed sliding window (survives serverless cold starts)
+@@ -43,8 +43,11 @@ async function isRateLimited(ip: string): Promise<boolean> {
+ const MAX_SCORE = 99999;
+ 
+ export async function GET() {
+-  const scores = await getTopScores(20);
+-  return NextResponse.json(scores);
++  const [scores, totalPlayers] = await Promise.all([
++    getTopScores(20),
++    getTotalPlayers(),
++  ]);
++  return NextResponse.json({ scores, totalPlayers });
+ }
+ 
+ export async function POST(request: NextRequest) {
+diff --git a/components/GameCanvas.tsx b/components/GameCanvas.tsx
+index bd808d2..acd89ff 100644
+--- a/components/GameCanvas.tsx
++++ b/components/GameCanvas.tsx
+@@ -288,26 +288,48 @@ export default function GameCanvas() {
+       )}
+ 
+       {process.env.NODE_ENV !== "production" && (
+-        <button
+-          onClick={toggleDebugObstacles}
+-          style={{
+-            position: "fixed",
+-            top: 8,
+-            right: 8,
+-            padding: "4px 10px",
+-            fontSize: "0.7rem",
+-            fontFamily: "monospace",
+-            background: debugObstacles ? "#d44" : "#555",
+-            color: "#fff",
+-            border: "none",
+-            borderRadius: 4,
+-            cursor: "pointer",
+-            opacity: 0.85,
+-            zIndex: 9999,
+-          }}
+-        >
+-          Debug: {debugObstacles ? "ON" : "OFF"}
+-        </button>
++        <>
++          <button
++            onClick={toggleDebugObstacles}
++            style={{
++              position: "fixed",
++              top: 8,
++              right: 8,
++              padding: "4px 10px",
++              fontSize: "0.7rem",
++              fontFamily: "monospace",
++              background: debugObstacles ? "#d44" : "#555",
++              color: "#fff",
++              border: "none",
++              borderRadius: 4,
++              cursor: "pointer",
++              opacity: 0.85,
++              zIndex: 9999,
++            }}
++          >
++            Debug: {debugObstacles ? "ON" : "OFF"}
++          </button>
++          <button
++            onClick={() => engineRef.current?.forceNextBiome()}
++            style={{
++              position: "fixed",
++              top: 8,
++              right: 110,
++              padding: "4px 10px",
++              fontSize: "0.7rem",
++              fontFamily: "monospace",
++              background: "#c87020",
++              color: "#fff",
++              border: "none",
++              borderRadius: 4,
++              cursor: "pointer",
++              opacity: 0.85,
++              zIndex: 9999,
++            }}
++          >
++            Next Biome
++          </button>
++        </>
+       )}
+     </>
+   );
+diff --git a/components/GameOverScreen.tsx b/components/GameOverScreen.tsx
+index bfe9bc0..ae4233b 100644
+--- a/components/GameOverScreen.tsx
++++ b/components/GameOverScreen.tsx
+@@ -24,6 +24,7 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
+   const [submitting, setSubmitting] = useState(false);
+   const [error, setError] = useState("");
+   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
++  const [totalPlayers, setTotalPlayers] = useState(0);
+ 
+   // Pre-fill name from localStorage — no auto-focus so Space works freely
+   useEffect(() => {
+@@ -34,7 +35,8 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
+   const fetchLeaderboard = useCallback(async () => {
+     try {
+       const data = await fetch("/api/leaderboard").then((r) => r.json());
+-      setLeaderboard(data);
++      setLeaderboard(data.scores ?? []);
++      setTotalPlayers(data.totalPlayers ?? 0);
+     } catch {}
+   }, []);
+ 
+@@ -122,6 +124,7 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
+ 
+   return (
+     <div
++      onClick={step === 2 ? onRestart : undefined}
+       style={{
+         position: "fixed",
+         inset: 0,
+@@ -129,7 +132,8 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
+         flexDirection: "column",
+         alignItems: "center",
+         justifyContent: "center",
+-        pointerEvents: "none",
++        pointerEvents: step === 2 ? "auto" : "none",
++        cursor: step === 2 ? "pointer" : undefined,
+         gap: "0.4rem",
+         fontFamily: "var(--font-nunito), Arial, sans-serif",
+       }}
+@@ -295,7 +299,7 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
+                   fontFamily: "var(--font-space-mono), monospace",
+                 }}
+               >
+-                {leaderboard.slice(0, 10).map((entry, i) => (
++                {leaderboard.slice(0, 7).map((entry, i) => (
+                   <li key={i} style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
+                     <span style={{ fontWeight: 600, flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
+                     {entry.skin && (
+@@ -307,6 +311,18 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
+                   </li>
+                 ))}
+               </ol>
++              {totalPlayers > 0 && (
++                <p style={{
++                  margin: "0.45rem 0 0",
++                  fontSize: "0.72rem",
++                  color: "#64748b",
++                  textAlign: "center",
++                  fontWeight: 600,
++                  fontFamily: "var(--font-nunito), Arial, sans-serif",
++                }}>
++                  {totalPlayers} total player{totalPlayers !== 1 ? "s" : ""}
++                </p>
++              )}
+             </div>
+           ) : (
+             <p style={{ color: "#475569", fontSize: "0.85rem", margin: "0.5rem 0" }}>
+@@ -314,21 +330,15 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
+             </p>
+           )}
+ 
+-          <button
+-            onClick={onRestart}
+-            style={{
+-              ...glassBtn,
+-              marginTop: "0.75rem",
+-              fontSize: "1rem",
+-              padding: "0.6rem 2rem",
+-              letterSpacing: "0.06em",
+-            }}
+-          >
+-            PLAY AGAIN
+-            <span style={{ display: "block", fontSize: "0.7rem", fontWeight: 600, color: "#64748b", letterSpacing: "0.04em", marginTop: "0.15rem" }}>
+-              or press Space
+-            </span>
+-          </button>
++          <p style={{
++            marginTop: "1rem",
++            fontSize: "0.8rem",
++            fontWeight: 600,
++            color: "#64748b",
++            letterSpacing: "0.04em",
++          }}>
++            click anywhere to continue
++          </p>
+         </>
+       )}
+     </div>
+diff --git a/game/Engine.ts b/game/Engine.ts
+index a91764d..967018c 100644
+--- a/game/Engine.ts
++++ b/game/Engine.ts
+@@ -26,7 +26,9 @@ import {
+ } from "./TrickSystem";
+ import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
+ import { createBackgroundLayers, updateLayers } from "./Background";
+-import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider } from "./rendering";
++import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider, createParticles, updateParticles, drawParticles } from "./rendering";
++import type { Particle } from "./rendering";
++import type { ParticleOverlayConfig } from "./environments/types";
+ import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
+ import { checkCollision, checkRideableCollision } from "./Collision";
+ import { processRampInteractions, processRidingState } from "./RampPhysics";
+@@ -79,6 +81,8 @@ export class Engine {
+     bikeAngle: 0, bikeAngularVel: 0, bikeBounceCount: 0,
+     bikeWheelRotation: 0,
+   };
++  private particles: Particle[] = [];
++  private particleConfig: ParticleOverlayConfig | null = null;
+ 
+   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
+     this.canvas = canvas;
+@@ -126,6 +130,8 @@ export class Engine {
+     this.obstacles = [];
+     this.floatingTexts = [];
+     this.envManager.reset();
++    this.particles = [];
++    this.particleConfig = null;
+     this.player = createPlayer(this.groundY, this.canvasW);
+     this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
+     this.callbacks.onScoreUpdate(0);
+@@ -185,12 +191,21 @@ export class Engine {
+ 
+   private update(dt: number, rawDt: number): void {
+     // Environment progression
+-    const envResult = this.envManager.update(dt, this.score);
++    const envResult = this.envManager.update(dt, this.elapsedMs);
+     if (envResult.musicCrossfade) {
+       this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
+     }
+     if (envResult.regenerateBackground) {
+       this.layers = createBackgroundLayers(this.canvasW, this.groundY, envResult.regenerateBackground);
++      // Initialize particles if the new biome has a particle overlay
++      const overlay = envResult.regenerateBackground.particleOverlay;
++      if (overlay) {
++        this.particleConfig = overlay;
++        this.particles = createParticles(this.canvasW, this.canvasH, overlay);
++      } else {
++        this.particleConfig = null;
++        this.particles = [];
++      }
+     }
+ 
+     // Speed progression
+@@ -219,6 +234,9 @@ export class Engine {
+     const prevFlipDirection = this.player.flipDirection;
+     updatePlayer(this.player, dt, this.groundY, this.speed);
+     updateLayers(this.layers, this.speed, dt);
++    if (this.particleConfig && this.particles.length > 0) {
++      updateParticles(this.particles, this.particleConfig, dt, this.canvasW, this.canvasH);
++    }
+ 
+     const FULL_FLIP = Math.PI * 2;
+ 
+@@ -254,7 +272,7 @@ export class Engine {
+         this.debugIndex++;
+       } else {
+         this.obstacles.push(
+-          spawnObstacle(this.canvasW, this.groundY, this.elapsedMs, this.envManager.getCurrentEnvironment())
++          spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment())
+         );
+       }
+       this.distanceSinceLastObstacle = 0;
+@@ -470,6 +488,9 @@ export class Engine {
+     }
+ 
+     drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
++    if (this.particleConfig && this.particles.length > 0) {
++      drawParticles(ctx, this.particles, this.particleConfig);
++    }
+     for (const obs of this.obstacles) {
+       drawObstacle(ctx, obs, palette);
+     }
+@@ -536,6 +557,24 @@ export class Engine {
+     if (gap !== undefined) this.debugGap = gap;
+   }
+ 
++  forceNextBiome(): void {
++    const result = this.envManager.forceNextBiome();
++    if (result.musicCrossfade) {
++      this.sound.crossfadeTo(result.musicCrossfade.track, result.musicCrossfade.durationMs);
++    }
++    // Immediately regenerate background with the target environment
++    const env = this.envManager.getCurrentEnvironment();
++    this.layers = createBackgroundLayers(this.canvasW, this.groundY, env);
++    const overlay = env.particleOverlay;
++    if (overlay) {
++      this.particleConfig = overlay;
++      this.particles = createParticles(this.canvasW, this.canvasH, overlay);
++    } else {
++      this.particleConfig = null;
++      this.particles = [];
++    }
++  }
++
+   destroy(): void {
+     cancelAnimationFrame(this.rafId);
+     this.sound.destroy();
+diff --git a/game/Obstacle.ts b/game/Obstacle.ts
+index 34fd31a..f77df94 100644
+--- a/game/Obstacle.ts
++++ b/game/Obstacle.ts
+@@ -16,6 +16,16 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
+   [ObstacleType.STRAIGHT_RAMP]:   { width: 90, height: 30 },
+   [ObstacleType.CURVED_RAMP]:     { width: 75, height: 36 },
+   [ObstacleType.CONTAINER_WITH_RAMP]: { width: 176, height: 75 },
++
++  // Dubai biome obstacles
++  [ObstacleType.CAMEL]:           { width: 50, height: 48 },
++  [ObstacleType.SAND_TRAP]:       { width: 120, height: 28 },
++  [ObstacleType.LAND_CRUISER]:    { width: 80, height: 42 },
++  [ObstacleType.PINK_G_CLASS]:    { width: 76, height: 46 },
++  [ObstacleType.CACTUS]:          { width: 22, height: 60 },
++  [ObstacleType.DUBAI_CHOCOLATE]: { width: 176, height: 75 },
++  [ObstacleType.LAMBORGHINI_HURACAN]: { width: 88, height: 28 },
++  [ObstacleType.DUBAI_BILLBOARD]:    { width: 238, height: 92 },
+ };
+ 
+ function weightedRandom(types: WeightedType[]): ObstacleType {
+@@ -34,13 +44,18 @@ export function createObstacle(
+   groundY: number
+ ): ObstacleInstance {
+   const spec = OBSTACLE_SPECS[type];
++  // Ramps keep exact positioning (physics-dependent), everything else sits
++  // slightly into the road so obstacles look grounded rather than floating.
++  // Offset is capped at (height - 17) to guarantee collision overlap remains.
++  const isRamp = type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP || type === ObstacleType.CONTAINER_WITH_RAMP;
++  const yOffset = isRamp ? 0 : Math.max(0, Math.min(spec.height - 17, 10));
+   return {
+     type,
+     x: canvasWidth + 60,
+-    y: groundY - spec.height,
++    y: groundY - spec.height + yOffset,
+     width: spec.width,
+     height: spec.height,
+-    rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER || type === ObstacleType.CONTAINER_WITH_RAMP,
++    rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER || type === ObstacleType.CONTAINER_WITH_RAMP || type === ObstacleType.DUBAI_CHOCOLATE || type === ObstacleType.DUBAI_BILLBOARD,
+     ramp: type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP,
+   };
+ }
+diff --git a/game/environments/EnvironmentManager.ts b/game/environments/EnvironmentManager.ts
+index 6307ae2..1fb3cdf 100644
+--- a/game/environments/EnvironmentManager.ts
++++ b/game/environments/EnvironmentManager.ts
+@@ -5,28 +5,30 @@ import type {
+   BackgroundDrawFn,
+ } from "./types";
+ import { SUBURBAN_ENVIRONMENT } from "./suburban";
++import { DUBAI_ENVIRONMENT } from "./dubai";
+ import { lerpPalette, easeInOutCubic } from "./colorLerp";
+ 
+-// ── Score thresholds for biome transitions ──
++// ── Time thresholds for biome transitions ──
+ // When new biomes are added, register them in BIOME_REGISTRY and add entries here.
+ 
+ interface BiomeThreshold {
+-  score: number;
++  timeMs: number;
+   biomeId: BiomeId;
+ }
+ 
+ const BIOME_THRESHOLDS: BiomeThreshold[] = [
+-  { score: 0, biomeId: "suburban" },
++  { timeMs: 0, biomeId: "suburban" },
++  { timeMs: 120_000, biomeId: "dubai" },
+   // Future:
+-  // { score: 2000, biomeId: "dubai" },
+-  // { score: 4000, biomeId: "desert" },
+-  // { score: 6000, biomeId: "snow" },
++  // { timeMs: 240_000, biomeId: "desert" },
++  // { timeMs: 360_000, biomeId: "snow" },
+ ];
+ 
+ // Registry of all available environments.
+ // New biomes register themselves here when implemented.
+ const BIOME_REGISTRY: Record<string, EnvironmentDefinition> = {
+   suburban: SUBURBAN_ENVIRONMENT,
++  dubai: DUBAI_ENVIRONMENT,
+ };
+ 
+ /** Duration of a biome transition in 60fps dt units (~4 seconds). */
+@@ -45,7 +47,7 @@ export interface EnvUpdateResult {
+ 
+ /**
+  * Manages the active environment/biome and handles smooth transitions
+- * between biomes based on score thresholds.
++ * between biomes based on elapsed time thresholds.
+  *
+  * During a transition:
+  * - getCurrentPalette() returns an interpolated palette
+@@ -62,24 +64,29 @@ export class EnvironmentManager {
+   private transitionProgress = 0;
+   private transitioning = false;
+ 
++  // Biome-relative timing — tracks when the current biome started
++  private biomeStartMs = 0;
++  private lastElapsedMs = 0;
++
+   constructor() {
+     this.currentEnv = SUBURBAN_ENVIRONMENT;
+   }
+ 
+   /**
+-   * Called every frame with dt (60fps-normalized) and current score.
+-   * Checks score thresholds and advances transition progress.
++   * Called every frame with dt (60fps-normalized) and elapsed game time in ms.
++   * Checks time thresholds and advances transition progress.
+    * Returns events for Engine to act on.
+    */
+-  update(dt: number, score: number): EnvUpdateResult {
++  update(dt: number, elapsedMs: number): EnvUpdateResult {
+     const result: EnvUpdateResult = {};
++    this.lastElapsedMs = elapsedMs;
+ 
+     // Check if we should start a new transition
+     if (!this.transitioning) {
+       const nextIndex = this.currentBiomeIndex + 1;
+       if (nextIndex < BIOME_THRESHOLDS.length) {
+         const threshold = BIOME_THRESHOLDS[nextIndex];
+-        if (score >= threshold.score) {
++        if (elapsedMs >= threshold.timeMs) {
+           const nextEnv = BIOME_REGISTRY[threshold.biomeId];
+           if (nextEnv) {
+             this.startTransition(nextEnv);
+@@ -125,6 +132,13 @@ export class EnvironmentManager {
+     this.toEnv = null;
+     this.transitionProgress = 0;
+     this.transitioning = false;
++    this.biomeStartMs = 0;
++    this.lastElapsedMs = 0;
++  }
++
++  /** Returns elapsed time relative to when the current biome started. */
++  getBiomeElapsedMs(elapsedMs: number): number {
++    return Math.max(0, elapsedMs - this.biomeStartMs);
+   }
+ 
+   /**
+@@ -172,6 +186,25 @@ export class EnvironmentManager {
+     return this.transitioning ? this.transitionProgress : 0;
+   }
+ 
++  /** Force an immediate transition to the next biome (debug only). */
++  forceNextBiome(): EnvUpdateResult {
++    const result: EnvUpdateResult = {};
++    const nextIndex = this.currentBiomeIndex + 1;
++    if (nextIndex >= BIOME_THRESHOLDS.length) return result;
++    const threshold = BIOME_THRESHOLDS[nextIndex];
++    const nextEnv = BIOME_REGISTRY[threshold.biomeId];
++    if (!nextEnv) return result;
++    this.startTransition(nextEnv);
++    this.currentBiomeIndex = nextIndex;
++    if (nextEnv.musicTrack !== this.currentEnv.musicTrack) {
++      result.musicCrossfade = {
++        track: nextEnv.musicTrack,
++        durationMs: MUSIC_CROSSFADE_MS,
++      };
++    }
++    return result;
++  }
++
+   // ── Internal ──
+ 
+   private startTransition(toEnv: EnvironmentDefinition): void {
+@@ -179,6 +212,7 @@ export class EnvironmentManager {
+     this.toEnv = toEnv;
+     this.transitionProgress = 0;
+     this.transitioning = true;
++    this.biomeStartMs = this.lastElapsedMs;
+   }
+ 
+   private completeTransition(): void {
+diff --git a/game/environments/dubai.ts b/game/environments/dubai.ts
+new file mode 100644
+index 0000000..a93efbf
+--- /dev/null
++++ b/game/environments/dubai.ts
+@@ -0,0 +1,336 @@
++import { ObstacleType, type BackgroundElement } from "../types";
++import { DUBAI_BACKGROUND_DRAWERS } from "../rendering";
++import type {
++  EnvironmentDefinition,
++  EnvironmentPalette,
++  WeightedType,
++} from "./types";
++
++// ── Desert City palette — Dubai/Miami inspired ──
++
++export const DUBAI_PALETTE: EnvironmentPalette = {
++  // Sky — hot blue with hazy horizon (suggests intense heat)
++  sky: "#4a90c8",
++  skyBottom: "#c8d8e0",
++  cloud: "#e8e0d8",
++
++  // Ground & road
++  ground: "#d4b87a",
++  road: "#8a8278",
++  roadLine: "#b0a898",
++
++  // Background buildings — glass & steel skyscrapers
++  buildings: [
++    { wall: "#c0d0e0", roof: "#8898a8" },
++    { wall: "#d4c8b8", roof: "#a09080" },
++    { wall: "#b8c8d8", roof: "#7888a0" },
++    { wall: "#e0d8c8", roof: "#9a9080" },
++  ],
++  windowGlass: "#88b8d8",
++  doorKnob: "#c8c0b0",
++
++  // Background nature — palm trees
++  treeSilhouette: "#5a8a48",
++  treeHighlight: "#78aa60",
++  backgroundTreeTrunk: "#8a7460",
++
++  // Background creatures & people
++  creature: "#c8a870",
++  creatureLeg: "#a08858",
++  creatureTail: "#b89868",
++  person: "#e8e0d8",
++
++  // Player
++  player: {
++    wheel: "#2e2e2e",
++    frame: "#8b1a1a",
++    helmet: "#9b3333",
++    skin: "#c8a882",
++    shirt: "#7a8a9a",
++    pants: "#5a5a6a",
++  },
++
++  // Obstacles
++  obstacle: {
++    // Shared obstacle colors (for ramps, etc.)
++    rock: "#c8a060",
++    rockHighlight: "#d8b878",
++    rockShadow: "#8a7040",
++    tree: "#3a8a42",
++    treeHighlight: "#58aa50",
++    treeTrunk: "#6e4e38",
++    treeTrunkShadow: "#523828",
++    trolley: "#5a7a9a",
++    trolleyBasket: "#4a6888",
++    trolleyAccent: "#c47a42",
++    car: "#e0e0e0",
++    carRoof: "#c8c8c8",
++    carWindow: "#70a8c8",
++    carBumper: "#9a9090",
++    carWheel: "#2e2e2c",
++    carHeadlight: "#e8d06a",
++    carTaillight: "#c44040",
++    bikeRider: "#5a4878",
++    bikeFrame: "#7a6898",
++    busStopFrame: "#3a7a6a",
++    busStopRoof: "#2e5e52",
++    busStopGlass: "#a0c8d4",
++    busStopSign: "#d4a444",
++    container: "#c4683a",
++    containerDark: "#8a4828",
++    containerDoor: "#a85830",
++    giantTreeCanopy: "#2e7a36",
++    giantTreeCanopyHighlight: "#48994a",
++    giantTreeTrunk: "#5e4030",
++    giantTreeBark: "#4a3020",
++    giantTreeOutline: "#1e5a24",
++    rampWood: "#b89a6a",
++    rampWoodDark: "#8a6a40",
++    rampWoodHighlight: "#d4b888",
++    rampMetal: "#7a8a9a",
++    rampMetalDark: "#5a6a7a",
++
++    // Dubai-specific obstacle colors
++    camel: "#c8a060",
++    camelLeg: "#a08040",
++    camelSaddle: "#c44040",
++    sand: "#d8c078",
++    sandHighlight: "#e8d498",
++    sandShadow: "#b09858",
++    pinkGClass: "#e87a9f",
++    pinkGClassRoof: "#d06888",
++    cactus: "#3a7a38",
++    cactusHighlight: "#4a9a48",
++    cactusSpine: "#2a5a28",
++    chocolate: "#5a3a20",
++    chocolateDark: "#3a2210",
++    chocolateWrapper: "#d4a844",
++    lamboGreen: "#2d8a35",
++    lamboGreenDark: "#1e6a25",
++    lamboWindow: "#2a3a4a",
++    billboardFrame: "#a0a0a0",
++    billboardPost: "#5a5a5a",
++  },
++};
++
++// ── Background element generation — Desert City skyline ──
++
++function generateDubaiElements(
++  canvasWidth: number,
++  groundY: number,
++  palette: EnvironmentPalette
++): BackgroundElement[] {
++  const elements: BackgroundElement[] = [];
++
++  let x = 0;
++  let lastType = "";
++  let lastLandmarkVariant: number | null = null;
++  let genericsSinceLandmark = 99; // allow landmark on first pick
++
++  while (x < canvasWidth * 2.5) {
++    const roll = Math.random();
++
++    if (roll > 0.30) {
++      // Skyscraper (70% chance)
++      // Variants 0-4 = generic, 5-8 = landmarks
++      let variant: number;
++      let w: number, h: number;
++
++      // Decide generic vs landmark: ~20% landmark chance, but only when
++      // at least 3 generics have appeared since the last landmark
++      const tryLandmark = Math.random() < 0.20 && genericsSinceLandmark >= 3;
++      if (tryLandmark) {
++        // Pick a landmark variant (5-8) that isn't the same as the last one
++        const landmarks = [5, 6, 7, 8].filter(v => v !== lastLandmarkVariant);
++        variant = landmarks[Math.floor(Math.random() * landmarks.length)];
++        // Add 20px breathing room BEFORE the landmark so it stands out
++        x += 20;
++      } else {
++        variant = Math.floor(Math.random() * 5); // generic 0-4
++      }
++
++      switch (variant) {
++        // Generic skyscrapers (0-4) — tall with variety
++        case 0: case 1: case 2: case 3: case 4:
++          w = 35 + Math.random() * 25;
++          h = 150 + Math.random() * 100;
++          break;
++        // Landmarks
++        case 5: // Burj Khalifa — narrow and extremely tall (double tallest generic)
++          w = 30 + Math.random() * 10;
++          h = 300 + Math.random() * 100;
++          break;
++        case 6: // Museum of the Future — wide oval, half the height of generic
++          w = 60 + Math.random() * 20;
++          h = 60 + Math.random() * 20;
++          break;
++        case 7: // Burj Al Arab — sail shape, very tall
++          w = 50 + Math.random() * 15;
++          h = 225 + Math.random() * 50;
++          break;
++        case 8: // Dubai Frame — two pillars with bridge, very tall
++          w = 45 + Math.random() * 10;
++          h = 200 + Math.random() * 50;
++          break;
++        default:
++          w = 35 + Math.random() * 25;
++          h = 150 + Math.random() * 100;
++      }
++
++      // Track landmark vs generic for deduplication
++      if (variant >= 5) {
++        lastLandmarkVariant = variant;
++        genericsSinceLandmark = 0;
++      } else {
++        genericsSinceLandmark++;
++      }
++
++      const scheme =
++        palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
++      elements.push({
++        type: "skyscraper",
++        x,
++        y: groundY - h - 16,
++        width: w,
++        height: h,
++        color: scheme.wall,
++        roofColor: scheme.roof,
++        variant,
++      });
++
++      const isLandmark = variant >= 5;
++      // Generic skyscrapers pack tightly — they can even overlap slightly
++      // to create a dense city-skyline look. Landmarks always get 20px
++      // breathing room on each side so they stand out.
++      let gap: number;
++      if (isLandmark) {
++        gap = 20;                            // 20px after the landmark
++      } else {
++        gap = -8 + Math.random() * 10;       // –8 to +2 px (tight / overlapping)
++      }
++      // If the NEXT element will be a landmark, peek-add 20px before it.
++      // We can't truly peek, so instead ensure the gap after a landmark
++      // covers both sides: add the pre-gap of the next building here.
++      // (Non-landmark gap already tight, so no extra padding needed.)
++
++      x += w + gap;
++
++      // Maybe add a background camel or person — only in landmark gaps
++      // (generics are too tightly packed for figures)
++      if (
++        isLandmark &&
++        Math.random() > 0.5 &&
++        lastType !== "bg_camel" &&
++        lastType !== "walking_person"
++      ) {
++        const isAnimal = Math.random() > 0.4;
++        const vergeOffset = Math.random() * 18;
++        if (isAnimal) {
++          elements.push({
++            type: "bg_camel",
++            x: x - gap * 0.6,
++            y: groundY - 32 - vergeOffset,
++            width: 36,
++            height: 32,
++            color: palette.creature,
++          });
++          lastType = "bg_camel";
++        } else {
++          elements.push({
++            type: "walking_person",
++            x: x - gap * 0.5,
++            y: groundY - 32 - vergeOffset,
++            width: 14,
++            height: 32,
++            color: palette.person,
++          });
++          lastType = "walking_person";
++        }
++      } else {
++        lastType = "skyscraper";
++      }
++    } else {
++      // Palm tree (30% chance) — stays same size
++      const sizeTier = Math.random();
++      const tw = sizeTier < 0.5 ? 16 + Math.random() * 6 : 22 + Math.random() * 8;
++      const th = sizeTier < 0.5 ? 50 + Math.random() * 20 : 70 + Math.random() * 25;
++      const vergeOffset = Math.random() * 18;
++      elements.push({
++        type: "palm_tree",
++        x,
++        y: groundY - th - vergeOffset,
++        width: tw,
++        height: th,
++        color: palette.treeSilhouette,
++      });
++      x += tw + 12 + Math.random() * 20;
++      lastType = "palm_tree";
++    }
++  }
++  return elements;
++}
++
++// ── Obstacle pool — Dubai biome, time-staged ──
++
++// biomeMs = biome-relative elapsed time (0 = when this biome started, not game start)
++function dubaiWeightedTypes(biomeMs: number): WeightedType[] {
++  const earlyWeight = biomeMs >= 30_000 ? 0.4 : biomeMs >= 15_000 ? 0.7 : 1.0;
++
++  const types: WeightedType[] = [
++    // Stage 1: core desert obstacles + vehicle previews
++    { type: ObstacleType.SAND_TRAP, weight: earlyWeight },
++    { type: ObstacleType.CACTUS, weight: earlyWeight },
++    { type: ObstacleType.CAMEL, weight: 0.8 },
++    { type: ObstacleType.LAND_CRUISER, weight: 0.3 },
++    { type: ObstacleType.PINK_G_CLASS, weight: 0.2 },
++  ];
++  // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + lambo + billboard
++  if (biomeMs >= 15_000) {
++    types.push({ type: ObstacleType.STRAIGHT_RAMP, weight: 0.4 });
++    types.push({ type: ObstacleType.CURVED_RAMP, weight: 0.4 });
++    types.push({ type: ObstacleType.DUBAI_CHOCOLATE, weight: 0.7 });
++    types.push({ type: ObstacleType.LAMBORGHINI_HURACAN, weight: 0.5 });
++    types.push({ type: ObstacleType.DUBAI_BILLBOARD, weight: 0.4 });
++    for (const t of types) {
++      if (t.type === ObstacleType.LAND_CRUISER) t.weight = 0.7;
++      if (t.type === ObstacleType.PINK_G_CLASS) t.weight = 0.5;
++    }
++  }
++  // Stage 3 (30s into Dubai): full roster, max weights
++  if (biomeMs >= 30_000) {
++    for (const t of types) {
++      if (t.type === ObstacleType.LAND_CRUISER) t.weight = 1.0;
++      if (t.type === ObstacleType.PINK_G_CLASS) t.weight = 0.7;
++      if (t.type === ObstacleType.LAMBORGHINI_HURACAN) t.weight = 0.8;
++      if (t.type === ObstacleType.DUBAI_CHOCOLATE) t.weight = 1.0;
++    }
++  }
++  return types;
++}
++
++// ── Full environment definition ──
++
++export const DUBAI_ENVIRONMENT: EnvironmentDefinition = {
++  id: "dubai",
++  name: "Desert City",
++  palette: DUBAI_PALETTE,
++  background: {
++    cloudCount: 6,
++    cloudSpeedRatio: 0.08,
++    buildingSpeedRatio: 0.4,
++    generateElements: generateDubaiElements,
++  },
++  backgroundDrawers: DUBAI_BACKGROUND_DRAWERS,
++  obstaclePool: {
++    getWeightedTypes: dubaiWeightedTypes,
++  },
++  musicTrack: "/music-dubai.mp3",
++  particleOverlay: {
++    type: "sand",
++    density: 0.3,
++    speed: { x: 2, y: 0.5 },
++    size: { min: 1, max: 2 },
++    color: "#d4b878",
++    opacity: 0.3,
++  },
++};
+diff --git a/game/environments/index.ts b/game/environments/index.ts
+index 4e219e4..7e04cbf 100644
+--- a/game/environments/index.ts
++++ b/game/environments/index.ts
+@@ -1,6 +1,7 @@
+ export { EnvironmentManager } from "./EnvironmentManager";
+ export type { EnvUpdateResult } from "./EnvironmentManager";
+ export { SUBURBAN_ENVIRONMENT } from "./suburban";
++export { DUBAI_ENVIRONMENT } from "./dubai";
+ export { lerpColor, lerpPalette, hexToRgb, rgbToHex, easeInOutCubic } from "./colorLerp";
+ export type {
+   BiomeId,
+diff --git a/game/environments/types.ts b/game/environments/types.ts
+index c43051c..4491bf5 100644
+--- a/game/environments/types.ts
++++ b/game/environments/types.ts
+@@ -81,6 +81,27 @@ export interface EnvironmentPalette {
+     rampWoodHighlight: string;
+     rampMetal: string;
+     rampMetalDark: string;
++
++    // Dubai-specific (optional — not needed by suburban)
++    camel?: string;
++    camelLeg?: string;
++    camelSaddle?: string;
++    sand?: string;
++    sandHighlight?: string;
++    sandShadow?: string;
++    pinkGClass?: string;
++    pinkGClassRoof?: string;
++    cactus?: string;
++    cactusHighlight?: string;
++    cactusSpine?: string;
++    chocolate?: string;
++    chocolateDark?: string;
++    chocolateWrapper?: string;
++    lamboGreen?: string;
++    lamboGreenDark?: string;
++    lamboWindow?: string;
++    billboardFrame?: string;
++    billboardPost?: string;
+   };
+ }
+ 
+diff --git a/game/rendering/BackgroundRenderer.ts b/game/rendering/BackgroundRenderer.ts
+index cdd83c3..b8c8aae 100644
+--- a/game/rendering/BackgroundRenderer.ts
++++ b/game/rendering/BackgroundRenderer.ts
+@@ -425,6 +425,567 @@ export function drawBackground(
+ // These adapt the exported draw functions to the BackgroundDrawFn signature
+ // so they can be registered in an environment's backgroundDrawers map.
+ 
++// --- Dubai background elements ---
++
++// Burj Khalifa: stepped/tapered tower with spire
++function drawBurjKhalifa(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, roofColor: string, palette: EnvironmentPalette
++) {
++  const cx = x + w / 2;
++  // Base section (widest)
++  ctx.fillStyle = wallColor;
++  ctx.beginPath();
++  ctx.moveTo(cx - w * 0.45, y + h);
++  ctx.lineTo(cx - w * 0.35, y + h * 0.55);
++  ctx.lineTo(cx + w * 0.35, y + h * 0.55);
++  ctx.lineTo(cx + w * 0.45, y + h);
++  ctx.closePath();
++  ctx.fill();
++
++  // Mid section
++  ctx.beginPath();
++  ctx.moveTo(cx - w * 0.3, y + h * 0.55);
++  ctx.lineTo(cx - w * 0.2, y + h * 0.3);
++  ctx.lineTo(cx + w * 0.2, y + h * 0.3);
++  ctx.lineTo(cx + w * 0.3, y + h * 0.55);
++  ctx.closePath();
++  ctx.fill();
++
++  // Upper section
++  ctx.beginPath();
++  ctx.moveTo(cx - w * 0.15, y + h * 0.3);
++  ctx.lineTo(cx - w * 0.08, y + h * 0.12);
++  ctx.lineTo(cx + w * 0.08, y + h * 0.12);
++  ctx.lineTo(cx + w * 0.15, y + h * 0.3);
++  ctx.closePath();
++  ctx.fill();
++
++  // Spire
++  ctx.fillStyle = roofColor;
++  ctx.beginPath();
++  ctx.moveTo(cx - w * 0.03, y + h * 0.12);
++  ctx.lineTo(cx, y);
++  ctx.lineTo(cx + w * 0.03, y + h * 0.12);
++  ctx.closePath();
++  ctx.fill();
++
++  // Window lines
++  ctx.strokeStyle = palette.windowGlass;
++  ctx.lineWidth = 0.5;
++  for (let i = 1; i < 10; i++) {
++    const ly = y + h * (0.15 + i * 0.08);
++    if (ly > y + h) break;
++    const t = (ly - y) / h;
++    const halfW = w * (0.08 + t * 0.37);
++    ctx.beginPath();
++    ctx.moveTo(cx - halfW, ly);
++    ctx.lineTo(cx + halfW, ly);
++    ctx.stroke();
++  }
++}
++
++// Museum of the Future: torus/oval shape
++function drawMuseumOfFuture(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, roofColor: string, palette: EnvironmentPalette
++) {
++  const cx = x + w / 2;
++  const cy = y + h * 0.5;
++
++  // Outer ring
++  ctx.fillStyle = wallColor;
++  ctx.beginPath();
++  ctx.ellipse(cx, cy, w * 0.48, h * 0.45, 0, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Inner void (sky color to simulate hole)
++  ctx.fillStyle = palette.sky;
++  ctx.beginPath();
++  ctx.ellipse(cx, cy, w * 0.28, h * 0.22, 0, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Surface decoration lines (Arabic calligraphy suggestion)
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 0.6;
++  for (let i = 0; i < 5; i++) {
++    const angle = -0.4 + i * 0.2;
++    ctx.beginPath();
++    ctx.ellipse(cx, cy, w * (0.35 + i * 0.02), h * (0.32 + i * 0.02), angle, 0.3, 2.8);
++    ctx.stroke();
++  }
++
++  // Outline
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 0.8;
++  ctx.beginPath();
++  ctx.ellipse(cx, cy, w * 0.48, h * 0.45, 0, 0, Math.PI * 2);
++  ctx.stroke();
++
++  // Base/pedestal
++  ctx.fillStyle = roofColor;
++  ctx.fillRect(cx - w * 0.3, y + h * 0.88, w * 0.6, h * 0.12);
++}
++
++// Burj Al Arab: sail shape
++function drawBurjAlArab(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, roofColor: string, palette: EnvironmentPalette
++) {
++  const cx = x + w / 2;
++
++  // Sail shape — two curves meeting at top (widened right side for distinctive profile)
++  ctx.fillStyle = wallColor;
++  ctx.beginPath();
++  ctx.moveTo(cx - w * 0.3, y + h);
++  ctx.quadraticCurveTo(cx - w * 0.35, y + h * 0.3, cx, y + h * 0.02);
++  ctx.quadraticCurveTo(cx + w * 0.48, y + h * 0.15, cx + w * 0.45, y + h);
++  ctx.closePath();
++  ctx.fill();
++
++  // Sail outline for visibility
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 1;
++  ctx.beginPath();
++  ctx.moveTo(cx - w * 0.3, y + h);
++  ctx.quadraticCurveTo(cx - w * 0.35, y + h * 0.3, cx, y + h * 0.02);
++  ctx.quadraticCurveTo(cx + w * 0.48, y + h * 0.15, cx + w * 0.45, y + h);
++  ctx.stroke();
++
++  // Cross-bracing structure lines
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 0.5;
++  for (let i = 1; i < 8; i++) {
++    const t = i / 8;
++    const ly = y + h * t;
++    const leftX = cx - w * 0.3 * (1 - t * 0.6);
++    const rightX = cx + w * 0.45 * (1 - t * 0.5);
++    ctx.beginPath();
++    ctx.moveTo(leftX, ly);
++    ctx.lineTo(rightX, ly);
++    ctx.stroke();
++  }
++
++  // Helipad on top
++  ctx.fillStyle = roofColor;
++  ctx.beginPath();
++  ctx.ellipse(cx, y + h * 0.06, w * 0.1, h * 0.02, 0, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Base island
++  ctx.fillStyle = roofColor;
++  ctx.fillRect(cx - w * 0.35, y + h * 0.95, w * 0.7, h * 0.05);
++
++  // Window reflections
++  ctx.fillStyle = palette.windowGlass;
++  ctx.globalAlpha = 0.3;
++  ctx.beginPath();
++  ctx.moveTo(cx - w * 0.1, y + h * 0.3);
++  ctx.quadraticCurveTo(cx + w * 0.1, y + h * 0.4, cx + w * 0.15, y + h * 0.8);
++  ctx.lineTo(cx + w * 0.05, y + h * 0.8);
++  ctx.quadraticCurveTo(cx, y + h * 0.45, cx - w * 0.1, y + h * 0.3);
++  ctx.fill();
++  ctx.globalAlpha = 1;
++}
++
++// Dubai Frame: two pillars connected at top
++function drawDubaiFrame(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, roofColor: string, palette: EnvironmentPalette
++) {
++  const pillarW = w * 0.2;
++
++  // Left pillar
++  ctx.fillStyle = wallColor;
++  ctx.fillRect(x, y + h * 0.08, pillarW, h * 0.92);
++
++  // Right pillar
++  ctx.fillRect(x + w - pillarW, y + h * 0.08, pillarW, h * 0.92);
++
++  // Top bridge
++  ctx.fillStyle = roofColor;
++  ctx.fillRect(x, y, w, h * 0.1);
++
++  // Glass bridge windows
++  ctx.fillStyle = palette.windowGlass;
++  ctx.globalAlpha = 0.3;
++  ctx.fillRect(x + pillarW + 2, y + h * 0.02, w - pillarW * 2 - 4, h * 0.06);
++  ctx.globalAlpha = 1;
++
++  // Pillar windows
++  ctx.strokeStyle = palette.windowGlass;
++  ctx.lineWidth = 0.4;
++  for (let i = 0; i < 10; i++) {
++    const wy = y + h * 0.12 + i * h * 0.085;
++    ctx.beginPath();
++    ctx.moveTo(x + 2, wy);
++    ctx.lineTo(x + pillarW - 2, wy);
++    ctx.moveTo(x + w - pillarW + 2, wy);
++    ctx.lineTo(x + w - 2, wy);
++    ctx.stroke();
++  }
++
++  // Gold accent on bridge
++  ctx.fillStyle = roofColor;
++  ctx.fillRect(x, y + h * 0.08, w, 2);
++}
++
++// ── Generic skyscraper variants (0-4) ──
++
++// Variant 1: Stepped/setback tower — wider at base, 2-3 tiers narrowing upward
++function drawSteppedSkyscraper(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, roofColor: string, palette: EnvironmentPalette
++) {
++  // 3 tiers — each narrower
++  const tiers = [
++    { top: y + h * 0.6, bottom: y + h, widthRatio: 1.0 },
++    { top: y + h * 0.25, bottom: y + h * 0.6, widthRatio: 0.72 },
++    { top: y, bottom: y + h * 0.25, widthRatio: 0.45 },
++  ];
++  for (const tier of tiers) {
++    const tw = w * tier.widthRatio;
++    const tx = x + (w - tw) / 2;
++    const th = tier.bottom - tier.top;
++    ctx.fillStyle = wallColor;
++    ctx.fillRect(tx, tier.top, tw, th);
++    // Window grid per tier
++    ctx.fillStyle = palette.windowGlass;
++    const cols = Math.max(2, Math.floor(tw / 9));
++    const rows = Math.max(2, Math.floor(th / 12));
++    const winW = (tw - 4) / cols - 2;
++    const winH = (th - 4) / rows - 2;
++    for (let r = 0; r < rows; r++) {
++      for (let c = 0; c < cols; c++) {
++        ctx.fillRect(tx + 2 + c * (winW + 2), tier.top + 3 + r * (winH + 2), winW, winH);
++      }
++    }
++    // Ledge at tier boundary
++    ctx.fillStyle = roofColor;
++    ctx.fillRect(tx, tier.top, tw, 2);
++  }
++  // Outline
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 0.6;
++  for (const tier of tiers) {
++    const tw = w * tier.widthRatio;
++    const tx = x + (w - tw) / 2;
++    ctx.strokeRect(tx, tier.top, tw, tier.bottom - tier.top);
++  }
++}
++
++// Variant 2: Dome-topped tower — rectangular body with rounded dome cap
++function drawDomeTopTower(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, roofColor: string, palette: EnvironmentPalette
++) {
++  const cx = x + w / 2;
++  const domeH = h * 0.12;
++  const bodyTop = y + domeH;
++  const bodyH = h - domeH;
++
++  // Dome
++  ctx.fillStyle = roofColor;
++  ctx.beginPath();
++  ctx.ellipse(cx, bodyTop, w / 2, domeH, 0, Math.PI, 0);
++  ctx.fill();
++
++  // Body
++  ctx.fillStyle = wallColor;
++  ctx.fillRect(x, bodyTop, w, bodyH);
++
++  // Window grid
++  ctx.fillStyle = palette.windowGlass;
++  const cols = Math.max(2, Math.floor(w / 8));
++  const rows = Math.max(4, Math.floor(bodyH / 10));
++  const winW = (w - 6) / cols - 2;
++  const winH = (bodyH - 8) / rows - 2;
++  for (let r = 0; r < rows; r++) {
++    for (let c = 0; c < cols; c++) {
++      ctx.fillRect(x + 3 + c * (winW + 2), bodyTop + 5 + r * (winH + 2), winW, winH);
++    }
++  }
++
++  // Outline
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 0.6;
++  ctx.strokeRect(x, bodyTop, w, bodyH);
++}
++
++// Variant 3: Angled/pointed crown tower
++function drawAngledTower(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, roofColor: string, palette: EnvironmentPalette
++) {
++  const cx = x + w / 2;
++  const crownH = h * 0.1;
++  const bodyTop = y + crownH;
++  const bodyH = h - crownH;
++
++  // Crown — angular pointed shape
++  ctx.fillStyle = roofColor;
++  ctx.beginPath();
++  ctx.moveTo(x, bodyTop);
++  ctx.lineTo(cx, y);
++  ctx.lineTo(x + w, bodyTop);
++  ctx.closePath();
++  ctx.fill();
++
++  // Body
++  ctx.fillStyle = wallColor;
++  ctx.fillRect(x, bodyTop, w, bodyH);
++
++  // Window grid
++  ctx.fillStyle = palette.windowGlass;
++  const cols = Math.max(2, Math.floor(w / 8));
++  const rows = Math.max(4, Math.floor(bodyH / 10));
++  const winW = (w - 6) / cols - 2;
++  const winH = (bodyH - 8) / rows - 2;
++  for (let r = 0; r < rows; r++) {
++    for (let c = 0; c < cols; c++) {
++      ctx.fillRect(x + 3 + c * (winW + 2), bodyTop + 5 + r * (winH + 2), winW, winH);
++    }
++  }
++
++  // Outline
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 0.6;
++  ctx.strokeRect(x, bodyTop, w, bodyH);
++}
++
++// Variant 4: Wide flat-topped commercial tower — horizontal window bands
++function drawWideFlatTower(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, roofColor: string, palette: EnvironmentPalette
++) {
++  // Body
++  ctx.fillStyle = wallColor;
++  ctx.fillRect(x, y, w, h);
++
++  // Horizontal window bands (instead of grid)
++  ctx.fillStyle = palette.windowGlass;
++  const bands = Math.max(3, Math.floor(h / 14));
++  const bandH = 4;
++  const bandGap = (h - 8) / bands;
++  for (let i = 0; i < bands; i++) {
++    const by = y + 4 + i * bandGap;
++    ctx.fillRect(x + 3, by, w - 6, bandH);
++  }
++
++  // Rooftop bar
++  ctx.fillStyle = roofColor;
++  ctx.fillRect(x, y, w, 3);
++  ctx.fillRect(x + w * 0.1, y - 3, w * 0.8, 4);
++
++  // Outline
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 0.6;
++  ctx.strokeRect(x, y, w, h);
++}
++
++// Variant 0: Generic skyscraper: tall rectangle with window grid
++function drawGenericSkyscraper(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, roofColor: string, palette: EnvironmentPalette
++) {
++  // Main body
++  ctx.fillStyle = wallColor;
++  ctx.fillRect(x, y, w, h);
++
++  // Window grid
++  ctx.fillStyle = palette.windowGlass;
++  const cols = Math.max(2, Math.floor(w / 8));
++  const rows = Math.max(4, Math.floor(h / 10));
++  const winW = (w - 6) / cols - 2;
++  const winH = (h - 10) / rows - 2;
++  for (let r = 0; r < rows; r++) {
++    for (let c = 0; c < cols; c++) {
++      const wx = x + 3 + c * (winW + 2);
++      const wy = y + 6 + r * (winH + 2);
++      ctx.fillRect(wx, wy, winW, winH);
++    }
++  }
++
++  // Rooftop structure
++  ctx.fillStyle = roofColor;
++  ctx.fillRect(x + w * 0.35, y - h * 0.04, w * 0.3, h * 0.05);
++  // Antenna
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 1;
++  ctx.beginPath();
++  ctx.moveTo(x + w / 2, y);
++  ctx.lineTo(x + w / 2, y - h * 0.08);
++  ctx.stroke();
++
++  // Outline
++  ctx.strokeStyle = roofColor;
++  ctx.lineWidth = 0.6;
++  ctx.strokeRect(x, y, w, h);
++}
++
++/** Draw a skyscraper — dispatches to the correct variant. */
++function drawSkyscraper(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  wallColor: string, palette: EnvironmentPalette, roofColor?: string, variant?: number
++) {
++  const roof = roofColor || wallColor;
++  switch (variant) {
++    // Generic variants (0-4)
++    case 0: drawGenericSkyscraper(ctx, x, y, w, h, wallColor, roof, palette); break;
++    case 1: drawSteppedSkyscraper(ctx, x, y, w, h, wallColor, roof, palette); break;
++    case 2: drawDomeTopTower(ctx, x, y, w, h, wallColor, roof, palette); break;
++    case 3: drawAngledTower(ctx, x, y, w, h, wallColor, roof, palette); break;
++    case 4: drawWideFlatTower(ctx, x, y, w, h, wallColor, roof, palette); break;
++    // Landmark variants (5-8)
++    case 5: drawBurjKhalifa(ctx, x, y, w, h, wallColor, roof, palette); break;
++    case 6: drawMuseumOfFuture(ctx, x, y, w, h, wallColor, roof, palette); break;
++    case 7: drawBurjAlArab(ctx, x, y, w, h, wallColor, roof, palette); break;
++    case 8: drawDubaiFrame(ctx, x, y, w, h, wallColor, roof, palette); break;
++    default: drawGenericSkyscraper(ctx, x, y, w, h, wallColor, roof, palette); break;
++  }
++}
++
++// --- Palm tree (background) ---
++
++export function drawPalmTree(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  color: string, palette: EnvironmentPalette
++) {
++  const cx = x + w / 2;
++  const trunkColor = palette.backgroundTreeTrunk;
++  const frondColor = color;
++
++  // Curved trunk (gentle S-curve)
++  ctx.strokeStyle = trunkColor;
++  ctx.lineWidth = w * 0.18;
++  ctx.lineCap = "round";
++  ctx.beginPath();
++  ctx.moveTo(cx, y + h);
++  ctx.quadraticCurveTo(cx - w * 0.15, y + h * 0.6, cx + w * 0.05, y + h * 0.22);
++  ctx.stroke();
++
++  // Trunk segment lines
++  ctx.strokeStyle = "rgba(0,0,0,0.1)";
++  ctx.lineWidth = w * 0.2;
++  ctx.setLineDash([2, 4]);
++  ctx.beginPath();
++  ctx.moveTo(cx, y + h);
++  ctx.quadraticCurveTo(cx - w * 0.15, y + h * 0.6, cx + w * 0.05, y + h * 0.22);
++  ctx.stroke();
++  ctx.setLineDash([]);
++
++  // Crown position
++  const crownX = cx + w * 0.05;
++  const crownY = y + h * 0.2;
++
++  // Fronds (8 arcs radiating from crown)
++  ctx.strokeStyle = frondColor;
++  ctx.lineWidth = 1.5;
++  ctx.lineCap = "round";
++  const frondAngles = [-2.2, -1.8, -1.2, -0.6, 0.2, 0.8, 1.4, 2.0];
++  for (const angle of frondAngles) {
++    const len = w * 0.7 + Math.random() * w * 0.2;
++    const endX = crownX + Math.cos(angle) * len;
++    const endY = crownY + Math.sin(angle) * len * 0.6;
++    const cpX = crownX + Math.cos(angle) * len * 0.5;
++    const cpY = crownY + Math.sin(angle) * len * 0.2 - h * 0.05;
++    ctx.beginPath();
++    ctx.moveTo(crownX, crownY);
++    ctx.quadraticCurveTo(cpX, cpY, endX, endY);
++    ctx.stroke();
++
++    // Leaf detail (small lines along frond)
++    const midX = (crownX + endX) / 2;
++    const midY = (cpY + endY) / 2;
++    ctx.lineWidth = 0.8;
++    ctx.beginPath();
++    ctx.moveTo(midX, midY);
++    ctx.lineTo(midX + 3, midY + 4);
++    ctx.moveTo(midX, midY);
++    ctx.lineTo(midX - 3, midY + 4);
++    ctx.stroke();
++    ctx.lineWidth = 1.5;
++  }
++
++  // Coconuts
++  ctx.fillStyle = "#6a5a3a";
++  ctx.beginPath();
++  ctx.arc(crownX - 3, crownY + 4, 2.5, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.beginPath();
++  ctx.arc(crownX + 4, crownY + 3, 2, 0, Math.PI * 2);
++  ctx.fill();
++
++  ctx.lineCap = "butt";
++}
++
++// --- Background camel (simpler than obstacle version) ---
++
++export function drawBackgroundCamel(
++  ctx: CanvasRenderingContext2D,
++  x: number, y: number, w: number, h: number,
++  color: string, palette: EnvironmentPalette
++) {
++  const legColor = palette.creatureLeg;
++
++  // Body
++  ctx.fillStyle = color;
++  ctx.beginPath();
++  ctx.ellipse(x + w * 0.5, y + h * 0.48, w * 0.3, h * 0.15, 0, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Hump
++  ctx.beginPath();
++  ctx.ellipse(x + w * 0.5, y + h * 0.3, w * 0.1, h * 0.1, 0, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Legs
++  ctx.strokeStyle = legColor;
++  ctx.lineWidth = 2;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.25, y + h * 0.58);
++  ctx.lineTo(x + w * 0.23, y + h * 0.92);
++  ctx.moveTo(x + w * 0.38, y + h * 0.58);
++  ctx.lineTo(x + w * 0.4, y + h * 0.95);
++  ctx.moveTo(x + w * 0.62, y + h * 0.58);
++  ctx.lineTo(x + w * 0.6, y + h * 0.92);
++  ctx.moveTo(x + w * 0.74, y + h * 0.58);
++  ctx.lineTo(x + w * 0.76, y + h * 0.95);
++  ctx.stroke();
++
++  // Neck + Head
++  ctx.fillStyle = color;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.22, y + h * 0.38);
++  ctx.lineTo(x + w * 0.14, y + h * 0.15);
++  ctx.lineTo(x + w * 0.26, y + h * 0.18);
++  ctx.lineTo(x + w * 0.28, y + h * 0.4);
++  ctx.closePath();
++  ctx.fill();
++
++  // Head
++  ctx.beginPath();
++  ctx.ellipse(x + w * 0.12, y + h * 0.14, w * 0.08, h * 0.06, -0.3, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Tail
++  ctx.fillStyle = palette.creatureTail;
++  ctx.beginPath();
++  ctx.ellipse(x + w * 0.82, y + h * 0.42, w * 0.04, h * 0.05, 0, 0, Math.PI * 2);
++  ctx.fill();
++}
++
+ export const SUBURBAN_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
+   house: (ctx, x, y, w, h, color, palette, roofColor, variant) => {
+     drawHouse(ctx, x, y, w, h, color, palette, roofColor, variant);
+@@ -439,3 +1000,18 @@ export const SUBURBAN_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
+     drawWalkingPerson(ctx, x, y, w, h, color, palette);
+   },
+ };
++
++export const DUBAI_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
++  skyscraper: (ctx, x, y, w, h, color, palette, roofColor, variant) => {
++    drawSkyscraper(ctx, x, y, w, h, color, palette, roofColor, variant);
++  },
++  palm_tree: (ctx, x, y, w, h, color, palette) => {
++    drawPalmTree(ctx, x, y, w, h, color, palette);
++  },
++  bg_camel: (ctx, x, y, w, h, color, palette) => {
++    drawBackgroundCamel(ctx, x, y, w, h, color, palette);
++  },
++  walking_person: (ctx, x, y, w, h, color, palette) => {
++    drawWalkingPerson(ctx, x, y, w, h, color, palette);
++  },
++};
+diff --git a/game/rendering/ObstacleRenderer.ts b/game/rendering/ObstacleRenderer.ts
+index ef560c2..d3efe0d 100644
+--- a/game/rendering/ObstacleRenderer.ts
++++ b/game/rendering/ObstacleRenderer.ts
+@@ -651,6 +651,1061 @@ function drawContainerWithRamp(ctx: CanvasRenderingContext2D, x: number, y: numb
+   ctx.stroke();
+ }
+ 
++// --- Dubai biome obstacles ---
++
++function drawCamel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
++  const bodyColor = palette.obstacle.camel ?? "#c8a060";
++  const legColor = palette.obstacle.camelLeg ?? "#a08040";
++  const saddleColor = palette.obstacle.camelSaddle ?? "#c44040";
++
++  // Legs (4 thick strokes)
++  ctx.strokeStyle = legColor;
++  ctx.lineWidth = 3;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.2, y + h * 0.58);
++  ctx.lineTo(x + w * 0.18, y + h * 0.92);
++  ctx.moveTo(x + w * 0.32, y + h * 0.6);
++  ctx.lineTo(x + w * 0.34, y + h * 0.95);
++  ctx.moveTo(x + w * 0.58, y + h * 0.58);
++  ctx.lineTo(x + w * 0.56, y + h * 0.92);
++  ctx.moveTo(x + w * 0.7, y + h * 0.6);
++  ctx.lineTo(x + w * 0.72, y + h * 0.95);
++  ctx.stroke();
++
++  // Hooves
++  ctx.lineWidth = 4;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.16, y + h * 0.92);
++  ctx.lineTo(x + w * 0.2, y + h * 0.95);
++  ctx.moveTo(x + w * 0.32, y + h * 0.95);
++  ctx.lineTo(x + w * 0.36, y + h * 0.98);
++  ctx.moveTo(x + w * 0.54, y + h * 0.92);
++  ctx.lineTo(x + w * 0.58, y + h * 0.95);
++  ctx.moveTo(x + w * 0.7, y + h * 0.95);
++  ctx.lineTo(x + w * 0.74, y + h * 0.98);
++  ctx.stroke();
++
++  // Body (large oval)
++  ctx.fillStyle = bodyColor;
++  ctx.beginPath();
++  ctx.ellipse(x + w * 0.48, y + h * 0.48, w * 0.3, h * 0.16, 0, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Hump
++  ctx.beginPath();
++  ctx.ellipse(x + w * 0.48, y + h * 0.3, w * 0.12, h * 0.12, 0, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Saddle blanket
++  ctx.fillStyle = saddleColor;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.35, y + h * 0.35);
++  ctx.lineTo(x + w * 0.6, y + h * 0.35);
++  ctx.lineTo(x + w * 0.58, y + h * 0.52);
++  ctx.lineTo(x + w * 0.37, y + h * 0.52);
++  ctx.closePath();
++  ctx.fill();
++
++  // Neck
++  ctx.fillStyle = bodyColor;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.2, y + h * 0.4);
++  ctx.lineTo(x + w * 0.1, y + h * 0.12);
++  ctx.lineTo(x + w * 0.22, y + h * 0.14);
++  ctx.lineTo(x + w * 0.28, y + h * 0.42);
++  ctx.closePath();
++  ctx.fill();
++
++  // Head
++  ctx.beginPath();
++  ctx.ellipse(x + w * 0.08, y + h * 0.1, w * 0.08, h * 0.06, -0.3, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Ear
++  ctx.beginPath();
++  ctx.ellipse(x + w * 0.14, y + h * 0.04, w * 0.025, h * 0.04, 0.3, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Eye
++  ctx.fillStyle = "#2a2a2a";
++  ctx.beginPath();
++  ctx.arc(x + w * 0.07, y + h * 0.09, 1.5, 0, Math.PI * 2);
++  ctx.fill();
++
++  // Tail
++  ctx.strokeStyle = bodyColor;
++  ctx.lineWidth = 2;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.78, y + h * 0.42);
++  ctx.quadraticCurveTo(x + w * 0.88, y + h * 0.38, x + w * 0.85, y + h * 0.52);
++  ctx.stroke();
++}
++
++function drawSandTrap(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
++  const sandColor = palette.obstacle.sand ?? "#d8c078";
++  const highlightColor = palette.obstacle.sandHighlight ?? "#e8d498";
++  const shadowColor = palette.obstacle.sandShadow ?? "#b09858";
++
++  // Wide sand drift across the road — long, low dune shape
++  // Main body
++  ctx.fillStyle = sandColor;
++  ctx.beginPath();
++  ctx.moveTo(x, y + h);
++  ctx.quadraticCurveTo(x + w * 0.15, y + h * 0.3, x + w * 0.35, y + h * 0.1);
++  ctx.quadraticCurveTo(x + w * 0.5, y - h * 0.05, x + w * 0.65, y + h * 0.15);
++  ctx.quadraticCurveTo(x + w * 0.85, y + h * 0.4, x + w, y + h);
++  ctx.closePath();
++  ctx.fill();
++
++  // Highlight band (sun-facing right slope)
++  ctx.fillStyle = highlightColor;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.5, y + h * 0.05);
++  ctx.quadraticCurveTo(x + w * 0.6, y + h * 0.1, x + w * 0.75, y + h * 0.4);
++  ctx.lineTo(x + w * 0.85, y + h * 0.6);
++  ctx.lineTo(x + w * 0.7, y + h * 0.55);
++  ctx.quadraticCurveTo(x + w * 0.58, y + h * 0.2, x + w * 0.5, y + h * 0.05);
++  ctx.closePath();
++  ctx.fill();
++
++  // Shadow (left windward side)
++  ctx.fillStyle = shadowColor;
++  ctx.beginPath();
++  ctx.moveTo(x, y + h);
++  ctx.quadraticCurveTo(x + w * 0.08, y + h * 0.6, x + w * 0.2, y + h * 0.25);
++  ctx.lineTo(x + w * 0.15, y + h * 0.4);
++  ctx.quadraticCurveTo(x + w * 0.06, y + h * 0.75, x + w * 0.02, y + h);
++  ctx.closePath();
++  ctx.fill();
++
++  // Wind ripple lines
++  ctx.strokeStyle = highlightColor;
++  ctx.lineWidth = 0.5;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.1, y + h * 0.65);
++  ctx.lineTo(x + w * 0.3, y + h * 0.5);
++  ctx.moveTo(x + w * 0.35, y + h * 0.7);
++  ctx.lineTo(x + w * 0.55, y + h * 0.55);
++  ctx.moveTo(x + w * 0.6, y + h * 0.7);
++  ctx.lineTo(x + w * 0.8, y + h * 0.55);
++  ctx.stroke();
++
++  // Outline
++  ctx.strokeStyle = shadowColor;
++  ctx.lineWidth = 0.8;
++  ctx.beginPath();
++  ctx.moveTo(x, y + h);
++  ctx.quadraticCurveTo(x + w * 0.15, y + h * 0.3, x + w * 0.35, y + h * 0.1);
++  ctx.quadraticCurveTo(x + w * 0.5, y - h * 0.05, x + w * 0.65, y + h * 0.15);
++  ctx.quadraticCurveTo(x + w * 0.85, y + h * 0.4, x + w, y + h);
++  ctx.stroke();
++}
++
++function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
++  const c = palette.obstacle;
++  const bodyColor = "#f0ece8"; // Pearl white
++  const bodyDark = "#d0ccc8";
++  const chrome = "#c8c8c8";
++  const wheelR = 10;
++  const wheelY = y + h - wheelR;
++  const bodyTop = y + 13;
++  const bodyBottom = y + h - wheelR - 2;
++  const roofTop = y + 2;
++
++  // --- Wheel arches (rounded, larger than G-Class) ---
++  ctx.fillStyle = "#1a1a1a";
++  for (const wx of [x + 18, x + w - 18]) {
++    ctx.beginPath();
++    ctx.arc(wx, bodyBottom + 1, wheelR + 3, Math.PI, 0);
++    ctx.fill();
++  }
++
++  // --- Main body (boxy but with slight contour) ---
++  ctx.fillStyle = bodyColor;
++  ctx.beginPath();
++  ctx.moveTo(x + 3, bodyTop);
++  ctx.lineTo(x + w - 2, bodyTop);
++  // Front bumper curves down slightly
++  ctx.quadraticCurveTo(x + w + 1, bodyTop, x + w + 1, bodyTop + 4);
++  ctx.lineTo(x + w + 1, bodyBottom);
++  ctx.lineTo(x - 1, bodyBottom);
++  ctx.lineTo(x - 1, bodyTop + 3);
++  ctx.quadraticCurveTo(x - 1, bodyTop, x + 3, bodyTop);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- Lower body trim / cladding (dark gray) ---
++  ctx.fillStyle = "#5a5a5a";
++  ctx.fillRect(x, bodyBottom - 4, w, 4);
++
++  // --- Roof (slightly angled windshield) ---
++  ctx.fillStyle = bodyDark;
++  ctx.beginPath();
++  ctx.moveTo(x + 8, bodyTop);
++  ctx.lineTo(x + 6, roofTop + 2);
++  ctx.lineTo(x + w - 14, roofTop);
++  // Windshield angle — front slopes slightly
++  ctx.lineTo(x + w - 8, bodyTop);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- Roof rails (chrome bars on top) ---
++  ctx.strokeStyle = chrome;
++  ctx.lineWidth = 1.5;
++  ctx.beginPath();
++  ctx.moveTo(x + 10, roofTop);
++  ctx.lineTo(x + w - 16, roofTop - 1);
++  ctx.stroke();
++  // Rail supports
++  ctx.lineWidth = 1;
++  ctx.beginPath();
++  ctx.moveTo(x + 14, roofTop);
++  ctx.lineTo(x + 14, roofTop + 3);
++  ctx.moveTo(x + w - 20, roofTop - 1);
++  ctx.lineTo(x + w - 20, roofTop + 3);
++  ctx.moveTo(x + w * 0.5, roofTop);
++  ctx.lineTo(x + w * 0.5, roofTop + 3);
++  ctx.stroke();
++
++  // --- Windows ---
++  ctx.fillStyle = c.carWindow;
++  // Rear quarter window
++  ctx.fillRect(x + 10, roofTop + 3, 14, bodyTop - roofTop - 4);
++  // Rear door window
++  ctx.fillRect(x + 26, roofTop + 3, 16, bodyTop - roofTop - 4);
++  // Front door window
++  ctx.fillRect(x + w * 0.56, roofTop + 2, 16, bodyTop - roofTop - 3);
++  // Windshield (angled)
++  ctx.beginPath();
++  ctx.moveTo(x + w - 14, roofTop + 2);
++  ctx.lineTo(x + w - 8, bodyTop);
++  ctx.lineTo(x + w - 4, bodyTop);
++  ctx.lineTo(x + w - 10, roofTop + 2);
++  ctx.closePath();
++  ctx.fill();
++  // Window glare
++  ctx.fillStyle = "rgba(255,255,255,0.25)";
++  ctx.fillRect(x + 11, roofTop + 4, 5, 3);
++  ctx.fillRect(x + w * 0.57, roofTop + 3, 5, 3);
++
++  // --- B-pillar, C-pillar ---
++  ctx.fillStyle = bodyDark;
++  ctx.fillRect(x + 24, roofTop + 2, 3, bodyTop - roofTop);
++  ctx.fillRect(x + w * 0.54, roofTop + 2, 3, bodyTop - roofTop);
++
++  // --- Front grille (prominent Toyota chrome grille) ---
++  ctx.fillStyle = chrome;
++  ctx.fillRect(x + w - 2, bodyTop + 3, 3, bodyBottom - bodyTop - 10);
++  ctx.strokeStyle = "#999";
++  ctx.lineWidth = 0.7;
++  // Horizontal grille slats
++  for (let i = 1; i <= 4; i++) {
++    const gy = bodyTop + 3 + (bodyBottom - bodyTop - 10) * (i / 5);
++    ctx.beginPath();
++    ctx.moveTo(x + w - 2, gy);
++    ctx.lineTo(x + w + 1, gy);
++    ctx.stroke();
++  }
++
++  // --- Headlights (angular, LED-style) ---
++  ctx.fillStyle = c.carHeadlight;
++  // Upper headlight
++  ctx.beginPath();
++  ctx.moveTo(x + w - 1, bodyTop + 3);
++  ctx.lineTo(x + w + 1, bodyTop + 3);
++  ctx.lineTo(x + w + 1, bodyTop + 8);
++  ctx.lineTo(x + w - 3, bodyTop + 8);
++  ctx.closePath();
++  ctx.fill();
++  // Lower headlight
++  ctx.beginPath();
++  ctx.moveTo(x + w - 1, bodyBottom - 10);
++  ctx.lineTo(x + w + 1, bodyBottom - 10);
++  ctx.lineTo(x + w + 1, bodyBottom - 5);
++  ctx.lineTo(x + w - 3, bodyBottom - 5);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- DRL strip (thin LED line connecting headlights) ---
++  ctx.strokeStyle = "#fff";
++  ctx.lineWidth = 0.8;
++  ctx.beginPath();
++  ctx.moveTo(x + w, bodyTop + 8);
++  ctx.lineTo(x + w, bodyBottom - 10);
++  ctx.stroke();
++
++  // --- Door lines ---
++  ctx.strokeStyle = bodyDark;
++  ctx.lineWidth = 1;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.36, bodyTop);
++  ctx.lineTo(x + w * 0.36, bodyBottom - 4);
++  ctx.moveTo(x + w * 0.64, bodyTop);
++  ctx.lineTo(x + w * 0.64, bodyBottom - 4);
++  ctx.stroke();
++
++  // --- Door handles (chrome) ---
++  ctx.fillStyle = chrome;
++  ctx.fillRect(x + w * 0.39, bodyTop + (bodyBottom - bodyTop) * 0.38, 6, 2.5);
++  ctx.fillRect(x + w * 0.67, bodyTop + (bodyBottom - bodyTop) * 0.38, 6, 2.5);
++
++  // --- Side body crease line (character line) ---
++  ctx.strokeStyle = bodyDark;
++  ctx.lineWidth = 0.7;
++  ctx.beginPath();
++  ctx.moveTo(x + 4, bodyTop + (bodyBottom - bodyTop) * 0.45);
++  ctx.lineTo(x + w - 4, bodyTop + (bodyBottom - bodyTop) * 0.42);
++  ctx.stroke();
++
++  // --- Rear bumper + taillight ---
++  ctx.fillStyle = "#5a5a5a";
++  ctx.fillRect(x - 2, bodyBottom - 5, 4, 8);
++  ctx.fillStyle = c.carTaillight;
++  ctx.fillRect(x - 1, bodyTop + 4, 3, 8);
++  ctx.fillRect(x - 1, bodyBottom - 12, 3, 8);
++
++  // --- Wheels (large, modern alloy) ---
++  ctx.fillStyle = c.carWheel;
++  ctx.beginPath();
++  ctx.arc(x + 18, wheelY, wheelR, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.beginPath();
++  ctx.arc(x + w - 18, wheelY, wheelR, 0, Math.PI * 2);
++  ctx.fill();
++  // Alloy rims
++  ctx.fillStyle = chrome;
++  ctx.beginPath();
++  ctx.arc(x + 18, wheelY, 5, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.beginPath();
++  ctx.arc(x + w - 18, wheelY, 5, 0, Math.PI * 2);
++  ctx.fill();
++  // Multi-spoke pattern
++  ctx.strokeStyle = "#aaa";
++  ctx.lineWidth = 1;
++  for (const wx of [x + 18, x + w - 18]) {
++    for (let i = 0; i < 6; i++) {
++      const a = (i * Math.PI * 2) / 6;
++      ctx.beginPath();
++      ctx.moveTo(wx + Math.cos(a) * 2.5, wheelY + Math.sin(a) * 2.5);
++      ctx.lineTo(wx + Math.cos(a) * (wheelR - 1.5), wheelY + Math.sin(a) * (wheelR - 1.5));
++      ctx.stroke();
++    }
++  }
++
++  // --- Body outline ---
++  ctx.strokeStyle = bodyDark;
++  ctx.lineWidth = 1;
++  ctx.beginPath();
++  ctx.moveTo(x + 3, bodyTop);
++  ctx.lineTo(x + w - 2, bodyTop);
++  ctx.lineTo(x + w + 1, bodyTop + 4);
++  ctx.lineTo(x + w + 1, bodyBottom);
++  ctx.lineTo(x - 1, bodyBottom);
++  ctx.lineTo(x - 1, bodyTop + 3);
++  ctx.closePath();
++  ctx.stroke();
++}
++
++function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
++  const pink = palette.obstacle.pinkGClass ?? "#e87a9f";
++  const pinkDark = palette.obstacle.pinkGClassRoof ?? "#d06888";
++  const c = palette.obstacle;
++  const wheelR = 9;
++  const wheelY = y + h - wheelR;
++  const bodyTop = y + 13;
++  const bodyBottom = y + h - wheelR - 3;
++  const roofTop = y + 1;
++
++  // --- Wheel arches (squared off, drawn before body) ---
++  ctx.fillStyle = "#1a1a1a";
++  ctx.fillRect(x + 9, bodyBottom - 2, 20, wheelR + 5);
++  ctx.fillRect(x + w - 29, bodyBottom - 2, 20, wheelR + 5);
++
++  // --- Main body (extremely boxy rectangle) ---
++  ctx.fillStyle = pink;
++  ctx.fillRect(x + 2, bodyTop, w - 4, bodyBottom - bodyTop);
++
++  // --- Roof (flat, very angular) ---
++  ctx.fillStyle = pinkDark;
++  // Roof slab
++  ctx.fillRect(x + 10, roofTop, w - 20, bodyTop - roofTop);
++  // A-pillar (rear)
++  ctx.fillRect(x + 10, roofTop, 5, bodyTop - roofTop + 2);
++  // B-pillar (center)
++  ctx.fillRect(x + w * 0.46, roofTop, 4, bodyTop - roofTop + 2);
++  // C-pillar (front)
++  ctx.fillRect(x + w - 15, roofTop, 5, bodyTop - roofTop + 2);
++
++  // --- Windows (two separate panes) ---
++  ctx.fillStyle = c.carWindow;
++  // Rear window
++  ctx.fillRect(x + 16, roofTop + 2, w * 0.28, bodyTop - roofTop - 3);
++  // Front window
++  ctx.fillRect(x + w * 0.50, roofTop + 2, w * 0.24, bodyTop - roofTop - 3);
++  // Window glare
++  ctx.fillStyle = "rgba(255,255,255,0.25)";
++  ctx.fillRect(x + 17, roofTop + 3, 7, 4);
++  ctx.fillRect(x + w * 0.51, roofTop + 3, 7, 4);
++
++  // --- Flat hood area (front of body above grille) ---
++  ctx.fillStyle = pink;
++  ctx.fillRect(x + w - 15, bodyTop, 13, 4);
++
++  // --- Front grille (vertical chrome slats) ---
++  ctx.fillStyle = "#c8c8c8";
++  ctx.fillRect(x + w - 3, bodyTop + 2, 3, bodyBottom - bodyTop - 6);
++  ctx.strokeStyle = "#888";
++  ctx.lineWidth = 0.8;
++  for (let i = 1; i <= 5; i++) {
++    const gy = bodyTop + 2 + (bodyBottom - bodyTop - 6) * (i / 6);
++    ctx.beginPath();
++    ctx.moveTo(x + w - 3, gy);
++    ctx.lineTo(x + w, gy);
++    ctx.stroke();
++  }
++
++  // --- Headlights (round — iconic G-Class feature) ---
++  ctx.fillStyle = c.carHeadlight;
++  ctx.strokeStyle = "#c8c8c8";
++  ctx.lineWidth = 1.2;
++  ctx.beginPath();
++  ctx.arc(x + w - 1, bodyTop + 8, 3.5, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.stroke();
++  ctx.beginPath();
++  ctx.arc(x + w - 1, bodyBottom - 8, 3.5, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.stroke();
++
++  // --- Front turn signal (small amber below headlight) ---
++  ctx.fillStyle = "#e8a030";
++  ctx.fillRect(x + w - 3, bodyTop + 13, 3, 2);
++  ctx.fillRect(x + w - 3, bodyBottom - 13, 3, 2);
++
++  // --- Door lines (vertical — flat panel construction) ---
++  ctx.strokeStyle = pinkDark;
++  ctx.lineWidth = 1;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.38, bodyTop);
++  ctx.lineTo(x + w * 0.38, bodyBottom);
++  ctx.moveTo(x + w * 0.62, bodyTop);
++  ctx.lineTo(x + w * 0.62, bodyBottom);
++  ctx.stroke();
++
++  // --- External door hinges (iconic G-Class detail) ---
++  ctx.fillStyle = "#888";
++  ctx.fillRect(x + w * 0.38 - 1, bodyTop + 4, 3, 4);
++  ctx.fillRect(x + w * 0.38 - 1, bodyBottom - 8, 3, 4);
++  ctx.fillRect(x + w * 0.62 - 1, bodyTop + 4, 3, 4);
++  ctx.fillRect(x + w * 0.62 - 1, bodyBottom - 8, 3, 4);
++
++  // --- Door handles (chrome) ---
++  ctx.fillStyle = "#c8c8c8";
++  ctx.fillRect(x + w * 0.42, bodyTop + (bodyBottom - bodyTop) * 0.4, 6, 2.5);
++  ctx.fillRect(x + w * 0.65, bodyTop + (bodyBottom - bodyTop) * 0.4, 6, 2.5);
++
++  // --- Side indicator on fender ---
++  ctx.fillStyle = "#e8a030";
++  ctx.fillRect(x + w * 0.28, bodyTop + 4, 4, 2);
++
++  // --- Running board / side step ---
++  ctx.fillStyle = "#888";
++  ctx.fillRect(x + 18, bodyBottom, w - 36, 3);
++
++  // --- Taillights (vertical rectangles — rear of G-Class) ---
++  ctx.fillStyle = c.carTaillight;
++  ctx.fillRect(x, bodyTop + 4, 3, 8);
++  ctx.fillRect(x, bodyBottom - 12, 3, 8);
++
++  // --- Rear bumper ---
++  ctx.fillStyle = "#888";
++  ctx.fillRect(x - 1, bodyBottom - 3, 4, 6);
++
++  // --- Spare tire on rear door (very visible from side) ---
++  ctx.fillStyle = "#222";
++  ctx.beginPath();
++  ctx.arc(x + 2, bodyTop + (bodyBottom - bodyTop) * 0.5, 9, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.strokeStyle = "#444";
++  ctx.lineWidth = 2;
++  ctx.beginPath();
++  ctx.arc(x + 2, bodyTop + (bodyBottom - bodyTop) * 0.5, 9, 0, Math.PI * 2);
++  ctx.stroke();
++  // Spare tire hub
++  ctx.fillStyle = "#888";
++  ctx.beginPath();
++  ctx.arc(x + 2, bodyTop + (bodyBottom - bodyTop) * 0.5, 3.5, 0, Math.PI * 2);
++  ctx.fill();
++
++  // --- Wheels (large, boxy arches) ---
++  ctx.fillStyle = c.carWheel;
++  ctx.beginPath();
++  ctx.arc(x + 19, wheelY, wheelR, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.beginPath();
++  ctx.arc(x + w - 19, wheelY, wheelR, 0, Math.PI * 2);
++  ctx.fill();
++  // Chrome hubcaps (multi-spoke)
++  ctx.fillStyle = "#c8c8c8";
++  ctx.beginPath();
++  ctx.arc(x + 19, wheelY, 4.5, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.beginPath();
++  ctx.arc(x + w - 19, wheelY, 4.5, 0, Math.PI * 2);
++  ctx.fill();
++  // Spoke lines
++  ctx.strokeStyle = "#aaa";
++  ctx.lineWidth = 0.7;
++  for (const wx of [x + 19, x + w - 19]) {
++    for (let i = 0; i < 5; i++) {
++      const a = (i * Math.PI * 2) / 5;
++      ctx.beginPath();
++      ctx.moveTo(wx + Math.cos(a) * 2, wheelY + Math.sin(a) * 2);
++      ctx.lineTo(wx + Math.cos(a) * (wheelR - 1), wheelY + Math.sin(a) * (wheelR - 1));
++      ctx.stroke();
++    }
++  }
++
++  // --- Body outline ---
++  ctx.strokeStyle = pinkDark;
++  ctx.lineWidth = 1.2;
++  ctx.strokeRect(x + 2, bodyTop, w - 4, bodyBottom - bodyTop);
++}
++
++function drawCactus(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
++  const green = palette.obstacle.cactus ?? "#3a7a38";
++  const highlight = palette.obstacle.cactusHighlight ?? "#4a9a48";
++  const spine = palette.obstacle.cactusSpine ?? "#2a5a28";
++  const cx = x + w / 2;
++  const trunkW = w * 0.38;
++
++  // Main trunk
++  ctx.fillStyle = green;
++  ctx.beginPath();
++  ctx.moveTo(cx - trunkW / 2, y + h);
++  ctx.lineTo(cx - trunkW / 2, y + h * 0.08);
++  ctx.quadraticCurveTo(cx, y - h * 0.02, cx + trunkW / 2, y + h * 0.08);
++  ctx.lineTo(cx + trunkW / 2, y + h);
++  ctx.closePath();
++  ctx.fill();
++
++  // Right arm (at ~35% height)
++  const armY = y + h * 0.35;
++  ctx.beginPath();
++  ctx.moveTo(cx + trunkW / 2, armY);
++  ctx.lineTo(x + w * 0.85, armY);
++  ctx.quadraticCurveTo(x + w * 0.92, armY, x + w * 0.88, armY - h * 0.22);
++  ctx.lineTo(x + w * 0.78, armY - h * 0.2);
++  ctx.quadraticCurveTo(x + w * 0.82, armY - h * 0.02, x + w * 0.78, armY);
++  ctx.lineTo(cx + trunkW / 2, armY + h * 0.06);
++  ctx.closePath();
++  ctx.fill();
++
++  // Left arm (at ~55% height)
++  const armY2 = y + h * 0.55;
++  ctx.beginPath();
++  ctx.moveTo(cx - trunkW / 2, armY2);
++  ctx.lineTo(x + w * 0.15, armY2);
++  ctx.quadraticCurveTo(x + w * 0.08, armY2, x + w * 0.12, armY2 - h * 0.18);
++  ctx.lineTo(x + w * 0.22, armY2 - h * 0.16);
++  ctx.quadraticCurveTo(x + w * 0.18, armY2 - h * 0.02, x + w * 0.22, armY2);
++  ctx.lineTo(cx - trunkW / 2, armY2 + h * 0.06);
++  ctx.closePath();
++  ctx.fill();
++
++  // Highlight stripe
++  ctx.fillStyle = highlight;
++  ctx.beginPath();
++  ctx.moveTo(cx + trunkW * 0.1, y + h * 0.1);
++  ctx.lineTo(cx + trunkW * 0.35, y + h * 0.12);
++  ctx.lineTo(cx + trunkW * 0.35, y + h * 0.95);
++  ctx.lineTo(cx + trunkW * 0.1, y + h * 0.95);
++  ctx.closePath();
++  ctx.fill();
++
++  // Vertical ribbing
++  ctx.strokeStyle = spine;
++  ctx.lineWidth = 0.6;
++  ctx.beginPath();
++  ctx.moveTo(cx - trunkW * 0.15, y + h * 0.1);
++  ctx.lineTo(cx - trunkW * 0.15, y + h * 0.95);
++  ctx.moveTo(cx + trunkW * 0.15, y + h * 0.1);
++  ctx.lineTo(cx + trunkW * 0.15, y + h * 0.95);
++  ctx.stroke();
++
++  // Outline
++  ctx.strokeStyle = spine;
++  ctx.lineWidth = 0.8;
++  ctx.beginPath();
++  ctx.moveTo(cx - trunkW / 2, y + h);
++  ctx.lineTo(cx - trunkW / 2, y + h * 0.08);
++  ctx.quadraticCurveTo(cx, y - h * 0.02, cx + trunkW / 2, y + h * 0.08);
++  ctx.lineTo(cx + trunkW / 2, y + h);
++  ctx.stroke();
++}
++
++function drawDubaiChocolate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
++  const choc = palette.obstacle.chocolate ?? "#5a3a20";
++  const chocDark = palette.obstacle.chocolateDark ?? "#3a2210";
++  const wrapper = palette.obstacle.chocolateWrapper ?? "#d4a844";
++
++  // Main chocolate body
++  ctx.fillStyle = choc;
++  ctx.fillRect(x, y, w, h);
++
++  // Chocolate segment grid
++  ctx.strokeStyle = chocDark;
++  ctx.lineWidth = 1.2;
++  const cols = 8;
++  const rows = 3;
++  for (let i = 1; i < cols; i++) {
++    const lx = x + (w / cols) * i;
++    ctx.beginPath();
++    ctx.moveTo(lx, y + 3);
++    ctx.lineTo(lx, y + h - 3);
++    ctx.stroke();
++  }
++  for (let i = 1; i < rows; i++) {
++    const ly = y + (h / rows) * i;
++    ctx.beginPath();
++    ctx.moveTo(x + 3, ly);
++    ctx.lineTo(x + w - 3, ly);
++    ctx.stroke();
++  }
++
++  // Top highlight
++  ctx.fillStyle = "rgba(255,255,255,0.08)";
++  ctx.fillRect(x, y, w, 4);
++
++  // Bottom shadow
++  ctx.fillStyle = "rgba(0,0,0,0.15)";
++  ctx.fillRect(x, y + h - 4, w, 4);
++
++  // Gold wrapper peeled back on left end
++  ctx.fillStyle = wrapper;
++  ctx.beginPath();
++  ctx.moveTo(x, y);
++  ctx.lineTo(x + 28, y);
++  ctx.lineTo(x + 22, y - 12);
++  ctx.lineTo(x + 8, y - 14);
++  ctx.lineTo(x - 4, y - 8);
++  ctx.closePath();
++  ctx.fill();
++  ctx.strokeStyle = "#c09838";
++  ctx.lineWidth = 0.8;
++  ctx.beginPath();
++  ctx.moveTo(x + 6, y - 2);
++  ctx.lineTo(x + 14, y - 12);
++  ctx.stroke();
++
++  // Bottom wrapper edge
++  ctx.fillStyle = wrapper;
++  ctx.beginPath();
++  ctx.moveTo(x, y + h);
++  ctx.lineTo(x + 24, y + h);
++  ctx.lineTo(x + 18, y + h + 8);
++  ctx.lineTo(x + 4, y + h + 6);
++  ctx.lineTo(x - 2, y + h + 3);
++  ctx.closePath();
++  ctx.fill();
++
++  // "DUBAI" label
++  ctx.fillStyle = wrapper;
++  ctx.font = "bold 10px sans-serif";
++  ctx.textAlign = "center";
++  ctx.textBaseline = "middle";
++  ctx.fillText("DUBAI", x + w * 0.55, y + h * 0.5);
++
++  // Outline
++  ctx.strokeStyle = chocDark;
++  ctx.lineWidth = 1.5;
++  ctx.strokeRect(x, y, w, h);
++}
++
++function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
++  const frameColor = palette.obstacle.billboardFrame ?? "#a0a0a0";
++  const postColor = palette.obstacle.billboardPost ?? "#5a5a5a";
++
++  // Layout: sign panel on top, short posts below
++  const signH = h * 0.81;  // ~75px for 92h — legs are only 19%
++  const postStartY = y + signH;
++  const postW = 5;
++  const postLeftX = x + w * 0.12;
++  const postRightX = x + w * 0.88 - postW;
++
++  // --- Support posts (steel I-beams) ---
++  ctx.fillStyle = postColor;
++  ctx.fillRect(postLeftX, postStartY, postW, h - signH);
++  ctx.fillRect(postRightX, postStartY, postW, h - signH);
++  // Post highlight edge
++  ctx.fillStyle = "#7a7a7a";
++  ctx.fillRect(postLeftX + 1, postStartY, 1.5, h - signH);
++  ctx.fillRect(postRightX + 1, postStartY, 1.5, h - signH);
++  // Post base plates
++  ctx.fillStyle = postColor;
++  ctx.fillRect(postLeftX - 3, y + h - 3, postW + 6, 3);
++  ctx.fillRect(postRightX - 3, y + h - 3, postW + 6, 3);
++  // Cross brace between posts
++  ctx.strokeStyle = postColor;
++  ctx.lineWidth = 1.5;
++  ctx.beginPath();
++  ctx.moveTo(postLeftX + postW, postStartY + 8);
++  ctx.lineTo(postRightX, postStartY + 8);
++  ctx.stroke();
++
++  // --- Sign panel background (white) ---
++  ctx.fillStyle = "#ffffff";
++  ctx.fillRect(x + 2, y + 2, w - 4, signH - 4);
++
++  // --- Ad interior scene ---
++  const adX = x + 4;
++  const adY = y + 4;
++  const adW = w - 8; // ~132
++  const adH = signH - 8; // ~42
++
++  // Sky gradient (teal-blue)
++  const skyGrad = ctx.createLinearGradient(adX, adY, adX, adY + adH * 0.65);
++  skyGrad.addColorStop(0, "#1a6a8a");
++  skyGrad.addColorStop(0.5, "#3898b8");
++  skyGrad.addColorStop(1, "#68c8d8");
++  ctx.fillStyle = skyGrad;
++  ctx.fillRect(adX, adY, adW, adH * 0.65);
++
++  // Water strip (teal with reflections)
++  ctx.fillStyle = "#2088a0";
++  ctx.fillRect(adX, adY + adH * 0.55, adW, adH * 0.15);
++  // Water sparkles
++  ctx.strokeStyle = "rgba(255,255,255,0.3)";
++  ctx.lineWidth = 0.5;
++  for (let i = 0; i < 8; i++) {
++    const sx = adX + adW * (0.05 + i * 0.12);
++    const sy = adY + adH * 0.6 + Math.random() * adH * 0.06;
++    ctx.beginPath();
++    ctx.moveTo(sx, sy);
++    ctx.lineTo(sx + 3, sy);
++    ctx.stroke();
++  }
++
++  // Sand/ground at bottom
++  ctx.fillStyle = "#d4b87a";
++  ctx.fillRect(adX, adY + adH * 0.68, adW, adH * 0.32);
++
++  // --- Skyscrapers (4 simplified towers) ---
++  const towers = [
++    { cx: 0.15, tw: 0.08, th: 0.5, color: "#b8d0e0" },
++    { cx: 0.32, tw: 0.06, th: 0.55, color: "#c8d8e8" },
++    { cx: 0.68, tw: 0.07, th: 0.48, color: "#a8c0d0" },
++    { cx: 0.82, tw: 0.05, th: 0.42, color: "#c0d0e0" },
++  ];
++  for (const t of towers) {
++    const tx = adX + adW * t.cx - (adW * t.tw) / 2;
++    const ty = adY + adH * (0.55 - t.th);
++    const ttw = adW * t.tw;
++    const tth = adH * t.th;
++    ctx.fillStyle = t.color;
++    ctx.fillRect(tx, ty, ttw, tth);
++    // Windows (tiny dots)
++    ctx.fillStyle = "rgba(255,255,255,0.4)";
++    for (let wy = 0; wy < tth - 2; wy += 4) {
++      for (let wx = 1; wx < ttw - 1; wx += 3) {
++        ctx.fillRect(tx + wx, ty + wy + 1, 1.5, 1.5);
++      }
++    }
++  }
++
++  // --- Sail-shaped tower (Burj Al Arab silhouette) ---
++  ctx.fillStyle = "#d0e0f0";
++  ctx.beginPath();
++  ctx.moveTo(adX + adW * 0.48, adY + adH * 0.52);
++  ctx.lineTo(adX + adW * 0.46, adY + adH * 0.08);
++  ctx.quadraticCurveTo(adX + adW * 0.5, adY + adH * 0.02, adX + adW * 0.56, adY + adH * 0.1);
++  ctx.lineTo(adX + adW * 0.54, adY + adH * 0.52);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- Palm tree silhouettes (3 palms) ---
++  const palmPositions = [0.22, 0.55, 0.88];
++  for (const px of palmPositions) {
++    const palmX = adX + adW * px;
++    const palmBase = adY + adH * 0.62;
++    const palmTop = adY + adH * 0.3;
++    // Trunk
++    ctx.strokeStyle = "#4a6838";
++    ctx.lineWidth = 1.5;
++    ctx.beginPath();
++    ctx.moveTo(palmX, palmBase);
++    ctx.quadraticCurveTo(palmX + 2, (palmBase + palmTop) / 2, palmX + 1, palmTop);
++    ctx.stroke();
++    // Fronds (small green fan)
++    ctx.fillStyle = "#3a7a38";
++    for (let f = 0; f < 5; f++) {
++      const angle = -Math.PI * 0.8 + (f * Math.PI * 1.6) / 4;
++      ctx.beginPath();
++      ctx.moveTo(palmX + 1, palmTop);
++      ctx.quadraticCurveTo(
++        palmX + 1 + Math.cos(angle) * 6,
++        palmTop + Math.sin(angle) * 3,
++        palmX + 1 + Math.cos(angle) * 10,
++        palmTop + Math.sin(angle) * 6
++      );
++      ctx.lineTo(palmX + 1, palmTop + 1);
++      ctx.closePath();
++      ctx.fill();
++    }
++  }
++
++  // --- Small yacht in water ---
++  ctx.fillStyle = "#ffffff";
++  ctx.beginPath();
++  ctx.moveTo(adX + adW * 0.4, adY + adH * 0.58);
++  ctx.lineTo(adX + adW * 0.44, adY + adH * 0.62);
++  ctx.lineTo(adX + adW * 0.36, adY + adH * 0.62);
++  ctx.closePath();
++  ctx.fill();
++  // Mast
++  ctx.strokeStyle = "#ffffff";
++  ctx.lineWidth = 0.5;
++  ctx.beginPath();
++  ctx.moveTo(adX + adW * 0.4, adY + adH * 0.58);
++  ctx.lineTo(adX + adW * 0.4, adY + adH * 0.52);
++  ctx.stroke();
++
++  // --- Text: project name ---
++  ctx.fillStyle = "#1a3a4a";
++  ctx.font = `bold ${Math.max(7, adH * 0.18 | 0)}px sans-serif`;
++  ctx.textAlign = "center";
++  ctx.textBaseline = "top";
++  ctx.fillText("DUBAI HORIZON", adX + adW * 0.5, adY + adH * 0.72);
++
++  // --- Subtext ---
++  ctx.fillStyle = "#8a6a30";
++  ctx.font = `${Math.max(5, adH * 0.12 | 0)}px sans-serif`;
++  ctx.fillText("RESIDENCES", adX + adW * 0.5, adY + adH * 0.84);
++
++  // --- Decorative Arabic-style line (geometric ornament) ---
++  ctx.strokeStyle = "#c8a050";
++  ctx.lineWidth = 0.6;
++  const ornY = adY + adH * 0.7;
++  ctx.beginPath();
++  ctx.moveTo(adX + adW * 0.15, ornY);
++  ctx.lineTo(adX + adW * 0.85, ornY);
++  ctx.stroke();
++  // Small diamond ornaments along the line
++  ctx.fillStyle = "#c8a050";
++  for (let d = 0; d < 5; d++) {
++    const dx = adX + adW * (0.25 + d * 0.125);
++    ctx.beginPath();
++    ctx.moveTo(dx, ornY - 1.5);
++    ctx.lineTo(dx + 1.5, ornY);
++    ctx.lineTo(dx, ornY + 1.5);
++    ctx.lineTo(dx - 1.5, ornY);
++    ctx.closePath();
++    ctx.fill();
++  }
++
++  // --- Crescent + tower logo (top-left of ad) ---
++  ctx.fillStyle = "#c8a050";
++  // Crescent
++  ctx.beginPath();
++  ctx.arc(adX + 8, adY + 6, 3.5, 0.3, Math.PI * 2 - 0.3);
++  ctx.fill();
++  ctx.fillStyle = "#1a6a8a"; // cut-out for crescent shape
++  ctx.beginPath();
++  ctx.arc(adX + 9.5, adY + 5.5, 2.8, 0, Math.PI * 2);
++  ctx.fill();
++  // Small star
++  ctx.fillStyle = "#c8a050";
++  ctx.beginPath();
++  ctx.arc(adX + 12, adY + 5, 1, 0, Math.PI * 2);
++  ctx.fill();
++
++  // --- "COMING SOON" badge (bottom-right) ---
++  ctx.fillStyle = "#c44040";
++  ctx.fillRect(adX + adW - 32, adY + adH - 9, 30, 8);
++  ctx.fillStyle = "#ffffff";
++  ctx.font = `bold ${Math.max(4, adH * 0.1 | 0)}px sans-serif`;
++  ctx.textAlign = "center";
++  ctx.textBaseline = "middle";
++  ctx.fillText("COMING SOON", adX + adW - 17, adY + adH - 5);
++
++  // --- Sign panel metal frame (on top of everything) ---
++  ctx.strokeStyle = frameColor;
++  ctx.lineWidth = 3;
++  ctx.strokeRect(x + 1, y + 1, w - 2, signH - 2);
++  // Inner frame line
++  ctx.strokeStyle = "#b8b8b8";
++  ctx.lineWidth = 1;
++  ctx.strokeRect(x + 3, y + 3, w - 6, signH - 6);
++
++  // Reset text alignment
++  ctx.textAlign = "start";
++  ctx.textBaseline = "alphabetic";
++}
++
++function drawLamborghiniHuracan(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
++  const green = palette.obstacle.lamboGreen ?? "#2d8a35";
++  const greenDark = palette.obstacle.lamboGreenDark ?? "#1e6a25";
++  const windowColor = palette.obstacle.lamboWindow ?? "#2a3a4a";
++  const c = palette.obstacle;
++  const wheelR = 7;
++  const wheelY = y + h - wheelR;
++  const bodyBottom = y + h - wheelR - 1;
++
++  // --- Wheel arches (low profile) ---
++  ctx.fillStyle = "#1a1a1a";
++  for (const wx of [x + 16, x + w - 16]) {
++    ctx.beginPath();
++    ctx.arc(wx, bodyBottom + 2, wheelR + 2, Math.PI, 0);
++    ctx.fill();
++  }
++
++  // --- Main body (very low, wedge-shaped) ---
++  ctx.fillStyle = green;
++  ctx.beginPath();
++  // Rear — slightly angled up
++  ctx.moveTo(x, bodyBottom);
++  ctx.lineTo(x, y + h * 0.38);
++  // Rear deck rises to roofline
++  ctx.lineTo(x + w * 0.12, y + h * 0.22);
++  // Roof (very low, flat)
++  ctx.lineTo(x + w * 0.32, y + h * 0.1);
++  // Windshield angle (very aggressive rake)
++  ctx.lineTo(x + w * 0.52, y + 1);
++  // Hood slopes down — wedge shape
++  ctx.lineTo(x + w * 0.85, y + h * 0.2);
++  // Front nose (very low)
++  ctx.lineTo(x + w, y + h * 0.35);
++  ctx.lineTo(x + w, bodyBottom);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- Side air intake (large angular scoop) ---
++  ctx.fillStyle = "#1a1a1a";
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.42, y + h * 0.42);
++  ctx.lineTo(x + w * 0.58, y + h * 0.32);
++  ctx.lineTo(x + w * 0.58, y + h * 0.55);
++  ctx.lineTo(x + w * 0.42, y + h * 0.62);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- Body crease line (sharp Lamborghini character line) ---
++  ctx.strokeStyle = greenDark;
++  ctx.lineWidth = 1;
++  ctx.beginPath();
++  ctx.moveTo(x + 3, y + h * 0.45);
++  ctx.lineTo(x + w * 0.4, y + h * 0.42);
++  ctx.moveTo(x + w * 0.6, y + h * 0.38);
++  ctx.lineTo(x + w - 3, y + h * 0.4);
++  ctx.stroke();
++
++  // --- Window (very low, angular) ---
++  ctx.fillStyle = windowColor;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.18, y + h * 0.2);
++  ctx.lineTo(x + w * 0.32, y + h * 0.12);
++  ctx.lineTo(x + w * 0.5, y + 3);
++  ctx.lineTo(x + w * 0.48, y + h * 0.18);
++  ctx.lineTo(x + w * 0.32, y + h * 0.25);
++  ctx.closePath();
++  ctx.fill();
++  // Window glare
++  ctx.fillStyle = "rgba(255,255,255,0.15)";
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.44, y + 6);
++  ctx.lineTo(x + w * 0.48, y + 4);
++  ctx.lineTo(x + w * 0.46, y + h * 0.18);
++  ctx.lineTo(x + w * 0.42, y + h * 0.2);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- Rear engine vent ---
++  ctx.fillStyle = "#1a1a1a";
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.04, y + h * 0.28);
++  ctx.lineTo(x + w * 0.14, y + h * 0.22);
++  ctx.lineTo(x + w * 0.14, y + h * 0.35);
++  ctx.lineTo(x + w * 0.04, y + h * 0.38);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- Front splitter (low) ---
++  ctx.fillStyle = "#1a1a1a";
++  ctx.fillRect(x + w * 0.78, bodyBottom - 2, w * 0.22 + 1, 3);
++
++  // --- Rear diffuser ---
++  ctx.fillStyle = "#1a1a1a";
++  ctx.fillRect(x - 1, bodyBottom - 2, w * 0.12, 3);
++
++  // --- Headlights (angular LED) ---
++  ctx.fillStyle = c.carHeadlight;
++  ctx.beginPath();
++  ctx.moveTo(x + w * 0.85, y + h * 0.2);
++  ctx.lineTo(x + w - 1, y + h * 0.34);
++  ctx.lineTo(x + w - 4, y + h * 0.34);
++  ctx.lineTo(x + w * 0.84, y + h * 0.24);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- Taillights (Y-shaped Lamborghini style — simplified) ---
++  ctx.fillStyle = c.carTaillight;
++  ctx.beginPath();
++  ctx.moveTo(x + 1, y + h * 0.32);
++  ctx.lineTo(x + 4, y + h * 0.28);
++  ctx.lineTo(x + 4, y + h * 0.42);
++  ctx.lineTo(x + 1, y + h * 0.45);
++  ctx.closePath();
++  ctx.fill();
++
++  // --- Rear spoiler (small lip) ---
++  ctx.fillStyle = greenDark;
++  ctx.fillRect(x - 1, y + h * 0.3, 3, 2);
++
++  // --- Wheels (low profile) ---
++  ctx.fillStyle = c.carWheel;
++  ctx.beginPath();
++  ctx.arc(x + 16, wheelY, wheelR, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.beginPath();
++  ctx.arc(x + w - 16, wheelY, wheelR, 0, Math.PI * 2);
++  ctx.fill();
++  // Sport alloy rims
++  ctx.fillStyle = "#2a2a2a";
++  ctx.beginPath();
++  ctx.arc(x + 16, wheelY, 3.5, 0, Math.PI * 2);
++  ctx.fill();
++  ctx.beginPath();
++  ctx.arc(x + w - 16, wheelY, 3.5, 0, Math.PI * 2);
++  ctx.fill();
++  // Y-spoke pattern
++  ctx.strokeStyle = "#555";
++  ctx.lineWidth = 0.8;
++  for (const wx of [x + 16, x + w - 16]) {
++    for (let i = 0; i < 5; i++) {
++      const a = (i * Math.PI * 2) / 5;
++      ctx.beginPath();
++      ctx.moveTo(wx + Math.cos(a) * 1.5, wheelY + Math.sin(a) * 1.5);
++      ctx.lineTo(wx + Math.cos(a) * (wheelR - 1), wheelY + Math.sin(a) * (wheelR - 1));
++      ctx.stroke();
++    }
++  }
++
++  // --- Body outline ---
++  ctx.strokeStyle = greenDark;
++  ctx.lineWidth = 1;
++  ctx.beginPath();
++  ctx.moveTo(x, bodyBottom);
++  ctx.lineTo(x, y + h * 0.38);
++  ctx.lineTo(x + w * 0.12, y + h * 0.22);
++  ctx.lineTo(x + w * 0.32, y + h * 0.1);
++  ctx.lineTo(x + w * 0.52, y + 1);
++  ctx.lineTo(x + w * 0.85, y + h * 0.2);
++  ctx.lineTo(x + w, y + h * 0.35);
++  ctx.lineTo(x + w, bodyBottom);
++  ctx.stroke();
++}
++
+ export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette) {
+   const { type, x, y, width: w, height: h } = obstacle;
+   switch (type) {
+@@ -666,5 +1721,13 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleIn
+     case ObstacleType.STRAIGHT_RAMP:      drawStraightRamp(ctx, x, y, w, h, palette); break;
+     case ObstacleType.CURVED_RAMP:        drawCurvedRamp(ctx, x, y, w, h, palette); break;
+     case ObstacleType.CONTAINER_WITH_RAMP: drawContainerWithRamp(ctx, x, y, w, h, palette); break;
++    case ObstacleType.CAMEL:              drawCamel(ctx, x, y, w, h, palette); break;
++    case ObstacleType.SAND_TRAP:          drawSandTrap(ctx, x, y, w, h, palette); break;
++    case ObstacleType.LAND_CRUISER:       drawLandCruiser(ctx, x, y, w, h, palette); break;
++    case ObstacleType.PINK_G_CLASS:       drawPinkGClass(ctx, x, y, w, h, palette); break;
++    case ObstacleType.CACTUS:             drawCactus(ctx, x, y, w, h, palette); break;
++    case ObstacleType.DUBAI_CHOCOLATE:    drawDubaiChocolate(ctx, x, y, w, h, palette); break;
++    case ObstacleType.LAMBORGHINI_HURACAN: drawLamborghiniHuracan(ctx, x, y, w, h, palette); break;
++    case ObstacleType.DUBAI_BILLBOARD:    drawDubaiBillboard(ctx, x, y, w, h, palette); break;
+   }
+ }
+diff --git a/game/rendering/ParticleRenderer.ts b/game/rendering/ParticleRenderer.ts
+new file mode 100644
+index 0000000..4dc61c2
+--- /dev/null
++++ b/game/rendering/ParticleRenderer.ts
+@@ -0,0 +1,58 @@
++import type { ParticleOverlayConfig } from "../environments/types";
++
++export interface Particle {
++  x: number;
++  y: number;
++  size: number;
++}
++
++export function createParticles(
++  canvasW: number,
++  canvasH: number,
++  config: ParticleOverlayConfig
++): Particle[] {
++  const area = (canvasW * canvasH) / 10_000; // per 100×100px
++  const count = Math.floor(area * config.density);
++  const particles: Particle[] = [];
++  for (let i = 0; i < count; i++) {
++    particles.push({
++      x: Math.random() * canvasW,
++      y: Math.random() * canvasH,
++      size: config.size.min + Math.random() * (config.size.max - config.size.min),
++    });
++  }
++  return particles;
++}
++
++export function updateParticles(
++  particles: Particle[],
++  config: ParticleOverlayConfig,
++  dt: number,
++  canvasW: number,
++  canvasH: number
++): void {
++  for (const p of particles) {
++    p.x += config.speed.x * dt;
++    p.y += config.speed.y * dt;
++    // Wrap around screen edges
++    if (p.x > canvasW) p.x -= canvasW;
++    if (p.x < 0) p.x += canvasW;
++    if (p.y > canvasH) p.y -= canvasH;
++    if (p.y < 0) p.y += canvasH;
++  }
++}
++
++export function drawParticles(
++  ctx: CanvasRenderingContext2D,
++  particles: Particle[],
++  config: ParticleOverlayConfig
++): void {
++  ctx.fillStyle = config.color;
++  ctx.globalAlpha = config.opacity;
++  for (const p of particles) {
++    ctx.beginPath();
++    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
++    ctx.fill();
++  }
++  ctx.globalAlpha = 1;
++}
+diff --git a/game/rendering/index.ts b/game/rendering/index.ts
+index 7d1763e..c805cc6 100644
+--- a/game/rendering/index.ts
++++ b/game/rendering/index.ts
+@@ -1,5 +1,7 @@
+-export { drawBackground, drawHouse, drawTreeSilhouette, drawDeer, drawWalkingPerson, SUBURBAN_BACKGROUND_DRAWERS } from "./BackgroundRenderer";
++export { drawBackground, drawHouse, drawTreeSilhouette, drawDeer, drawWalkingPerson, drawPalmTree, drawBackgroundCamel, SUBURBAN_BACKGROUND_DRAWERS, DUBAI_BACKGROUND_DRAWERS } from "./BackgroundRenderer";
+ export { drawPlayer, drawSkinPreview } from "./PlayerRenderer";
+ export { drawObstacle } from "./ObstacleRenderer";
+ export { drawFloatingText } from "./FloatingTextRenderer";
+ export { drawCrashBike, drawCrashRider } from "./CrashRenderer";
++export { createParticles, updateParticles, drawParticles } from "./ParticleRenderer";
++export type { Particle } from "./ParticleRenderer";
+diff --git a/game/types.ts b/game/types.ts
+index 22ef1b5..1489df3 100644
+--- a/game/types.ts
++++ b/game/types.ts
+@@ -44,6 +44,16 @@ export enum ObstacleType {
+   STRAIGHT_RAMP = "STRAIGHT_RAMP",
+   CURVED_RAMP = "CURVED_RAMP",
+   CONTAINER_WITH_RAMP = "CONTAINER_WITH_RAMP",
++
++  // Dubai biome obstacles
++  CAMEL = "CAMEL",
++  SAND_TRAP = "SAND_TRAP",
++  LAND_CRUISER = "LAND_CRUISER",
++  PINK_G_CLASS = "PINK_G_CLASS",
++  CACTUS = "CACTUS",
++  DUBAI_CHOCOLATE = "DUBAI_CHOCOLATE",
++  LAMBORGHINI_HURACAN = "LAMBORGHINI_HURACAN",
++  DUBAI_BILLBOARD = "DUBAI_BILLBOARD",
+ }
+ 
+ export enum TrickType {
+diff --git a/lib/leaderboard.ts b/lib/leaderboard.ts
+index 8686e69..313dfde 100644
+--- a/lib/leaderboard.ts
++++ b/lib/leaderboard.ts
+@@ -131,6 +131,14 @@ export async function getTopScores(
+   return getTopScoresFile(limit);
+ }
+ 
++export async function getTotalPlayers(): Promise<number> {
++  const redis = getRedis();
++  if (redis) {
++    return redis.zcard(LEADERBOARD_KEY);
++  }
++  return readFileStore().length;
++}
++
+ export async function addScore(name: string, score: number, skin?: string): Promise<void> {
+   const redis = getRedis();
+   if (redis) {
+diff --git a/public/music-dubai.mp3 b/public/music-dubai.mp3
+new file mode 100644
+index 0000000..e4795f7
+Binary files /dev/null and b/public/music-dubai.mp3 differ

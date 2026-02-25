@@ -8,28 +8,14 @@ import {
   MAX_SPEED_MULTIPLIER,
   FLIP_TOLERANCE,
   SKETCHY_TOLERANCE,
-  CRASH_DURATION,
-  CRASH_GRAVITY,
-  CRASH_BOUNCE_DAMPING,
-  CRASH_SHAKE_INITIAL,
   AMBULANCE_CHANCE,
-  AMBULANCE_WIDTH,
-  AMBULANCE_HEIGHT,
-  AMBULANCE_DRIVE_SPEED,
-  AMBULANCE_DRIVE_OUT_SPEED,
-  AMBULANCE_STOP_MS,
-  AMBULANCE_REVIVE_MS,
 } from "./constants";
 import {
   FloatingText,
-  evaluateFlipLanding,
-  evaluatePoseTrickLanding,
-  evaluateComboLanding,
-  resetFlipState,
-  resetPoseState,
-  resetAllTrickState,
   createTrickFloatingText,
   updateFloatingTexts,
+  processTrickLanding,
+  TrickContext
 } from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
@@ -42,6 +28,7 @@ import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
+import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbulanceLogic } from "./CrashSequence";
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
@@ -83,7 +70,7 @@ export class Engine {
   private debugIndex: number = 0;
   private debugGap: number = 500;
   private crashState: CrashState = {
-    elapsed: 0, duration: CRASH_DURATION,
+    elapsed: 0, duration: 1, // Will be initialized
     shakeIntensity: 0, shakeOffsetX: 0, shakeOffsetY: 0,
     riderX: 0, riderY: 0, riderVX: 0, riderVY: 0,
     riderAngle: 0, riderAngularVel: 0, riderBounceCount: 0,
@@ -260,18 +247,17 @@ export class Engine {
     }
 
     const FULL_FLIP = Math.PI * 2;
+    const trickCtx: TrickContext = {
+      player: this.player,
+      onCrash: () => this.startCrash(),
+      onAwardBonus: (label, bonus, sketchy) => this.awardTrickBonus(label, bonus, sketchy)
+    };
 
     // Trick landing checks — unified to support combos (pose + flip simultaneously)
     if (wasAirborne && this.player.isOnGround) {
       const hadFlip = wasBackflipping;
       const hadPose = this.player.activeTrick !== TrickType.NONE;
-      if (hadFlip && hadPose) {
-        if (this.handleComboLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
-      } else if (hadFlip) {
-        if (this.handleFlipLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
-      } else if (hadPose) {
-        if (this.handlePoseTrickLanding()) return;
-      }
+      if (processTrickLanding(trickCtx, hadFlip, hadPose, prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
     }
 
     // Update floating texts (float up + fade out)
@@ -321,13 +307,7 @@ export class Engine {
           // Check trick landing on rideable (combo-aware)
           const landFlip = this.player.isBackflipping;
           const landPose = this.player.activeTrick !== TrickType.NONE;
-          if (landFlip && landPose) {
-            if (this.handleComboLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
-          } else if (landFlip) {
-            if (this.handleFlipLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
-          } else if (landPose) {
-            if (this.handlePoseTrickLanding()) return;
-          }
+          if (processTrickLanding(trickCtx, landFlip, landPose, this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
           this.player.ridingObstacle = obs;
           this.player.y = obs.y - this.player.height;
           this.player.velocityY = 0;
@@ -347,7 +327,7 @@ export class Engine {
     this.state = GameState.CRASHING;
     this.sound.stopMusic();
     this.sound.playCrash();
-    this.initCrashState();
+    initCrashPhysics(this.crashState, this.player, this.speed);
     this.callbacks.onStateChange(this.state);
   }
 
@@ -369,73 +349,30 @@ export class Engine {
 
   private startAmbulanceSequence(): void {
     this.state = GameState.AMBULANCE;
-
-    this.ambulance = {
-      x: this.canvasW + 140,
-      y: this.groundY - AMBULANCE_HEIGHT,
-      width: AMBULANCE_WIDTH,
-      height: AMBULANCE_HEIGHT,
-      phase: AmbulancePhase.DRIVING_IN,
-      phaseTimer: 0,
-      targetX: this.player.x + this.player.width + 10,
-      sirenFlash: 0,
-      reviveFlashOpacity: 0,
-    };
-
+    this.ambulance = createAmbulanceState(this.player.x, this.player.width, this.canvasW, this.groundY);
     this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
-
     this.sound.playSiren();
     this.callbacks.onStateChange(this.state);
   }
 
   private updateAmbulance(dt: number, rawDt: number): void {
-    const amb = this.ambulance;
-    if (!amb) return;
+    if (!this.ambulance) return;
 
-    amb.phaseTimer += rawDt;
-    amb.sirenFlash += rawDt;
-
-    // Update floating texts
     this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
 
-    switch (amb.phase) {
-      case AmbulancePhase.DRIVING_IN:
-        amb.x -= AMBULANCE_DRIVE_SPEED * dt;
-        if (amb.x <= amb.targetX) {
-          amb.x = amb.targetX;
-          amb.phase = AmbulancePhase.STOPPED;
-          amb.phaseTimer = 0;
-          this.sound.stopSiren();
-        }
-        break;
+    const action = updateAmbulanceLogic(this.ambulance, dt, rawDt, this.canvasW);
 
-      case AmbulancePhase.STOPPED:
-        if (amb.phaseTimer >= AMBULANCE_STOP_MS) {
-          amb.phase = AmbulancePhase.REVIVING;
-          amb.phaseTimer = 0;
-          amb.reviveFlashOpacity = 1;
-          this.revivePlayer();
-          this.sound.playRevive();
-        }
-        break;
-
-      case AmbulancePhase.REVIVING:
-        amb.reviveFlashOpacity = Math.max(0, 1 - amb.phaseTimer / AMBULANCE_REVIVE_MS);
-        if (amb.phaseTimer >= AMBULANCE_REVIVE_MS) {
-          amb.phase = AmbulancePhase.DRIVING_OUT;
-          amb.phaseTimer = 0;
-          this.state = GameState.RUNNING;
-          this.sound.startMusic();
-          this.callbacks.onStateChange(this.state);
-        }
-        break;
-
-      case AmbulancePhase.DRIVING_OUT:
-        amb.x += AMBULANCE_DRIVE_OUT_SPEED * dt;
-        if (amb.x > this.canvasW + 20) {
-          this.ambulance = null;
-        }
-        break;
+    if (action === "stop_siren") {
+      this.sound.stopSiren();
+    } else if (action === "revive") {
+      this.revivePlayer();
+      this.sound.playRevive();
+    } else if (action === "resume_game") {
+      this.state = GameState.RUNNING;
+      this.sound.startMusic();
+      this.callbacks.onStateChange(this.state);
+    } else if (action === "remove") {
+      this.ambulance = null;
     }
   }
 
@@ -475,134 +412,10 @@ export class Engine {
     });
   }
 
-  private initCrashState(): void {
-    const cs = this.crashState;
-    const p = this.player;
-    const speedFactor = this.speed / INITIAL_SPEED;
-
-    cs.elapsed = 0;
-    cs.duration = CRASH_DURATION;
-    cs.shakeIntensity = CRASH_SHAKE_INITIAL;
-    cs.shakeOffsetX = 0;
-    cs.shakeOffsetY = 0;
-
-    // Rider: ejected forward and upward
-    cs.riderX = p.x + 10;
-    cs.riderY = p.y - 5;
-    cs.riderVX = this.speed * 0.6 + 1.5;
-    cs.riderVY = -6 - speedFactor * 2;
-    cs.riderAngle = 0;
-    cs.riderAngularVel = 0.15 + speedFactor * 0.08;
-    cs.riderBounceCount = 0;
-
-    // Carry upward momentum if player was still rising
-    if (p.velocityY < 0) {
-      cs.riderVY += p.velocityY * 0.5;
-    }
-
-    // Bike: slides forward, slight upward kick
-    cs.bikeX = p.x;
-    cs.bikeY = p.y + p.height * 0.3;
-    cs.bikeVX = this.speed * 0.3;
-    cs.bikeVY = -2;
-    cs.bikeAngle = 0;
-    cs.bikeAngularVel = -0.08;
-    cs.bikeBounceCount = 0;
-    cs.bikeWheelRotation = p.wheelRotation;
-  }
-
   private updateCrash(dt: number, rawDt: number): void {
-    const cs = this.crashState;
-    cs.elapsed += rawDt / 1000;
-
-    if (cs.elapsed >= cs.duration) {
+    if (updateCrashPhysics(this.crashState, dt, rawDt, this.groundY)) {
       this.gameOver();
-      return;
     }
-
-    const groundY = this.groundY;
-    const friction = 0.95;
-    const angularDamping = 0.7;
-
-    // Screen shake — exponential decay
-    cs.shakeIntensity *= 1 - 0.06 * dt;
-    if (cs.shakeIntensity < 0.3) cs.shakeIntensity = 0;
-    cs.shakeOffsetX = (Math.random() - 0.5) * 2 * cs.shakeIntensity;
-    cs.shakeOffsetY = (Math.random() - 0.5) * 2 * cs.shakeIntensity;
-
-    // Rider physics
-    const riderGroundY = groundY - 15;
-    const riderSettled = cs.riderBounceCount >= 2;
-    if (!riderSettled) cs.riderVY += CRASH_GRAVITY * dt;
-    cs.riderX += cs.riderVX * dt;
-    if (!riderSettled) cs.riderY += cs.riderVY * dt;
-    cs.riderAngle += cs.riderAngularVel * dt;
-    cs.riderVX *= Math.pow(friction, dt);
-
-    if (cs.riderY >= riderGroundY && cs.riderVY > 0 && !riderSettled) {
-      cs.riderY = riderGroundY;
-      cs.riderBounceCount++;
-      if (cs.riderBounceCount >= 2) {
-        cs.riderVY = 0;
-        cs.riderAngularVel = 0;
-      } else {
-        cs.riderVY = -cs.riderVY * CRASH_BOUNCE_DAMPING;
-        cs.riderAngularVel *= angularDamping;
-      }
-      cs.riderVX *= 0.7;
-    }
-
-    // Bike physics
-    const bikeGroundY = groundY - 12;
-    const bikeSettled = cs.bikeBounceCount >= 2;
-    if (!bikeSettled) cs.bikeVY += CRASH_GRAVITY * dt;
-    cs.bikeX += cs.bikeVX * dt;
-    if (!bikeSettled) cs.bikeY += cs.bikeVY * dt;
-    cs.bikeAngle += cs.bikeAngularVel * dt;
-    cs.bikeVX *= Math.pow(friction, dt);
-
-    if (cs.bikeY >= bikeGroundY && cs.bikeVY > 0 && !bikeSettled) {
-      cs.bikeY = bikeGroundY;
-      cs.bikeBounceCount++;
-      if (cs.bikeBounceCount >= 2) {
-        cs.bikeVY = 0;
-        cs.bikeAngularVel = 0;
-      } else {
-        cs.bikeVY = -cs.bikeVY * CRASH_BOUNCE_DAMPING;
-        cs.bikeAngularVel *= angularDamping;
-      }
-      cs.bikeVX *= 0.6;
-    }
-
-    // Decelerating wheel spin
-    cs.bikeWheelRotation += cs.bikeVX * dt * 0.08;
-  }
-
-  /** Handle flip landing. Returns true if game over (crash). */
-  private handleFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): boolean {
-    const result = evaluateFlipLanding(angle, direction, fullFlip, tolerance, sketchyTolerance);
-    resetFlipState(this.player);
-    if (result.crashed) { this.startCrash(); return true; }
-    this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
-    return false;
-  }
-
-  /** Handle pose trick landing. Returns true if game over (crash). */
-  private handlePoseTrickLanding(): boolean {
-    const result = evaluatePoseTrickLanding(this.player);
-    resetPoseState(this.player);
-    if (result.crashed) { this.startCrash(); return true; }
-    this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
-    return false;
-  }
-
-  /** Handle combo landing (pose trick + flip simultaneously). Returns true if crash. */
-  private handleComboLanding(angle: number, direction: number, fullFlip: number, tolerance: number, sketchyTolerance: number): boolean {
-    const result = evaluateComboLanding(this.player, angle, direction, fullFlip, tolerance, sketchyTolerance);
-    resetAllTrickState(this.player);
-    if (result.crashed) { this.startCrash(); return true; }
-    this.awardTrickBonus(result.label!, result.bonus!, result.sketchy);
-    return false;
   }
 
   private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): void {

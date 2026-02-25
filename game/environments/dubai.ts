@@ -143,6 +143,8 @@ function generateDubaiElements(
         // Pick a landmark variant (5-8) that isn't the same as the last one
         const landmarks = [5, 6, 7, 8].filter(v => v !== lastLandmarkVariant);
         variant = landmarks[Math.floor(Math.random() * landmarks.length)];
+        // Add 20px breathing room BEFORE the landmark so it stands out
+        x += 20;
       } else {
         variant = Math.floor(Math.random() * 5); // generic 0-4
       }
@@ -195,13 +197,29 @@ function generateDubaiElements(
         roofColor: scheme.roof,
         variant,
       });
-      const gap = 15 + Math.random() * 25;
+
+      const isLandmark = variant >= 5;
+      // Generic skyscrapers pack tightly — they can even overlap slightly
+      // to create a dense city-skyline look. Landmarks always get 20px
+      // breathing room on each side so they stand out.
+      let gap: number;
+      if (isLandmark) {
+        gap = 20;                            // 20px after the landmark
+      } else {
+        gap = -8 + Math.random() * 10;       // –8 to +2 px (tight / overlapping)
+      }
+      // If the NEXT element will be a landmark, peek-add 20px before it.
+      // We can't truly peek, so instead ensure the gap after a landmark
+      // covers both sides: add the pre-gap of the next building here.
+      // (Non-landmark gap already tight, so no extra padding needed.)
+
       x += w + gap;
 
-      // Maybe add a background camel or person in the gap
+      // Maybe add a background camel or person — only in landmark gaps
+      // (generics are too tightly packed for figures)
       if (
-        gap > 20 &&
-        Math.random() > 0.65 &&
+        isLandmark &&
+        Math.random() > 0.5 &&
         lastType !== "bg_camel" &&
         lastType !== "walking_person"
       ) {

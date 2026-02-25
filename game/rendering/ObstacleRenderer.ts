@@ -1327,12 +1327,12 @@ function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: number,
   const frameColor = palette.obstacle.billboardFrame ?? "#a0a0a0";
   const postColor = palette.obstacle.billboardPost ?? "#5a5a5a";
 
-  // Layout: sign panel on top, two posts below
-  const signH = h * 0.62;  // ~50px for 80h
+  // Layout: sign panel on top, short posts below
+  const signH = h * 0.81;  // ~75px for 92h — legs are only 19%
   const postStartY = y + signH;
   const postW = 5;
-  const postLeftX = x + 22;
-  const postRightX = x + w - 27;
+  const postLeftX = x + w * 0.12;
+  const postRightX = x + w * 0.88 - postW;
 
   // --- Support posts (steel I-beams) ---
   ctx.fillStyle = postColor;

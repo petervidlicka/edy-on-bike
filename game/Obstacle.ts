@@ -25,7 +25,7 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.CACTUS]:          { width: 22, height: 60 },
   [ObstacleType.DUBAI_CHOCOLATE]: { width: 176, height: 75 },
   [ObstacleType.LAMBORGHINI_HURACAN]: { width: 88, height: 28 },
-  [ObstacleType.DUBAI_BILLBOARD]:    { width: 238, height: 92 },
+  [ObstacleType.DUBAI_BILLBOARD]:    { width: 309, height: 92 },
 };
 
 function weightedRandom(types: WeightedType[]): ObstacleType {

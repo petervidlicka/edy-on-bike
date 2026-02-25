@@ -158,11 +158,11 @@ function generateDubaiElements(
         // Landmarks
         case 5: // Burj Khalifa — narrow and extremely tall (double tallest generic)
           w = 30 + Math.random() * 10;
-          h = 300 + Math.random() * 100;
+          h = 390 + Math.random() * 130;
           break;
         case 6: // Museum of the Future — wide oval, half the height of generic
           w = 60 + Math.random() * 20;
-          h = 60 + Math.random() * 20;
+          h = 48 + Math.random() * 16;
           break;
         case 7: // Burj Al Arab — sail shape, very tall
           w = 50 + Math.random() * 15;

@@ -812,6 +812,13 @@ function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: number, w:
   const bodyBottom = y + h - wheelR - 2;
   const roofTop = y + 2;
 
+  // Mirror horizontally so the car faces left (direction of travel),
+  // and shift up 10px to compensate for the universal road-sink offset
+  // (which would otherwise push the wheels halfway through the road).
+  ctx.save();
+  ctx.translate(2 * x + w, -10);
+  ctx.scale(-1, 1);
+
   // --- Wheel arches (rounded, larger than G-Class) ---
   ctx.fillStyle = "#1a1a1a";
   for (const wx of [x + 18, x + w - 18]) {
@@ -1005,6 +1012,8 @@ function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: number, w:
   ctx.lineTo(x - 1, bodyTop + 3);
   ctx.closePath();
   ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
@@ -1016,6 +1025,13 @@ function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   const bodyTop = y + 13;
   const bodyBottom = y + h - wheelR - 3;
   const roofTop = y + 1;
+
+  // Mirror horizontally so the car faces left (direction of travel),
+  // and shift up 10px to compensate for the universal road-sink offset
+  // (which would otherwise push the wheels halfway through the road).
+  ctx.save();
+  ctx.translate(2 * x + w, -10);
+  ctx.scale(-1, 1);
 
   // --- Wheel arches (squared off, drawn before body) ---
   ctx.fillStyle = "#1a1a1a";
@@ -1171,6 +1187,8 @@ function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   ctx.strokeStyle = pinkDark;
   ctx.lineWidth = 1.2;
   ctx.strokeRect(x + 2, bodyTop, w - 4, bodyBottom - bodyTop);
+
+  ctx.restore();
 }
 
 function drawCactus(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {

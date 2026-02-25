@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import LeaderboardForm from "./LeaderboardForm";
-import { glassBtn } from "./sharedStyles";
 
 interface LeaderboardEntry {
   name: string;
@@ -25,13 +24,15 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
 
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
+
   const fetchLeaderboard = useCallback(async () => {
     try {
-      const data = await fetch("/api/leaderboard").then((r) => r.json());
+      const data = await fetch(`${apiBase}/api/leaderboard`).then((r) => r.json());
       setLeaderboard(data.scores ?? []);
       setTotalPlayers(data.totalPlayers ?? 0);
     } catch { }
-  }, []);
+  }, [apiBase]);
 
   const handleSaved = useCallback(async () => {
     await fetchLeaderboard();

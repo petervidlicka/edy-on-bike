@@ -651,6 +651,574 @@ function drawContainerWithRamp(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.stroke();
 }
 
+// --- Dubai biome obstacles ---
+
+function drawCamel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const bodyColor = palette.obstacle.camel ?? "#c8a060";
+  const legColor = palette.obstacle.camelLeg ?? "#a08040";
+  const saddleColor = palette.obstacle.camelSaddle ?? "#c44040";
+
+  // Legs (4 thick strokes)
+  ctx.strokeStyle = legColor;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.2, y + h * 0.58);
+  ctx.lineTo(x + w * 0.18, y + h * 0.92);
+  ctx.moveTo(x + w * 0.32, y + h * 0.6);
+  ctx.lineTo(x + w * 0.34, y + h * 0.95);
+  ctx.moveTo(x + w * 0.58, y + h * 0.58);
+  ctx.lineTo(x + w * 0.56, y + h * 0.92);
+  ctx.moveTo(x + w * 0.7, y + h * 0.6);
+  ctx.lineTo(x + w * 0.72, y + h * 0.95);
+  ctx.stroke();
+
+  // Hooves
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.16, y + h * 0.92);
+  ctx.lineTo(x + w * 0.2, y + h * 0.95);
+  ctx.moveTo(x + w * 0.32, y + h * 0.95);
+  ctx.lineTo(x + w * 0.36, y + h * 0.98);
+  ctx.moveTo(x + w * 0.54, y + h * 0.92);
+  ctx.lineTo(x + w * 0.58, y + h * 0.95);
+  ctx.moveTo(x + w * 0.7, y + h * 0.95);
+  ctx.lineTo(x + w * 0.74, y + h * 0.98);
+  ctx.stroke();
+
+  // Body (large oval)
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.ellipse(x + w * 0.48, y + h * 0.48, w * 0.3, h * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Hump
+  ctx.beginPath();
+  ctx.ellipse(x + w * 0.48, y + h * 0.3, w * 0.12, h * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Saddle blanket
+  ctx.fillStyle = saddleColor;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.35, y + h * 0.35);
+  ctx.lineTo(x + w * 0.6, y + h * 0.35);
+  ctx.lineTo(x + w * 0.58, y + h * 0.52);
+  ctx.lineTo(x + w * 0.37, y + h * 0.52);
+  ctx.closePath();
+  ctx.fill();
+
+  // Neck
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.2, y + h * 0.4);
+  ctx.lineTo(x + w * 0.1, y + h * 0.12);
+  ctx.lineTo(x + w * 0.22, y + h * 0.14);
+  ctx.lineTo(x + w * 0.28, y + h * 0.42);
+  ctx.closePath();
+  ctx.fill();
+
+  // Head
+  ctx.beginPath();
+  ctx.ellipse(x + w * 0.08, y + h * 0.1, w * 0.08, h * 0.06, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ear
+  ctx.beginPath();
+  ctx.ellipse(x + w * 0.14, y + h * 0.04, w * 0.025, h * 0.04, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye
+  ctx.fillStyle = "#2a2a2a";
+  ctx.beginPath();
+  ctx.arc(x + w * 0.07, y + h * 0.09, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tail
+  ctx.strokeStyle = bodyColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.78, y + h * 0.42);
+  ctx.quadraticCurveTo(x + w * 0.88, y + h * 0.38, x + w * 0.85, y + h * 0.52);
+  ctx.stroke();
+}
+
+function drawSandTrap(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const sandColor = palette.obstacle.sand ?? "#d8c078";
+  const highlightColor = palette.obstacle.sandHighlight ?? "#e8d498";
+  const shadowColor = palette.obstacle.sandShadow ?? "#b09858";
+
+  // Wide sand drift across the road — long, low dune shape
+  // Main body
+  ctx.fillStyle = sandColor;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.quadraticCurveTo(x + w * 0.15, y + h * 0.3, x + w * 0.35, y + h * 0.1);
+  ctx.quadraticCurveTo(x + w * 0.5, y - h * 0.05, x + w * 0.65, y + h * 0.15);
+  ctx.quadraticCurveTo(x + w * 0.85, y + h * 0.4, x + w, y + h);
+  ctx.closePath();
+  ctx.fill();
+
+  // Highlight band (sun-facing right slope)
+  ctx.fillStyle = highlightColor;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.5, y + h * 0.05);
+  ctx.quadraticCurveTo(x + w * 0.6, y + h * 0.1, x + w * 0.75, y + h * 0.4);
+  ctx.lineTo(x + w * 0.85, y + h * 0.6);
+  ctx.lineTo(x + w * 0.7, y + h * 0.55);
+  ctx.quadraticCurveTo(x + w * 0.58, y + h * 0.2, x + w * 0.5, y + h * 0.05);
+  ctx.closePath();
+  ctx.fill();
+
+  // Shadow (left windward side)
+  ctx.fillStyle = shadowColor;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.quadraticCurveTo(x + w * 0.08, y + h * 0.6, x + w * 0.2, y + h * 0.25);
+  ctx.lineTo(x + w * 0.15, y + h * 0.4);
+  ctx.quadraticCurveTo(x + w * 0.06, y + h * 0.75, x + w * 0.02, y + h);
+  ctx.closePath();
+  ctx.fill();
+
+  // Wind ripple lines
+  ctx.strokeStyle = highlightColor;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.1, y + h * 0.65);
+  ctx.lineTo(x + w * 0.3, y + h * 0.5);
+  ctx.moveTo(x + w * 0.35, y + h * 0.7);
+  ctx.lineTo(x + w * 0.55, y + h * 0.55);
+  ctx.moveTo(x + w * 0.6, y + h * 0.7);
+  ctx.lineTo(x + w * 0.8, y + h * 0.55);
+  ctx.stroke();
+
+  // Outline
+  ctx.strokeStyle = shadowColor;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.quadraticCurveTo(x + w * 0.15, y + h * 0.3, x + w * 0.35, y + h * 0.1);
+  ctx.quadraticCurveTo(x + w * 0.5, y - h * 0.05, x + w * 0.65, y + h * 0.15);
+  ctx.quadraticCurveTo(x + w * 0.85, y + h * 0.4, x + w, y + h);
+  ctx.stroke();
+}
+
+function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+
+  // Body (boxy SUV shape)
+  ctx.fillStyle = c.car;
+  ctx.beginPath();
+  ctx.moveTo(x + 3, y + 12);
+  ctx.lineTo(x + w - 3, y + 12);
+  ctx.lineTo(x + w, y + 16);
+  ctx.lineTo(x + w, y + h - 10);
+  ctx.lineTo(x, y + h - 10);
+  ctx.lineTo(x, y + 16);
+  ctx.closePath();
+  ctx.fill();
+
+  // Roof (flat SUV roof)
+  ctx.fillStyle = c.carRoof;
+  ctx.beginPath();
+  ctx.moveTo(x + 12, y + 12);
+  ctx.lineTo(x + 10, y + 2);
+  ctx.lineTo(x + w - 10, y + 2);
+  ctx.lineTo(x + w - 12, y + 12);
+  ctx.closePath();
+  ctx.fill();
+
+  // Roof rack bars
+  ctx.strokeStyle = c.carBumper;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x + 14, y + 1);
+  ctx.lineTo(x + w - 14, y + 1);
+  ctx.moveTo(x + 18, y - 1);
+  ctx.lineTo(x + w - 18, y - 1);
+  ctx.stroke();
+
+  // Windows
+  ctx.fillStyle = c.carWindow;
+  ctx.fillRect(x + 14, y + 3, 20, 8);
+  ctx.fillRect(x + w - 34, y + 3, 20, 8);
+  ctx.fillStyle = "rgba(255,255,255,0.2)";
+  ctx.fillRect(x + 15, y + 4, 6, 3);
+  ctx.fillRect(x + w - 33, y + 4, 6, 3);
+
+  // Door line
+  ctx.strokeStyle = c.carRoof;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.5, y + 12);
+  ctx.lineTo(x + w * 0.5, y + h - 12);
+  ctx.stroke();
+
+  // Bumpers
+  ctx.fillStyle = c.carBumper;
+  ctx.fillRect(x - 2, y + h - 12, 7, 4);
+  ctx.fillRect(x + w - 5, y + h - 12, 7, 4);
+
+  // Headlight / Taillight
+  ctx.fillStyle = c.carHeadlight;
+  ctx.fillRect(x + w - 3, y + 16, 3, 4);
+  ctx.fillStyle = c.carTaillight;
+  ctx.fillRect(x, y + 16, 3, 4);
+
+  // Wheels (larger for SUV)
+  ctx.fillStyle = c.carWheel;
+  ctx.beginPath();
+  ctx.arc(x + 18, y + h - 7, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w - 18, y + h - 7, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = c.carBumper;
+  ctx.beginPath();
+  ctx.arc(x + 18, y + h - 7, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w - 18, y + h - 7, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = c.carRoof;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y + 12, w, h - 22);
+}
+
+function drawDesertBuggy(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const frameColor = palette.obstacle.buggyFrame ?? "#2e2e2e";
+  const cageColor = palette.obstacle.buggyCage ?? "#4a4a4a";
+  const wheelColor = palette.obstacle.buggyWheel ?? "#3a3a3a";
+
+  // Large exposed wheels
+  const wheelR = 10;
+  const rearWX = x + wheelR + 3;
+  const frontWX = x + w - wheelR - 3;
+  const wheelY = y + h - wheelR;
+
+  ctx.fillStyle = wheelColor;
+  for (const wx of [rearWX, frontWX]) {
+    ctx.beginPath();
+    ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = cageColor;
+    ctx.beginPath();
+    ctx.arc(wx, wheelY, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = cageColor;
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 5; i++) {
+      const a = (i * Math.PI * 2) / 5;
+      ctx.beginPath();
+      ctx.moveTo(wx + Math.cos(a) * 3.5, wheelY + Math.sin(a) * 3.5);
+      ctx.lineTo(wx + Math.cos(a) * (wheelR - 1), wheelY + Math.sin(a) * (wheelR - 1));
+      ctx.stroke();
+    }
+    ctx.fillStyle = wheelColor;
+  }
+
+  // Roll cage frame
+  const cageY = y + 4;
+  ctx.strokeStyle = frameColor;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(rearWX - 2, wheelY - wheelR);
+  ctx.lineTo(rearWX - 2, cageY + 4);
+  ctx.lineTo(rearWX + 6, cageY);
+  ctx.lineTo(frontWX - 6, cageY);
+  ctx.lineTo(frontWX + 2, cageY + 4);
+  ctx.lineTo(frontWX + 2, wheelY - wheelR);
+  ctx.stroke();
+
+  // Cross braces
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = cageColor;
+  ctx.beginPath();
+  ctx.moveTo(rearWX - 2, cageY + 4);
+  ctx.lineTo(rearWX + 8, wheelY - wheelR);
+  ctx.moveTo(rearWX + 8, cageY + 4);
+  ctx.lineTo(rearWX - 2, wheelY - wheelR);
+  ctx.stroke();
+
+  // Bottom rail
+  ctx.strokeStyle = frameColor;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(rearWX, wheelY - wheelR + 2);
+  ctx.lineTo(frontWX, wheelY - wheelR + 2);
+  ctx.stroke();
+
+  // Seat
+  ctx.fillStyle = cageColor;
+  const cageH = h - wheelR - 6;
+  ctx.fillRect(x + w * 0.3, cageY + cageH * 0.4, w * 0.2, cageH * 0.25);
+
+  // Steering wheel area
+  ctx.strokeStyle = frameColor;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(frontWX - 10, cageY + cageH * 0.35, 4, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Headlight
+  ctx.fillStyle = "#e8d06a";
+  ctx.beginPath();
+  ctx.arc(frontWX + 2, cageY + cageH * 0.6, 2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const pink = palette.obstacle.pinkGClass ?? "#e87a9f";
+  const pinkDark = palette.obstacle.pinkGClassRoof ?? "#d06888";
+  const c = palette.obstacle;
+
+  // Body (very boxy)
+  ctx.fillStyle = pink;
+  ctx.fillRect(x + 2, y + 12, w - 4, h - 22);
+
+  // Roof (flat)
+  ctx.fillStyle = pinkDark;
+  ctx.fillRect(x + 10, y, w - 20, 12);
+  ctx.fillRect(x + 10, y, 4, 14);
+  ctx.fillRect(x + w - 14, y, 4, 14);
+
+  // Windows
+  ctx.fillStyle = c.carWindow;
+  ctx.fillRect(x + 16, y + 2, 18, 9);
+  ctx.fillRect(x + w - 34, y + 2, 18, 9);
+  ctx.fillStyle = "rgba(255,255,255,0.25)";
+  ctx.fillRect(x + 17, y + 3, 6, 3);
+
+  // Front grille
+  ctx.fillStyle = "#c0c0c0";
+  ctx.fillRect(x + w - 4, y + 14, 4, h - 26);
+  ctx.strokeStyle = pinkDark;
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const gy = y + 14 + (h - 26) * (i / 4);
+    ctx.beginPath();
+    ctx.moveTo(x + w - 4, gy);
+    ctx.lineTo(x + w, gy);
+    ctx.stroke();
+  }
+
+  // Door lines
+  ctx.strokeStyle = pinkDark;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.4, y + 12);
+  ctx.lineTo(x + w * 0.4, y + h - 12);
+  ctx.moveTo(x + w * 0.6, y + 12);
+  ctx.lineTo(x + w * 0.6, y + h - 12);
+  ctx.stroke();
+
+  // Door handles
+  ctx.fillStyle = "#c0c0c0";
+  ctx.fillRect(x + w * 0.42, y + h * 0.45, 5, 2);
+  ctx.fillRect(x + w * 0.62, y + h * 0.45, 5, 2);
+
+  // Headlights
+  ctx.fillStyle = c.carHeadlight;
+  ctx.beginPath();
+  ctx.arc(x + w - 2, y + 18, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w - 2, y + h - 18, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Taillights
+  ctx.fillStyle = c.carTaillight;
+  ctx.fillRect(x, y + 14, 3, 6);
+  ctx.fillRect(x, y + h - 20, 3, 6);
+
+  // Spare tire on rear
+  ctx.strokeStyle = c.carWheel;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(x + 1, y + h * 0.42, 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = c.carWheel;
+  ctx.beginPath();
+  ctx.arc(x + 1, y + h * 0.42, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wheels
+  ctx.fillStyle = c.carWheel;
+  ctx.beginPath();
+  ctx.arc(x + 16, y + h - 7, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w - 16, y + h - 7, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#c0c0c0";
+  ctx.beginPath();
+  ctx.arc(x + 16, y + h - 7, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w - 16, y + h - 7, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = pinkDark;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 2, y + 12, w - 4, h - 22);
+}
+
+function drawCactus(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const green = palette.obstacle.cactus ?? "#3a7a38";
+  const highlight = palette.obstacle.cactusHighlight ?? "#4a9a48";
+  const spine = palette.obstacle.cactusSpine ?? "#2a5a28";
+  const cx = x + w / 2;
+  const trunkW = w * 0.38;
+
+  // Main trunk
+  ctx.fillStyle = green;
+  ctx.beginPath();
+  ctx.moveTo(cx - trunkW / 2, y + h);
+  ctx.lineTo(cx - trunkW / 2, y + h * 0.08);
+  ctx.quadraticCurveTo(cx, y - h * 0.02, cx + trunkW / 2, y + h * 0.08);
+  ctx.lineTo(cx + trunkW / 2, y + h);
+  ctx.closePath();
+  ctx.fill();
+
+  // Right arm (at ~35% height)
+  const armY = y + h * 0.35;
+  ctx.beginPath();
+  ctx.moveTo(cx + trunkW / 2, armY);
+  ctx.lineTo(x + w * 0.85, armY);
+  ctx.quadraticCurveTo(x + w * 0.92, armY, x + w * 0.88, armY - h * 0.22);
+  ctx.lineTo(x + w * 0.78, armY - h * 0.2);
+  ctx.quadraticCurveTo(x + w * 0.82, armY - h * 0.02, x + w * 0.78, armY);
+  ctx.lineTo(cx + trunkW / 2, armY + h * 0.06);
+  ctx.closePath();
+  ctx.fill();
+
+  // Left arm (at ~55% height)
+  const armY2 = y + h * 0.55;
+  ctx.beginPath();
+  ctx.moveTo(cx - trunkW / 2, armY2);
+  ctx.lineTo(x + w * 0.15, armY2);
+  ctx.quadraticCurveTo(x + w * 0.08, armY2, x + w * 0.12, armY2 - h * 0.18);
+  ctx.lineTo(x + w * 0.22, armY2 - h * 0.16);
+  ctx.quadraticCurveTo(x + w * 0.18, armY2 - h * 0.02, x + w * 0.22, armY2);
+  ctx.lineTo(cx - trunkW / 2, armY2 + h * 0.06);
+  ctx.closePath();
+  ctx.fill();
+
+  // Highlight stripe
+  ctx.fillStyle = highlight;
+  ctx.beginPath();
+  ctx.moveTo(cx + trunkW * 0.1, y + h * 0.1);
+  ctx.lineTo(cx + trunkW * 0.35, y + h * 0.12);
+  ctx.lineTo(cx + trunkW * 0.35, y + h * 0.95);
+  ctx.lineTo(cx + trunkW * 0.1, y + h * 0.95);
+  ctx.closePath();
+  ctx.fill();
+
+  // Vertical ribbing
+  ctx.strokeStyle = spine;
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(cx - trunkW * 0.15, y + h * 0.1);
+  ctx.lineTo(cx - trunkW * 0.15, y + h * 0.95);
+  ctx.moveTo(cx + trunkW * 0.15, y + h * 0.1);
+  ctx.lineTo(cx + trunkW * 0.15, y + h * 0.95);
+  ctx.stroke();
+
+  // Outline
+  ctx.strokeStyle = spine;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(cx - trunkW / 2, y + h);
+  ctx.lineTo(cx - trunkW / 2, y + h * 0.08);
+  ctx.quadraticCurveTo(cx, y - h * 0.02, cx + trunkW / 2, y + h * 0.08);
+  ctx.lineTo(cx + trunkW / 2, y + h);
+  ctx.stroke();
+}
+
+function drawDubaiChocolate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const choc = palette.obstacle.chocolate ?? "#5a3a20";
+  const chocDark = palette.obstacle.chocolateDark ?? "#3a2210";
+  const wrapper = palette.obstacle.chocolateWrapper ?? "#d4a844";
+
+  // Main chocolate body
+  ctx.fillStyle = choc;
+  ctx.fillRect(x, y, w, h);
+
+  // Chocolate segment grid
+  ctx.strokeStyle = chocDark;
+  ctx.lineWidth = 1.2;
+  const cols = 8;
+  const rows = 3;
+  for (let i = 1; i < cols; i++) {
+    const lx = x + (w / cols) * i;
+    ctx.beginPath();
+    ctx.moveTo(lx, y + 3);
+    ctx.lineTo(lx, y + h - 3);
+    ctx.stroke();
+  }
+  for (let i = 1; i < rows; i++) {
+    const ly = y + (h / rows) * i;
+    ctx.beginPath();
+    ctx.moveTo(x + 3, ly);
+    ctx.lineTo(x + w - 3, ly);
+    ctx.stroke();
+  }
+
+  // Top highlight
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(x, y, w, 4);
+
+  // Bottom shadow
+  ctx.fillStyle = "rgba(0,0,0,0.15)";
+  ctx.fillRect(x, y + h - 4, w, 4);
+
+  // Gold wrapper peeled back on left end
+  ctx.fillStyle = wrapper;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + 28, y);
+  ctx.lineTo(x + 22, y - 12);
+  ctx.lineTo(x + 8, y - 14);
+  ctx.lineTo(x - 4, y - 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "#c09838";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y - 2);
+  ctx.lineTo(x + 14, y - 12);
+  ctx.stroke();
+
+  // Bottom wrapper edge
+  ctx.fillStyle = wrapper;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x + 24, y + h);
+  ctx.lineTo(x + 18, y + h + 8);
+  ctx.lineTo(x + 4, y + h + 6);
+  ctx.lineTo(x - 2, y + h + 3);
+  ctx.closePath();
+  ctx.fill();
+
+  // "DUBAI" label
+  ctx.fillStyle = wrapper;
+  ctx.font = "bold 10px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("DUBAI", x + w * 0.55, y + h * 0.5);
+
+  // Outline
+  ctx.strokeStyle = chocDark;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x, y, w, h);
+}
+
 export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette) {
   const { type, x, y, width: w, height: h } = obstacle;
   switch (type) {
@@ -666,5 +1234,12 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleIn
     case ObstacleType.STRAIGHT_RAMP:      drawStraightRamp(ctx, x, y, w, h, palette); break;
     case ObstacleType.CURVED_RAMP:        drawCurvedRamp(ctx, x, y, w, h, palette); break;
     case ObstacleType.CONTAINER_WITH_RAMP: drawContainerWithRamp(ctx, x, y, w, h, palette); break;
+    case ObstacleType.CAMEL:              drawCamel(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SAND_TRAP:          drawSandTrap(ctx, x, y, w, h, palette); break;
+    case ObstacleType.LAND_CRUISER:       drawLandCruiser(ctx, x, y, w, h, palette); break;
+    case ObstacleType.DESERT_BUGGY:       drawDesertBuggy(ctx, x, y, w, h, palette); break;
+    case ObstacleType.PINK_G_CLASS:       drawPinkGClass(ctx, x, y, w, h, palette); break;
+    case ObstacleType.CACTUS:             drawCactus(ctx, x, y, w, h, palette); break;
+    case ObstacleType.DUBAI_CHOCOLATE:    drawDubaiChocolate(ctx, x, y, w, h, palette); break;
   }
 }

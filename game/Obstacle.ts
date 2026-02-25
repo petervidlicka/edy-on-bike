@@ -16,6 +16,15 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.STRAIGHT_RAMP]:   { width: 90, height: 30 },
   [ObstacleType.CURVED_RAMP]:     { width: 75, height: 36 },
   [ObstacleType.CONTAINER_WITH_RAMP]: { width: 176, height: 75 },
+
+  // Dubai biome obstacles
+  [ObstacleType.CAMEL]:           { width: 50, height: 48 },
+  [ObstacleType.SAND_TRAP]:       { width: 120, height: 28 },
+  [ObstacleType.LAND_CRUISER]:    { width: 80, height: 42 },
+  [ObstacleType.DESERT_BUGGY]:    { width: 55, height: 34 },
+  [ObstacleType.PINK_G_CLASS]:    { width: 76, height: 46 },
+  [ObstacleType.CACTUS]:          { width: 22, height: 60 },
+  [ObstacleType.DUBAI_CHOCOLATE]: { width: 176, height: 75 },
 };
 
 function weightedRandom(types: WeightedType[]): ObstacleType {
@@ -40,7 +49,7 @@ export function createObstacle(
     y: groundY - spec.height,
     width: spec.width,
     height: spec.height,
-    rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER || type === ObstacleType.CONTAINER_WITH_RAMP,
+    rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER || type === ObstacleType.CONTAINER_WITH_RAMP || type === ObstacleType.DUBAI_CHOCOLATE,
     ramp: type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP,
   };
 }

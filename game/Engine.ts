@@ -26,7 +26,9 @@ import {
 } from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
-import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider } from "./rendering";
+import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider, createParticles, updateParticles, drawParticles } from "./rendering";
+import type { Particle } from "./rendering";
+import type { ParticleOverlayConfig } from "./environments/types";
 import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
@@ -79,6 +81,8 @@ export class Engine {
     bikeAngle: 0, bikeAngularVel: 0, bikeBounceCount: 0,
     bikeWheelRotation: 0,
   };
+  private particles: Particle[] = [];
+  private particleConfig: ParticleOverlayConfig | null = null;
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -126,6 +130,8 @@ export class Engine {
     this.obstacles = [];
     this.floatingTexts = [];
     this.envManager.reset();
+    this.particles = [];
+    this.particleConfig = null;
     this.player = createPlayer(this.groundY, this.canvasW);
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
@@ -185,12 +191,21 @@ export class Engine {
 
   private update(dt: number, rawDt: number): void {
     // Environment progression
-    const envResult = this.envManager.update(dt, this.score);
+    const envResult = this.envManager.update(dt, this.elapsedMs);
     if (envResult.musicCrossfade) {
       this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
     }
     if (envResult.regenerateBackground) {
       this.layers = createBackgroundLayers(this.canvasW, this.groundY, envResult.regenerateBackground);
+      // Initialize particles if the new biome has a particle overlay
+      const overlay = envResult.regenerateBackground.particleOverlay;
+      if (overlay) {
+        this.particleConfig = overlay;
+        this.particles = createParticles(this.canvasW, this.canvasH, overlay);
+      } else {
+        this.particleConfig = null;
+        this.particles = [];
+      }
     }
 
     // Speed progression
@@ -219,6 +234,9 @@ export class Engine {
     const prevFlipDirection = this.player.flipDirection;
     updatePlayer(this.player, dt, this.groundY, this.speed);
     updateLayers(this.layers, this.speed, dt);
+    if (this.particleConfig && this.particles.length > 0) {
+      updateParticles(this.particles, this.particleConfig, dt, this.canvasW, this.canvasH);
+    }
 
     const FULL_FLIP = Math.PI * 2;
 
@@ -254,7 +272,7 @@ export class Engine {
         this.debugIndex++;
       } else {
         this.obstacles.push(
-          spawnObstacle(this.canvasW, this.groundY, this.elapsedMs, this.envManager.getCurrentEnvironment())
+          spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment())
         );
       }
       this.distanceSinceLastObstacle = 0;
@@ -470,6 +488,9 @@ export class Engine {
     }
 
     drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
+    if (this.particleConfig && this.particles.length > 0) {
+      drawParticles(ctx, this.particles, this.particleConfig);
+    }
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs, palette);
     }
@@ -534,6 +555,24 @@ export class Engine {
     this.debugSequence = sequence;
     this.debugIndex = 0;
     if (gap !== undefined) this.debugGap = gap;
+  }
+
+  forceNextBiome(): void {
+    const result = this.envManager.forceNextBiome();
+    if (result.musicCrossfade) {
+      this.sound.crossfadeTo(result.musicCrossfade.track, result.musicCrossfade.durationMs);
+    }
+    // Immediately regenerate background with the target environment
+    const env = this.envManager.getCurrentEnvironment();
+    this.layers = createBackgroundLayers(this.canvasW, this.groundY, env);
+    const overlay = env.particleOverlay;
+    if (overlay) {
+      this.particleConfig = overlay;
+      this.particles = createParticles(this.canvasW, this.canvasH, overlay);
+    } else {
+      this.particleConfig = null;
+      this.particles = [];
+    }
   }
 
   destroy(): void {

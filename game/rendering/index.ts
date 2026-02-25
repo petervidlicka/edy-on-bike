@@ -5,3 +5,4 @@ export { drawFloatingText } from "./FloatingTextRenderer";
 export { drawCrashBike, drawCrashRider } from "./CrashRenderer";
 export { createParticles, updateParticles, drawParticles } from "./ParticleRenderer";
 export type { Particle } from "./ParticleRenderer";
+export { drawAmbulance, drawReviveFlash } from "./AmbulanceRenderer";

@@ -190,12 +190,18 @@ export default function GameCanvas() {
     engineRef.current?.setSfxMuted(sfxMuted);
   }, [sfxMuted]);
 
-  // IDKFA cheat code
+  // IDKFA cheat code — unlock all skins
   const handleCheat = useCallback(() => {
     const updated = activateCheat();
     setSkinState(updated);
   }, []);
   useCheatCode("IDKFA", handleCheat);
+
+  // IDDQD cheat code — guaranteed ambulance resurrection
+  const handleIddqd = useCallback(() => {
+    engineRef.current?.activateIddqd();
+  }, []);
+  useCheatCode("IDDQD", handleIddqd);
 
   const toggleDebugObstacles = useCallback(() => {
     setDebugObstacles((prev) => {

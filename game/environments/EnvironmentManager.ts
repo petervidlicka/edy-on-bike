@@ -18,7 +18,7 @@ interface BiomeThreshold {
 
 const BIOME_THRESHOLDS: BiomeThreshold[] = [
   { timeMs: 0, biomeId: "suburban" },
-  { timeMs: 120_000, biomeId: "dubai" },
+  { timeMs: 60_000, biomeId: "dubai" },
   // Future:
   // { timeMs: 240_000, biomeId: "desert" },
   // { timeMs: 360_000, biomeId: "snow" },

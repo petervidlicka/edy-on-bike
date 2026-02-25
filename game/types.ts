@@ -2,6 +2,7 @@ export enum GameState {
   IDLE = "IDLE",
   RUNNING = "RUNNING",
   CRASHING = "CRASHING",
+  AMBULANCE = "AMBULANCE",
   GAME_OVER = "GAME_OVER",
 }
 
@@ -29,6 +30,25 @@ export interface CrashState {
   bikeAngularVel: number;
   bikeBounceCount: number;
   bikeWheelRotation: number;
+}
+
+export enum AmbulancePhase {
+  DRIVING_IN = "DRIVING_IN",
+  STOPPED = "STOPPED",
+  REVIVING = "REVIVING",
+  DRIVING_OUT = "DRIVING_OUT",
+}
+
+export interface AmbulanceState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  phase: AmbulancePhase;
+  phaseTimer: number;
+  targetX: number;
+  sirenFlash: number;
+  reviveFlashOpacity: number;
 }
 
 export enum ObstacleType {

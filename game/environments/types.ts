@@ -81,6 +81,27 @@ export interface EnvironmentPalette {
     rampWoodHighlight: string;
     rampMetal: string;
     rampMetalDark: string;
+
+    // Dubai-specific (optional — not needed by suburban)
+    camel?: string;
+    camelLeg?: string;
+    camelSaddle?: string;
+    sand?: string;
+    sandHighlight?: string;
+    sandShadow?: string;
+    pinkGClass?: string;
+    pinkGClassRoof?: string;
+    cactus?: string;
+    cactusHighlight?: string;
+    cactusSpine?: string;
+    chocolate?: string;
+    chocolateDark?: string;
+    chocolateWrapper?: string;
+    lamboGreen?: string;
+    lamboGreenDark?: string;
+    lamboWindow?: string;
+    billboardFrame?: string;
+    billboardPost?: string;
   };
 }
 

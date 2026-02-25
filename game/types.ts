@@ -2,6 +2,7 @@ export enum GameState {
   IDLE = "IDLE",
   RUNNING = "RUNNING",
   CRASHING = "CRASHING",
+  AMBULANCE = "AMBULANCE",
   GAME_OVER = "GAME_OVER",
 }
 
@@ -31,6 +32,25 @@ export interface CrashState {
   bikeWheelRotation: number;
 }
 
+export enum AmbulancePhase {
+  DRIVING_IN = "DRIVING_IN",
+  STOPPED = "STOPPED",
+  REVIVING = "REVIVING",
+  DRIVING_OUT = "DRIVING_OUT",
+}
+
+export interface AmbulanceState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  phase: AmbulancePhase;
+  phaseTimer: number;
+  targetX: number;
+  sirenFlash: number;
+  reviveFlashOpacity: number;
+}
+
 export enum ObstacleType {
   ROCK = "ROCK",
   SMALL_TREE = "SMALL_TREE",
@@ -44,6 +64,16 @@ export enum ObstacleType {
   STRAIGHT_RAMP = "STRAIGHT_RAMP",
   CURVED_RAMP = "CURVED_RAMP",
   CONTAINER_WITH_RAMP = "CONTAINER_WITH_RAMP",
+
+  // Dubai biome obstacles
+  CAMEL = "CAMEL",
+  SAND_TRAP = "SAND_TRAP",
+  LAND_CRUISER = "LAND_CRUISER",
+  PINK_G_CLASS = "PINK_G_CLASS",
+  CACTUS = "CACTUS",
+  DUBAI_CHOCOLATE = "DUBAI_CHOCOLATE",
+  LAMBORGHINI_HURACAN = "LAMBORGHINI_HURACAN",
+  DUBAI_BILLBOARD = "DUBAI_BILLBOARD",
 }
 
 export enum TrickType {

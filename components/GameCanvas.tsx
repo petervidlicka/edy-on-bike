@@ -190,12 +190,18 @@ export default function GameCanvas() {
     engineRef.current?.setSfxMuted(sfxMuted);
   }, [sfxMuted]);
 
-  // IDKFA cheat code
+  // IDKFA cheat code — unlock all skins
   const handleCheat = useCallback(() => {
     const updated = activateCheat();
     setSkinState(updated);
   }, []);
   useCheatCode("IDKFA", handleCheat);
+
+  // IDDQD cheat code — guaranteed ambulance resurrection
+  const handleIddqd = useCallback(() => {
+    engineRef.current?.activateIddqd();
+  }, []);
+  useCheatCode("IDDQD", handleIddqd);
 
   const toggleDebugObstacles = useCallback(() => {
     setDebugObstacles((prev) => {
@@ -288,26 +294,48 @@ export default function GameCanvas() {
       )}
 
       {process.env.NODE_ENV !== "production" && (
-        <button
-          onClick={toggleDebugObstacles}
-          style={{
-            position: "fixed",
-            top: 8,
-            right: 8,
-            padding: "4px 10px",
-            fontSize: "0.7rem",
-            fontFamily: "monospace",
-            background: debugObstacles ? "#d44" : "#555",
-            color: "#fff",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-            opacity: 0.85,
-            zIndex: 9999,
-          }}
-        >
-          Debug: {debugObstacles ? "ON" : "OFF"}
-        </button>
+        <>
+          <button
+            onClick={toggleDebugObstacles}
+            style={{
+              position: "fixed",
+              top: 8,
+              right: 8,
+              padding: "4px 10px",
+              fontSize: "0.7rem",
+              fontFamily: "monospace",
+              background: debugObstacles ? "#d44" : "#555",
+              color: "#fff",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+              opacity: 0.85,
+              zIndex: 9999,
+            }}
+          >
+            Debug: {debugObstacles ? "ON" : "OFF"}
+          </button>
+          <button
+            onClick={() => engineRef.current?.forceNextBiome()}
+            style={{
+              position: "fixed",
+              top: 8,
+              right: 110,
+              padding: "4px 10px",
+              fontSize: "0.7rem",
+              fontFamily: "monospace",
+              background: "#c87020",
+              color: "#fff",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer",
+              opacity: 0.85,
+              zIndex: 9999,
+            }}
+          >
+            Next Biome
+          </button>
+        </>
       )}
     </>
   );

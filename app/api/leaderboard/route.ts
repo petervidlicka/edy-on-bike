@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { getTopScores, addScore } from "@/lib/leaderboard";
+import { getTopScores, getTotalPlayers, addScore } from "@/lib/leaderboard";
 
 // --- Rate limiting ---
 // Production: Redis-backed sliding window (survives serverless cold starts)
@@ -43,8 +43,11 @@ async function isRateLimited(ip: string): Promise<boolean> {
 const MAX_SCORE = 99999;
 
 export async function GET() {
-  const scores = await getTopScores(20);
-  return NextResponse.json(scores);
+  const [scores, totalPlayers] = await Promise.all([
+    getTopScores(20),
+    getTotalPlayers(),
+  ]);
+  return NextResponse.json({ scores, totalPlayers });
 }
 
 export async function POST(request: NextRequest) {

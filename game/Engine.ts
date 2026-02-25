@@ -1,4 +1,4 @@
-import { GameState, CrashState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
+import { GameState, AmbulancePhase, AmbulanceState, CrashState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
@@ -12,6 +12,13 @@ import {
   CRASH_GRAVITY,
   CRASH_BOUNCE_DAMPING,
   CRASH_SHAKE_INITIAL,
+  AMBULANCE_CHANCE,
+  AMBULANCE_WIDTH,
+  AMBULANCE_HEIGHT,
+  AMBULANCE_DRIVE_SPEED,
+  AMBULANCE_DRIVE_OUT_SPEED,
+  AMBULANCE_STOP_MS,
+  AMBULANCE_REVIVE_MS,
 } from "./constants";
 import {
   FloatingText,
@@ -26,7 +33,9 @@ import {
 } from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
-import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider } from "./rendering";
+import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider, createParticles, updateParticles, drawParticles, drawAmbulance, drawReviveFlash } from "./rendering";
+import type { Particle } from "./rendering";
+import type { ParticleOverlayConfig } from "./environments/types";
 import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
@@ -66,6 +75,9 @@ export class Engine {
   private groundY: number = 0;
   private callbacks: EngineCallbacks;
   private sound = new SoundManager();
+  private ambulance: AmbulanceState | null = null;
+  private hasBeenResurrected = false;
+  private iddqdActive = false;
   private skin: SkinDefinition = getSkinById("default");
   private debugSequence: ObstacleType[] | null = null;
   private debugIndex: number = 0;
@@ -79,6 +91,8 @@ export class Engine {
     bikeAngle: 0, bikeAngularVel: 0, bikeBounceCount: 0,
     bikeWheelRotation: 0,
   };
+  private particles: Particle[] = [];
+  private particleConfig: ParticleOverlayConfig | null = null;
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -96,7 +110,7 @@ export class Engine {
     this.canvas.width = w;
     this.canvas.height = h;
     this.layers = createBackgroundLayers(w, this.groundY, this.envManager.getCurrentEnvironment());
-    if (this.state !== GameState.RUNNING) {
+    if (this.state !== GameState.RUNNING && this.state !== GameState.AMBULANCE) {
       this.player = createPlayer(this.groundY, w);
     } else {
       this.player.y = Math.min(this.player.y, this.groundY - this.player.height);
@@ -112,7 +126,11 @@ export class Engine {
   }
 
   restart(): void {
+    this.sound.stopSiren();
     this.sound.stopMusic();
+    this.ambulance = null;
+    this.hasBeenResurrected = false;
+    this.iddqdActive = false;
     this.state = GameState.IDLE;
     this.speed = INITIAL_SPEED;
     this.score = 0;
@@ -126,6 +144,8 @@ export class Engine {
     this.obstacles = [];
     this.floatingTexts = [];
     this.envManager.reset();
+    this.particles = [];
+    this.particleConfig = null;
     this.player = createPlayer(this.groundY, this.canvasW);
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
@@ -177,6 +197,13 @@ export class Engine {
       this.update(dt, rawDt);
     } else if (this.state === GameState.CRASHING) {
       this.updateCrash(dt, rawDt);
+    } else if (this.state === GameState.AMBULANCE) {
+      this.updateAmbulance(dt, rawDt);
+    }
+
+    // Continue driving out ambulance after game resumes
+    if (this.state === GameState.RUNNING && this.ambulance) {
+      this.updateAmbulance(dt, rawDt);
     }
 
     this.render();
@@ -185,12 +212,21 @@ export class Engine {
 
   private update(dt: number, rawDt: number): void {
     // Environment progression
-    const envResult = this.envManager.update(dt, this.score);
+    const envResult = this.envManager.update(dt, this.elapsedMs);
     if (envResult.musicCrossfade) {
       this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
     }
     if (envResult.regenerateBackground) {
       this.layers = createBackgroundLayers(this.canvasW, this.groundY, envResult.regenerateBackground);
+      // Initialize particles if the new biome has a particle overlay
+      const overlay = envResult.regenerateBackground.particleOverlay;
+      if (overlay) {
+        this.particleConfig = overlay;
+        this.particles = createParticles(this.canvasW, this.canvasH, overlay);
+      } else {
+        this.particleConfig = null;
+        this.particles = [];
+      }
     }
 
     // Speed progression
@@ -219,6 +255,9 @@ export class Engine {
     const prevFlipDirection = this.player.flipDirection;
     updatePlayer(this.player, dt, this.groundY, this.speed);
     updateLayers(this.layers, this.speed, dt);
+    if (this.particleConfig && this.particles.length > 0) {
+      updateParticles(this.particles, this.particleConfig, dt, this.canvasW, this.canvasH);
+    }
 
     const FULL_FLIP = Math.PI * 2;
 
@@ -254,7 +293,7 @@ export class Engine {
         this.debugIndex++;
       } else {
         this.obstacles.push(
-          spawnObstacle(this.canvasW, this.groundY, this.elapsedMs, this.envManager.getCurrentEnvironment())
+          spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment())
         );
       }
       this.distanceSinceLastObstacle = 0;
@@ -313,9 +352,127 @@ export class Engine {
   }
 
   private gameOver(): void {
+    if (!this.hasBeenResurrected && (this.iddqdActive || Math.random() < AMBULANCE_CHANCE)) {
+      this.hasBeenResurrected = true;
+      this.iddqdActive = false;
+      this.startAmbulanceSequence();
+    } else {
+      this.finalGameOver();
+    }
+  }
+
+  private finalGameOver(): void {
     this.state = GameState.GAME_OVER;
     this.callbacks.onStateChange(this.state);
     this.callbacks.onGameOver(this.score);
+  }
+
+  private startAmbulanceSequence(): void {
+    this.state = GameState.AMBULANCE;
+
+    this.ambulance = {
+      x: this.canvasW + 140,
+      y: this.groundY - AMBULANCE_HEIGHT,
+      width: AMBULANCE_WIDTH,
+      height: AMBULANCE_HEIGHT,
+      phase: AmbulancePhase.DRIVING_IN,
+      phaseTimer: 0,
+      targetX: this.player.x + this.player.width + 10,
+      sirenFlash: 0,
+      reviveFlashOpacity: 0,
+    };
+
+    this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
+
+    this.sound.playSiren();
+    this.callbacks.onStateChange(this.state);
+  }
+
+  private updateAmbulance(dt: number, rawDt: number): void {
+    const amb = this.ambulance;
+    if (!amb) return;
+
+    amb.phaseTimer += rawDt;
+    amb.sirenFlash += rawDt;
+
+    // Update floating texts
+    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
+
+    switch (amb.phase) {
+      case AmbulancePhase.DRIVING_IN:
+        amb.x -= AMBULANCE_DRIVE_SPEED * dt;
+        if (amb.x <= amb.targetX) {
+          amb.x = amb.targetX;
+          amb.phase = AmbulancePhase.STOPPED;
+          amb.phaseTimer = 0;
+          this.sound.stopSiren();
+        }
+        break;
+
+      case AmbulancePhase.STOPPED:
+        if (amb.phaseTimer >= AMBULANCE_STOP_MS) {
+          amb.phase = AmbulancePhase.REVIVING;
+          amb.phaseTimer = 0;
+          amb.reviveFlashOpacity = 1;
+          this.revivePlayer();
+          this.sound.playRevive();
+        }
+        break;
+
+      case AmbulancePhase.REVIVING:
+        amb.reviveFlashOpacity = Math.max(0, 1 - amb.phaseTimer / AMBULANCE_REVIVE_MS);
+        if (amb.phaseTimer >= AMBULANCE_REVIVE_MS) {
+          amb.phase = AmbulancePhase.DRIVING_OUT;
+          amb.phaseTimer = 0;
+          this.state = GameState.RUNNING;
+          this.sound.startMusic();
+          this.callbacks.onStateChange(this.state);
+        }
+        break;
+
+      case AmbulancePhase.DRIVING_OUT:
+        amb.x += AMBULANCE_DRIVE_OUT_SPEED * dt;
+        if (amb.x > this.canvasW + 20) {
+          this.ambulance = null;
+        }
+        break;
+    }
+  }
+
+  private revivePlayer(): void {
+    // Clear obstacles near the player
+    const clearZone = this.player.x + this.player.width + 200;
+    this.obstacles = this.obstacles.filter((obs) => obs.x > clearZone);
+
+    // Reset player state to ground
+    this.player.y = this.groundY - this.player.height;
+    this.player.velocityY = 0;
+    this.player.isOnGround = true;
+    this.player.jumpCount = 0;
+    this.player.bikeTilt = 0;
+    this.player.riderLean = 0;
+    this.player.riderCrouch = 0;
+    this.player.legTuck = 0;
+    this.player.ridingObstacle = null;
+    this.player.backflipAngle = 0;
+    this.player.isBackflipping = false;
+
+    // Mercy slowdown
+    this.speed *= 0.85;
+    this.callbacks.onSpeedUpdate?.(this.speed);
+
+    // Big gap after revive
+    this.distanceSinceLastObstacle = 0;
+    this.nextObstacleGap = 500;
+
+    this.floatingTexts.push({
+      text: "REVIVED!",
+      x: this.player.x + this.player.width / 2,
+      y: this.player.y - 20,
+      opacity: 1,
+      velocityY: -1.2,
+      color: "#00ff88",
+    });
   }
 
   private initCrashState(): void {
@@ -470,15 +627,29 @@ export class Engine {
     }
 
     drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
+    if (this.particleConfig && this.particles.length > 0) {
+      drawParticles(ctx, this.particles, this.particleConfig);
+    }
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs, palette);
     }
 
-    if (crashing) {
+    const ambulancePreRevive = this.state === GameState.AMBULANCE
+      && this.ambulance
+      && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
+
+    if (crashing || ambulancePreRevive) {
       drawCrashBike(ctx, this.crashState, this.skin);
       drawCrashRider(ctx, this.crashState, this.skin);
     } else {
       drawPlayer(ctx, this.player, this.skin);
+    }
+
+    if (this.ambulance) {
+      drawAmbulance(ctx, this.ambulance);
+      if (this.ambulance.reviveFlashOpacity > 0) {
+        drawReviveFlash(ctx, this.ambulance.reviveFlashOpacity, canvasW, canvasH);
+      }
     }
 
     for (const ft of this.floatingTexts) {
@@ -499,12 +670,26 @@ export class Engine {
   getState(): GameState {
     return this.state;
   }
+  activateIddqd(): void {
+    this.iddqdActive = true;
+    this.floatingTexts.push({
+      text: "GOD MODE",
+      x: this.canvasW / 2,
+      y: this.canvasH * 0.35,
+      opacity: 1,
+      velocityY: -0.8,
+      color: "#ff4444",
+    });
+  }
+
   pause(): void {
     if (this.isPaused) return;
     this.isPaused = true;
     cancelAnimationFrame(this.rafId);
     if (this.state === GameState.RUNNING) {
       this.sound.pauseMusic();
+    } else if (this.state === GameState.AMBULANCE) {
+      this.sound.stopSiren();
     }
   }
 
@@ -515,6 +700,8 @@ export class Engine {
     this.rafId = requestAnimationFrame(this.loop);
     if (this.state === GameState.RUNNING) {
       this.sound.resumeMusic();
+    } else if (this.state === GameState.AMBULANCE && this.ambulance?.phase === AmbulancePhase.DRIVING_IN) {
+      this.sound.playSiren();
     }
   }
 
@@ -534,6 +721,24 @@ export class Engine {
     this.debugSequence = sequence;
     this.debugIndex = 0;
     if (gap !== undefined) this.debugGap = gap;
+  }
+
+  forceNextBiome(): void {
+    const result = this.envManager.forceNextBiome();
+    if (result.musicCrossfade) {
+      this.sound.crossfadeTo(result.musicCrossfade.track, result.musicCrossfade.durationMs);
+    }
+    // Immediately regenerate background with the target environment
+    const env = this.envManager.getCurrentEnvironment();
+    this.layers = createBackgroundLayers(this.canvasW, this.groundY, env);
+    const overlay = env.particleOverlay;
+    if (overlay) {
+      this.particleConfig = overlay;
+      this.particles = createParticles(this.canvasW, this.canvasH, overlay);
+    } else {
+      this.particleConfig = null;
+      this.particles = [];
+    }
   }
 
   destroy(): void {

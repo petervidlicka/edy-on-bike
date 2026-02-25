@@ -108,6 +108,9 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
     chocolate: "#5a3a20",
     chocolateDark: "#3a2210",
     chocolateWrapper: "#d4a844",
+    lamboGreen: "#2d8a35",
+    lamboGreenDark: "#1e6a25",
+    lamboWindow: "#2a3a4a",
   },
 };
 
@@ -156,9 +159,9 @@ function generateDubaiElements(
           w = 30 + Math.random() * 10;
           h = 300 + Math.random() * 100;
           break;
-        case 6: // Museum of the Future — wide oval
+        case 6: // Museum of the Future — wide oval, half the height of generic
           w = 60 + Math.random() * 20;
-          h = 120 + Math.random() * 40;
+          h = 60 + Math.random() * 20;
           break;
         case 7: // Burj Al Arab — sail shape, very tall
           w = 50 + Math.random() * 15;
@@ -264,22 +267,25 @@ function dubaiWeightedTypes(biomeMs: number): WeightedType[] {
     { type: ObstacleType.LAND_CRUISER, weight: 0.3 },
     { type: ObstacleType.PINK_G_CLASS, weight: 0.2 },
   ];
-  // Stage 2 (15s into Dubai): buggies + ramps, more vehicles
+  // Stage 2 (15s into Dubai): buggies + ramps, more vehicles, chocolate + lambo
   if (biomeMs >= 15_000) {
     types.push({ type: ObstacleType.DESERT_BUGGY, weight: 0.8 });
     types.push({ type: ObstacleType.STRAIGHT_RAMP, weight: 0.4 });
     types.push({ type: ObstacleType.CURVED_RAMP, weight: 0.4 });
+    types.push({ type: ObstacleType.DUBAI_CHOCOLATE, weight: 0.7 });
+    types.push({ type: ObstacleType.LAMBORGHINI_HURACAN, weight: 0.5 });
     for (const t of types) {
       if (t.type === ObstacleType.LAND_CRUISER) t.weight = 0.7;
       if (t.type === ObstacleType.PINK_G_CLASS) t.weight = 0.5;
     }
   }
-  // Stage 3 (30s into Dubai): full roster + rideable chocolate
+  // Stage 3 (30s into Dubai): full roster, max weights
   if (biomeMs >= 30_000) {
-    types.push({ type: ObstacleType.DUBAI_CHOCOLATE, weight: 0.6 });
     for (const t of types) {
       if (t.type === ObstacleType.LAND_CRUISER) t.weight = 1.0;
       if (t.type === ObstacleType.PINK_G_CLASS) t.weight = 0.7;
+      if (t.type === ObstacleType.LAMBORGHINI_HURACAN) t.weight = 0.8;
+      if (t.type === ObstacleType.DUBAI_CHOCOLATE) t.weight = 1.0;
     }
   }
   return types;

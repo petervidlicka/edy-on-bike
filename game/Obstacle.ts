@@ -25,6 +25,7 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.PINK_G_CLASS]:    { width: 76, height: 46 },
   [ObstacleType.CACTUS]:          { width: 22, height: 60 },
   [ObstacleType.DUBAI_CHOCOLATE]: { width: 176, height: 75 },
+  [ObstacleType.LAMBORGHINI_HURACAN]: { width: 88, height: 28 },
 };
 
 function weightedRandom(types: WeightedType[]): ObstacleType {
@@ -43,10 +44,12 @@ export function createObstacle(
   groundY: number
 ): ObstacleInstance {
   const spec = OBSTACLE_SPECS[type];
+  // Sand trap sits lower so it visually covers the road surface
+  const yOffset = type === ObstacleType.SAND_TRAP ? 10 : 0;
   return {
     type,
     x: canvasWidth + 60,
-    y: groundY - spec.height,
+    y: groundY - spec.height + yOffset,
     width: spec.width,
     height: spec.height,
     rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER || type === ObstacleType.CONTAINER_WITH_RAMP || type === ObstacleType.DUBAI_CHOCOLATE,

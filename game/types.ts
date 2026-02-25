@@ -53,6 +53,7 @@ export enum ObstacleType {
   PINK_G_CLASS = "PINK_G_CLASS",
   CACTUS = "CACTUS",
   DUBAI_CHOCOLATE = "DUBAI_CHOCOLATE",
+  LAMBORGHINI_HURACAN = "LAMBORGHINI_HURACAN",
 }
 
 export enum TrickType {

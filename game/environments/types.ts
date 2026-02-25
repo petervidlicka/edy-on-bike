@@ -100,6 +100,9 @@ export interface EnvironmentPalette {
     chocolate?: string;
     chocolateDark?: string;
     chocolateWrapper?: string;
+    lamboGreen?: string;
+    lamboGreenDark?: string;
+    lamboWindow?: string;
   };
 }
 

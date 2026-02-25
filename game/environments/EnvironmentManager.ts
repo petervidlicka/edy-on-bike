@@ -5,28 +5,30 @@ import type {
   BackgroundDrawFn,
 } from "./types";
 import { SUBURBAN_ENVIRONMENT } from "./suburban";
+import { DUBAI_ENVIRONMENT } from "./dubai";
 import { lerpPalette, easeInOutCubic } from "./colorLerp";
 
-// ── Score thresholds for biome transitions ──
+// ── Time thresholds for biome transitions ──
 // When new biomes are added, register them in BIOME_REGISTRY and add entries here.
 
 interface BiomeThreshold {
-  score: number;
+  timeMs: number;
   biomeId: BiomeId;
 }
 
 const BIOME_THRESHOLDS: BiomeThreshold[] = [
-  { score: 0, biomeId: "suburban" },
+  { timeMs: 0, biomeId: "suburban" },
+  { timeMs: 120_000, biomeId: "dubai" },
   // Future:
-  // { score: 2000, biomeId: "dubai" },
-  // { score: 4000, biomeId: "desert" },
-  // { score: 6000, biomeId: "snow" },
+  // { timeMs: 240_000, biomeId: "desert" },
+  // { timeMs: 360_000, biomeId: "snow" },
 ];
 
 // Registry of all available environments.
 // New biomes register themselves here when implemented.
 const BIOME_REGISTRY: Record<string, EnvironmentDefinition> = {
   suburban: SUBURBAN_ENVIRONMENT,
+  dubai: DUBAI_ENVIRONMENT,
 };
 
 /** Duration of a biome transition in 60fps dt units (~4 seconds). */
@@ -45,7 +47,7 @@ export interface EnvUpdateResult {
 
 /**
  * Manages the active environment/biome and handles smooth transitions
- * between biomes based on score thresholds.
+ * between biomes based on elapsed time thresholds.
  *
  * During a transition:
  * - getCurrentPalette() returns an interpolated palette
@@ -62,24 +64,29 @@ export class EnvironmentManager {
   private transitionProgress = 0;
   private transitioning = false;
 
+  // Biome-relative timing — tracks when the current biome started
+  private biomeStartMs = 0;
+  private lastElapsedMs = 0;
+
   constructor() {
     this.currentEnv = SUBURBAN_ENVIRONMENT;
   }
 
   /**
-   * Called every frame with dt (60fps-normalized) and current score.
-   * Checks score thresholds and advances transition progress.
+   * Called every frame with dt (60fps-normalized) and elapsed game time in ms.
+   * Checks time thresholds and advances transition progress.
    * Returns events for Engine to act on.
    */
-  update(dt: number, score: number): EnvUpdateResult {
+  update(dt: number, elapsedMs: number): EnvUpdateResult {
     const result: EnvUpdateResult = {};
+    this.lastElapsedMs = elapsedMs;
 
     // Check if we should start a new transition
     if (!this.transitioning) {
       const nextIndex = this.currentBiomeIndex + 1;
       if (nextIndex < BIOME_THRESHOLDS.length) {
         const threshold = BIOME_THRESHOLDS[nextIndex];
-        if (score >= threshold.score) {
+        if (elapsedMs >= threshold.timeMs) {
           const nextEnv = BIOME_REGISTRY[threshold.biomeId];
           if (nextEnv) {
             this.startTransition(nextEnv);
@@ -125,6 +132,13 @@ export class EnvironmentManager {
     this.toEnv = null;
     this.transitionProgress = 0;
     this.transitioning = false;
+    this.biomeStartMs = 0;
+    this.lastElapsedMs = 0;
+  }
+
+  /** Returns elapsed time relative to when the current biome started. */
+  getBiomeElapsedMs(elapsedMs: number): number {
+    return Math.max(0, elapsedMs - this.biomeStartMs);
   }
 
   /**
@@ -172,6 +186,25 @@ export class EnvironmentManager {
     return this.transitioning ? this.transitionProgress : 0;
   }
 
+  /** Force an immediate transition to the next biome (debug only). */
+  forceNextBiome(): EnvUpdateResult {
+    const result: EnvUpdateResult = {};
+    const nextIndex = this.currentBiomeIndex + 1;
+    if (nextIndex >= BIOME_THRESHOLDS.length) return result;
+    const threshold = BIOME_THRESHOLDS[nextIndex];
+    const nextEnv = BIOME_REGISTRY[threshold.biomeId];
+    if (!nextEnv) return result;
+    this.startTransition(nextEnv);
+    this.currentBiomeIndex = nextIndex;
+    if (nextEnv.musicTrack !== this.currentEnv.musicTrack) {
+      result.musicCrossfade = {
+        track: nextEnv.musicTrack,
+        durationMs: MUSIC_CROSSFADE_MS,
+      };
+    }
+    return result;
+  }
+
   // ── Internal ──
 
   private startTransition(toEnv: EnvironmentDefinition): void {
@@ -179,6 +212,7 @@ export class EnvironmentManager {
     this.toEnv = toEnv;
     this.transitionProgress = 0;
     this.transitioning = true;
+    this.biomeStartMs = this.lastElapsedMs;
   }
 
   private completeTransition(): void {

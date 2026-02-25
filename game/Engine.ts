@@ -9,6 +9,7 @@ import {
   FLIP_TOLERANCE,
   SKETCHY_TOLERANCE,
   AMBULANCE_CHANCE,
+  CRASH_DURATION,
 } from "./constants";
 import {
   FloatingText,
@@ -28,7 +29,7 @@ import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
-import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbulanceLogic } from "./CrashSequence";
+import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
@@ -70,7 +71,7 @@ export class Engine {
   private debugIndex: number = 0;
   private debugGap: number = 500;
   private crashState: CrashState = {
-    elapsed: 0, duration: 1, // Will be initialized
+    elapsed: 0, duration: CRASH_DURATION,
     shakeIntensity: 0, shakeOffsetX: 0, shakeOffsetY: 0,
     riderX: 0, riderY: 0, riderVX: 0, riderVY: 0,
     riderAngle: 0, riderAngularVel: 0, riderBounceCount: 0,
@@ -362,16 +363,16 @@ export class Engine {
 
     const action = updateAmbulanceLogic(this.ambulance, dt, rawDt, this.canvasW);
 
-    if (action === "stop_siren") {
+    if (action === AmbulanceAction.STOP_SIREN) {
       this.sound.stopSiren();
-    } else if (action === "revive") {
+    } else if (action === AmbulanceAction.REVIVE) {
       this.revivePlayer();
       this.sound.playRevive();
-    } else if (action === "resume_game") {
+    } else if (action === AmbulanceAction.RESUME_GAME) {
       this.state = GameState.RUNNING;
       this.sound.startMusic();
       this.callbacks.onStateChange(this.state);
-    } else if (action === "remove") {
+    } else if (action === AmbulanceAction.REMOVE) {
       this.ambulance = null;
     }
   }

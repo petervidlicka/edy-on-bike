@@ -89,9 +89,6 @@ export interface EnvironmentPalette {
     sand?: string;
     sandHighlight?: string;
     sandShadow?: string;
-    buggyFrame?: string;
-    buggyCage?: string;
-    buggyWheel?: string;
     pinkGClass?: string;
     pinkGClassRoof?: string;
     cactus?: string;
@@ -103,6 +100,8 @@ export interface EnvironmentPalette {
     lamboGreen?: string;
     lamboGreenDark?: string;
     lamboWindow?: string;
+    billboardFrame?: string;
+    billboardPost?: string;
   };
 }
 

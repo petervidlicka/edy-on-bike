@@ -1007,93 +1007,6 @@ function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: number, w:
   ctx.stroke();
 }
 
-function drawDesertBuggy(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const frameColor = palette.obstacle.buggyFrame ?? "#2e2e2e";
-  const cageColor = palette.obstacle.buggyCage ?? "#4a4a4a";
-  const wheelColor = palette.obstacle.buggyWheel ?? "#3a3a3a";
-
-  // Large exposed wheels
-  const wheelR = 10;
-  const rearWX = x + wheelR + 3;
-  const frontWX = x + w - wheelR - 3;
-  const wheelY = y + h - wheelR;
-
-  ctx.fillStyle = wheelColor;
-  for (const wx of [rearWX, frontWX]) {
-    ctx.beginPath();
-    ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#1a1a1a";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = cageColor;
-    ctx.beginPath();
-    ctx.arc(wx, wheelY, 3.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = cageColor;
-    ctx.lineWidth = 0.8;
-    for (let i = 0; i < 5; i++) {
-      const a = (i * Math.PI * 2) / 5;
-      ctx.beginPath();
-      ctx.moveTo(wx + Math.cos(a) * 3.5, wheelY + Math.sin(a) * 3.5);
-      ctx.lineTo(wx + Math.cos(a) * (wheelR - 1), wheelY + Math.sin(a) * (wheelR - 1));
-      ctx.stroke();
-    }
-    ctx.fillStyle = wheelColor;
-  }
-
-  // Roll cage frame
-  const cageY = y + 4;
-  ctx.strokeStyle = frameColor;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(rearWX - 2, wheelY - wheelR);
-  ctx.lineTo(rearWX - 2, cageY + 4);
-  ctx.lineTo(rearWX + 6, cageY);
-  ctx.lineTo(frontWX - 6, cageY);
-  ctx.lineTo(frontWX + 2, cageY + 4);
-  ctx.lineTo(frontWX + 2, wheelY - wheelR);
-  ctx.stroke();
-
-  // Cross braces
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = cageColor;
-  ctx.beginPath();
-  ctx.moveTo(rearWX - 2, cageY + 4);
-  ctx.lineTo(rearWX + 8, wheelY - wheelR);
-  ctx.moveTo(rearWX + 8, cageY + 4);
-  ctx.lineTo(rearWX - 2, wheelY - wheelR);
-  ctx.stroke();
-
-  // Bottom rail
-  ctx.strokeStyle = frameColor;
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(rearWX, wheelY - wheelR + 2);
-  ctx.lineTo(frontWX, wheelY - wheelR + 2);
-  ctx.stroke();
-
-  // Seat
-  ctx.fillStyle = cageColor;
-  const cageH = h - wheelR - 6;
-  ctx.fillRect(x + w * 0.3, cageY + cageH * 0.4, w * 0.2, cageH * 0.25);
-
-  // Steering wheel area
-  ctx.strokeStyle = frameColor;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(frontWX - 10, cageY + cageH * 0.35, 4, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Headlight
-  ctx.fillStyle = "#e8d06a";
-  ctx.beginPath();
-  ctx.arc(frontWX + 2, cageY + cageH * 0.6, 2, 0, Math.PI * 2);
-  ctx.fill();
-}
-
 function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const pink = palette.obstacle.pinkGClass ?? "#e87a9f";
   const pinkDark = palette.obstacle.pinkGClassRoof ?? "#d06888";
@@ -1410,6 +1323,226 @@ function drawDubaiChocolate(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.strokeRect(x, y, w, h);
 }
 
+function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const frameColor = palette.obstacle.billboardFrame ?? "#a0a0a0";
+  const postColor = palette.obstacle.billboardPost ?? "#5a5a5a";
+
+  // Layout: sign panel on top, two posts below
+  const signH = h * 0.62;  // ~50px for 80h
+  const postStartY = y + signH;
+  const postW = 5;
+  const postLeftX = x + 22;
+  const postRightX = x + w - 27;
+
+  // --- Support posts (steel I-beams) ---
+  ctx.fillStyle = postColor;
+  ctx.fillRect(postLeftX, postStartY, postW, h - signH);
+  ctx.fillRect(postRightX, postStartY, postW, h - signH);
+  // Post highlight edge
+  ctx.fillStyle = "#7a7a7a";
+  ctx.fillRect(postLeftX + 1, postStartY, 1.5, h - signH);
+  ctx.fillRect(postRightX + 1, postStartY, 1.5, h - signH);
+  // Post base plates
+  ctx.fillStyle = postColor;
+  ctx.fillRect(postLeftX - 3, y + h - 3, postW + 6, 3);
+  ctx.fillRect(postRightX - 3, y + h - 3, postW + 6, 3);
+  // Cross brace between posts
+  ctx.strokeStyle = postColor;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(postLeftX + postW, postStartY + 8);
+  ctx.lineTo(postRightX, postStartY + 8);
+  ctx.stroke();
+
+  // --- Sign panel background (white) ---
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(x + 2, y + 2, w - 4, signH - 4);
+
+  // --- Ad interior scene ---
+  const adX = x + 4;
+  const adY = y + 4;
+  const adW = w - 8; // ~132
+  const adH = signH - 8; // ~42
+
+  // Sky gradient (teal-blue)
+  const skyGrad = ctx.createLinearGradient(adX, adY, adX, adY + adH * 0.65);
+  skyGrad.addColorStop(0, "#1a6a8a");
+  skyGrad.addColorStop(0.5, "#3898b8");
+  skyGrad.addColorStop(1, "#68c8d8");
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(adX, adY, adW, adH * 0.65);
+
+  // Water strip (teal with reflections)
+  ctx.fillStyle = "#2088a0";
+  ctx.fillRect(adX, adY + adH * 0.55, adW, adH * 0.15);
+  // Water sparkles
+  ctx.strokeStyle = "rgba(255,255,255,0.3)";
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < 8; i++) {
+    const sx = adX + adW * (0.05 + i * 0.12);
+    const sy = adY + adH * 0.6 + Math.random() * adH * 0.06;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + 3, sy);
+    ctx.stroke();
+  }
+
+  // Sand/ground at bottom
+  ctx.fillStyle = "#d4b87a";
+  ctx.fillRect(adX, adY + adH * 0.68, adW, adH * 0.32);
+
+  // --- Skyscrapers (4 simplified towers) ---
+  const towers = [
+    { cx: 0.15, tw: 0.08, th: 0.5, color: "#b8d0e0" },
+    { cx: 0.32, tw: 0.06, th: 0.55, color: "#c8d8e8" },
+    { cx: 0.68, tw: 0.07, th: 0.48, color: "#a8c0d0" },
+    { cx: 0.82, tw: 0.05, th: 0.42, color: "#c0d0e0" },
+  ];
+  for (const t of towers) {
+    const tx = adX + adW * t.cx - (adW * t.tw) / 2;
+    const ty = adY + adH * (0.55 - t.th);
+    const ttw = adW * t.tw;
+    const tth = adH * t.th;
+    ctx.fillStyle = t.color;
+    ctx.fillRect(tx, ty, ttw, tth);
+    // Windows (tiny dots)
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    for (let wy = 0; wy < tth - 2; wy += 4) {
+      for (let wx = 1; wx < ttw - 1; wx += 3) {
+        ctx.fillRect(tx + wx, ty + wy + 1, 1.5, 1.5);
+      }
+    }
+  }
+
+  // --- Sail-shaped tower (Burj Al Arab silhouette) ---
+  ctx.fillStyle = "#d0e0f0";
+  ctx.beginPath();
+  ctx.moveTo(adX + adW * 0.48, adY + adH * 0.52);
+  ctx.lineTo(adX + adW * 0.46, adY + adH * 0.08);
+  ctx.quadraticCurveTo(adX + adW * 0.5, adY + adH * 0.02, adX + adW * 0.56, adY + adH * 0.1);
+  ctx.lineTo(adX + adW * 0.54, adY + adH * 0.52);
+  ctx.closePath();
+  ctx.fill();
+
+  // --- Palm tree silhouettes (3 palms) ---
+  const palmPositions = [0.22, 0.55, 0.88];
+  for (const px of palmPositions) {
+    const palmX = adX + adW * px;
+    const palmBase = adY + adH * 0.62;
+    const palmTop = adY + adH * 0.3;
+    // Trunk
+    ctx.strokeStyle = "#4a6838";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(palmX, palmBase);
+    ctx.quadraticCurveTo(palmX + 2, (palmBase + palmTop) / 2, palmX + 1, palmTop);
+    ctx.stroke();
+    // Fronds (small green fan)
+    ctx.fillStyle = "#3a7a38";
+    for (let f = 0; f < 5; f++) {
+      const angle = -Math.PI * 0.8 + (f * Math.PI * 1.6) / 4;
+      ctx.beginPath();
+      ctx.moveTo(palmX + 1, palmTop);
+      ctx.quadraticCurveTo(
+        palmX + 1 + Math.cos(angle) * 6,
+        palmTop + Math.sin(angle) * 3,
+        palmX + 1 + Math.cos(angle) * 10,
+        palmTop + Math.sin(angle) * 6
+      );
+      ctx.lineTo(palmX + 1, palmTop + 1);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // --- Small yacht in water ---
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.moveTo(adX + adW * 0.4, adY + adH * 0.58);
+  ctx.lineTo(adX + adW * 0.44, adY + adH * 0.62);
+  ctx.lineTo(adX + adW * 0.36, adY + adH * 0.62);
+  ctx.closePath();
+  ctx.fill();
+  // Mast
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(adX + adW * 0.4, adY + adH * 0.58);
+  ctx.lineTo(adX + adW * 0.4, adY + adH * 0.52);
+  ctx.stroke();
+
+  // --- Text: project name ---
+  ctx.fillStyle = "#1a3a4a";
+  ctx.font = `bold ${Math.max(7, adH * 0.18 | 0)}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("DUBAI HORIZON", adX + adW * 0.5, adY + adH * 0.72);
+
+  // --- Subtext ---
+  ctx.fillStyle = "#8a6a30";
+  ctx.font = `${Math.max(5, adH * 0.12 | 0)}px sans-serif`;
+  ctx.fillText("RESIDENCES", adX + adW * 0.5, adY + adH * 0.84);
+
+  // --- Decorative Arabic-style line (geometric ornament) ---
+  ctx.strokeStyle = "#c8a050";
+  ctx.lineWidth = 0.6;
+  const ornY = adY + adH * 0.7;
+  ctx.beginPath();
+  ctx.moveTo(adX + adW * 0.15, ornY);
+  ctx.lineTo(adX + adW * 0.85, ornY);
+  ctx.stroke();
+  // Small diamond ornaments along the line
+  ctx.fillStyle = "#c8a050";
+  for (let d = 0; d < 5; d++) {
+    const dx = adX + adW * (0.25 + d * 0.125);
+    ctx.beginPath();
+    ctx.moveTo(dx, ornY - 1.5);
+    ctx.lineTo(dx + 1.5, ornY);
+    ctx.lineTo(dx, ornY + 1.5);
+    ctx.lineTo(dx - 1.5, ornY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // --- Crescent + tower logo (top-left of ad) ---
+  ctx.fillStyle = "#c8a050";
+  // Crescent
+  ctx.beginPath();
+  ctx.arc(adX + 8, adY + 6, 3.5, 0.3, Math.PI * 2 - 0.3);
+  ctx.fill();
+  ctx.fillStyle = "#1a6a8a"; // cut-out for crescent shape
+  ctx.beginPath();
+  ctx.arc(adX + 9.5, adY + 5.5, 2.8, 0, Math.PI * 2);
+  ctx.fill();
+  // Small star
+  ctx.fillStyle = "#c8a050";
+  ctx.beginPath();
+  ctx.arc(adX + 12, adY + 5, 1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- "COMING SOON" badge (bottom-right) ---
+  ctx.fillStyle = "#c44040";
+  ctx.fillRect(adX + adW - 32, adY + adH - 9, 30, 8);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `bold ${Math.max(4, adH * 0.1 | 0)}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("COMING SOON", adX + adW - 17, adY + adH - 5);
+
+  // --- Sign panel metal frame (on top of everything) ---
+  ctx.strokeStyle = frameColor;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 1, y + 1, w - 2, signH - 2);
+  // Inner frame line
+  ctx.strokeStyle = "#b8b8b8";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 3, y + 3, w - 6, signH - 6);
+
+  // Reset text alignment
+  ctx.textAlign = "start";
+  ctx.textBaseline = "alphabetic";
+}
+
 function drawLamborghiniHuracan(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const green = palette.obstacle.lamboGreen ?? "#2d8a35";
   const greenDark = palette.obstacle.lamboGreenDark ?? "#1e6a25";
@@ -1591,10 +1724,10 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleIn
     case ObstacleType.CAMEL:              drawCamel(ctx, x, y, w, h, palette); break;
     case ObstacleType.SAND_TRAP:          drawSandTrap(ctx, x, y, w, h, palette); break;
     case ObstacleType.LAND_CRUISER:       drawLandCruiser(ctx, x, y, w, h, palette); break;
-    case ObstacleType.DESERT_BUGGY:       drawDesertBuggy(ctx, x, y, w, h, palette); break;
     case ObstacleType.PINK_G_CLASS:       drawPinkGClass(ctx, x, y, w, h, palette); break;
     case ObstacleType.CACTUS:             drawCactus(ctx, x, y, w, h, palette); break;
     case ObstacleType.DUBAI_CHOCOLATE:    drawDubaiChocolate(ctx, x, y, w, h, palette); break;
     case ObstacleType.LAMBORGHINI_HURACAN: drawLamborghiniHuracan(ctx, x, y, w, h, palette); break;
+    case ObstacleType.DUBAI_BILLBOARD:    drawDubaiBillboard(ctx, x, y, w, h, palette); break;
   }
 }

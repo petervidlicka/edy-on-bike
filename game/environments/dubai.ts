@@ -97,9 +97,6 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
     sand: "#d8c078",
     sandHighlight: "#e8d498",
     sandShadow: "#b09858",
-    buggyFrame: "#2e2e2e",
-    buggyCage: "#4a4a4a",
-    buggyWheel: "#3a3a3a",
     pinkGClass: "#e87a9f",
     pinkGClassRoof: "#d06888",
     cactus: "#3a7a38",
@@ -111,6 +108,8 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
     lamboGreen: "#2d8a35",
     lamboGreenDark: "#1e6a25",
     lamboWindow: "#2a3a4a",
+    billboardFrame: "#a0a0a0",
+    billboardPost: "#5a5a5a",
   },
 };
 
@@ -267,13 +266,13 @@ function dubaiWeightedTypes(biomeMs: number): WeightedType[] {
     { type: ObstacleType.LAND_CRUISER, weight: 0.3 },
     { type: ObstacleType.PINK_G_CLASS, weight: 0.2 },
   ];
-  // Stage 2 (15s into Dubai): buggies + ramps, more vehicles, chocolate + lambo
+  // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + lambo + billboard
   if (biomeMs >= 15_000) {
-    types.push({ type: ObstacleType.DESERT_BUGGY, weight: 0.8 });
     types.push({ type: ObstacleType.STRAIGHT_RAMP, weight: 0.4 });
     types.push({ type: ObstacleType.CURVED_RAMP, weight: 0.4 });
     types.push({ type: ObstacleType.DUBAI_CHOCOLATE, weight: 0.7 });
     types.push({ type: ObstacleType.LAMBORGHINI_HURACAN, weight: 0.5 });
+    types.push({ type: ObstacleType.DUBAI_BILLBOARD, weight: 0.4 });
     for (const t of types) {
       if (t.type === ObstacleType.LAND_CRUISER) t.weight = 0.7;
       if (t.type === ObstacleType.PINK_G_CLASS) t.weight = 0.5;

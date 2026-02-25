@@ -10,24 +10,7 @@ import StartScreen from "./StartScreen";
 import HUD from "./HUD";
 import GameOverScreen from "./GameOverScreen";
 
-function useCheatCode(code: string, onActivate: () => void) {
-  const bufferRef = useRef("");
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      bufferRef.current += e.key.toUpperCase();
-      if (bufferRef.current.length > code.length) {
-        bufferRef.current = bufferRef.current.slice(-code.length);
-      }
-      if (bufferRef.current === code) {
-        bufferRef.current = "";
-        onActivate();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [code, onActivate]);
-}
+import { useCheatCode } from "@/hooks/useCheatCode";
 
 const DEBUG_OBSTACLE_SEQUENCE = [
   ObstacleType.STRAIGHT_RAMP, ObstacleType.STRAIGHT_RAMP,
@@ -118,7 +101,7 @@ export default function GameCanvas() {
       window.removeEventListener("resize", handleResize);
       if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync skin to engine when selection changes

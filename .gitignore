@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local dev leaderboard data
 /data/
+*.diff
+*.patch
+pr_review*.md

@@ -337,7 +337,7 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
             color: "#64748b",
             letterSpacing: "0.04em",
           }}>
-            click anywhere to continue
+            click or press Space to continue
           </p>
         </>
       )}

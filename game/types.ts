@@ -1,7 +1,54 @@
 export enum GameState {
   IDLE = "IDLE",
   RUNNING = "RUNNING",
+  CRASHING = "CRASHING",
+  AMBULANCE = "AMBULANCE",
   GAME_OVER = "GAME_OVER",
+}
+
+export interface CrashState {
+  elapsed: number;
+  duration: number;
+
+  shakeIntensity: number;
+  shakeOffsetX: number;
+  shakeOffsetY: number;
+
+  riderX: number;
+  riderY: number;
+  riderVX: number;
+  riderVY: number;
+  riderAngle: number;
+  riderAngularVel: number;
+  riderBounceCount: number;
+
+  bikeX: number;
+  bikeY: number;
+  bikeVX: number;
+  bikeVY: number;
+  bikeAngle: number;
+  bikeAngularVel: number;
+  bikeBounceCount: number;
+  bikeWheelRotation: number;
+}
+
+export enum AmbulancePhase {
+  DRIVING_IN = "DRIVING_IN",
+  STOPPED = "STOPPED",
+  REVIVING = "REVIVING",
+  DRIVING_OUT = "DRIVING_OUT",
+}
+
+export interface AmbulanceState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  phase: AmbulancePhase;
+  phaseTimer: number;
+  targetX: number;
+  sirenFlash: number;
+  reviveFlashOpacity: number;
 }
 
 export enum ObstacleType {
@@ -17,6 +64,16 @@ export enum ObstacleType {
   STRAIGHT_RAMP = "STRAIGHT_RAMP",
   CURVED_RAMP = "CURVED_RAMP",
   CONTAINER_WITH_RAMP = "CONTAINER_WITH_RAMP",
+
+  // Dubai biome obstacles
+  CAMEL = "CAMEL",
+  SAND_TRAP = "SAND_TRAP",
+  LAND_CRUISER = "LAND_CRUISER",
+  PINK_G_CLASS = "PINK_G_CLASS",
+  CACTUS = "CACTUS",
+  DUBAI_CHOCOLATE = "DUBAI_CHOCOLATE",
+  LAMBORGHINI_HURACAN = "LAMBORGHINI_HURACAN",
+  DUBAI_BILLBOARD = "DUBAI_BILLBOARD",
 }
 
 export enum TrickType {
@@ -50,6 +107,8 @@ export interface PlayerState {
   isBackflipping: boolean;
   /** Rotation direction: 1 = backflip (CCW), -1 = frontflip (CW). */
   flipDirection: number;
+  /** How many flips the player intends to complete. Starts at 1, incremented by additional input. */
+  targetFlipCount: number;
   /** Current active pose trick (mutually exclusive with flips). */
   activeTrick: TrickType;
   /** Progress of pose trick animation: 0 = neutral, 1 = fully extended. Animates 0→1→0. */
@@ -58,6 +117,8 @@ export interface PlayerState {
   trickPhase: "extend" | "return";
   /** Number of completed pose trick cycles in current airtime. */
   trickCompletions: number;
+  /** How many pose trick cycles the player intends to complete. Starts at 1, incremented by additional input. */
+  targetTrickCount: number;
   /** Pending ramp boost type. 'straight' = more distance, 'curved' = more height. */
   rampBoost: "straight" | "curved" | null;
   /** Current ramp surface angle in radians for bike tilt matching. */
@@ -79,6 +140,38 @@ export interface BackgroundLayer {
   elements: BackgroundElement[];
   speedRatio: number;
   offset: number;
+}
+
+// --- Skin types ---
+
+export type SkinId = "default" | "racer" | "cowboy" | "royal" | "neon" | "stealth";
+
+export type HelmetStyle = "standard" | "aero" | "cowboy" | "crown" | "cap" | "goggles";
+
+export type BikeStyle = "bmx" | "racing" | "mtb" | "cruiser" | "fixie" | "fatTire";
+
+export interface SkinColors {
+  wheel: string;
+  frame: string;
+  helmet: string;
+  skin: string;
+  shirt: string;
+  pants: string;
+}
+
+export interface SkinDefinition {
+  id: SkinId;
+  name: string;
+  helmetStyle: HelmetStyle;
+  bikeStyle: BikeStyle;
+  unlockScore: number;
+  colors: SkinColors;
+}
+
+export interface SkinUnlockState {
+  selectedSkinId: SkinId;
+  bestScore: number;
+  cheatUnlocked: boolean;
 }
 
 export interface BackgroundElement {

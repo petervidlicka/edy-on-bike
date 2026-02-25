@@ -1,5 +1,5 @@
 import { PlayerState, TrickType } from "./types";
-import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED } from "./constants";
+import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, RAMP_GRAVITY_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED, MAX_FLIP_COUNT } from "./constants";
 
 export function createPlayer(groundY: number, canvasWidth: number): PlayerState {
   return {
@@ -19,10 +19,12 @@ export function createPlayer(groundY: number, canvasWidth: number): PlayerState 
     backflipAngle: 0,
     isBackflipping: false,
     flipDirection: 1,
+    targetFlipCount: 0,
     activeTrick: TrickType.NONE,
     trickProgress: 0,
     trickPhase: "extend",
     trickCompletions: 0,
+    targetTrickCount: 0,
     rampBoost: null,
     rampSurfaceAngle: 0,
   };
@@ -49,40 +51,102 @@ export function jumpPlayer(player: PlayerState): void {
 }
 
 export function startBackflip(player: PlayerState): boolean {
-  if (player.isOnGround || player.isBackflipping || player.ridingObstacle) return false;
+  if (player.isOnGround || player.ridingObstacle) return false;
+
+  // If already backflipping, queue an additional flip — but only after 90° of
+  // progress into the current target to prevent accidental double-queue
+  if (player.isBackflipping && player.flipDirection === 1) {
+    const minAngle = (player.targetFlipCount - 1) * Math.PI * 2 + Math.PI / 2;
+    if (player.targetFlipCount < MAX_FLIP_COUNT && player.backflipAngle >= minAngle) {
+      player.targetFlipCount++;
+      return true;
+    }
+    return false;
+  }
+  // Can't start a backflip while frontflipping
+  if (player.isBackflipping) return false;
+
   // Allow starting a flip while a pose trick is active (combo)
   player.isBackflipping = true;
   player.backflipAngle = 0;
   player.flipDirection = 1;
+  player.targetFlipCount = 1;
   return true;
 }
 
 export function startFrontflip(player: PlayerState): boolean {
-  if (player.isOnGround || player.isBackflipping || player.ridingObstacle) return false;
+  if (player.isOnGround || player.ridingObstacle) return false;
+
+  // If already frontflipping, queue an additional flip — but only after 90° of
+  // progress into the current target to prevent accidental double-queue
+  if (player.isBackflipping && player.flipDirection === -1) {
+    const minAngle = (player.targetFlipCount - 1) * Math.PI * 2 + Math.PI / 2;
+    if (player.targetFlipCount < MAX_FLIP_COUNT && player.backflipAngle >= minAngle) {
+      player.targetFlipCount++;
+      return true;
+    }
+    return false;
+  }
+  // Can't start a frontflip while backflipping
+  if (player.isBackflipping) return false;
+
   // Allow starting a flip while a pose trick is active (combo)
   player.isBackflipping = true;
   player.backflipAngle = 0;
   player.flipDirection = -1;
+  player.targetFlipCount = 1;
   return true;
 }
 
 export function startSuperman(player: PlayerState): boolean {
   if (player.isOnGround || player.ridingObstacle) return false;
+
+  // If already doing a superman, queue an additional cycle
+  if (player.activeTrick === TrickType.SUPERMAN) {
+    const cycleProgress = player.trickPhase === "extend"
+      ? player.trickProgress * 0.5
+      : 0.5 + (1 - player.trickProgress) * 0.5;
+    const totalProgress = player.trickCompletions + cycleProgress;
+    const minProgress = (player.targetTrickCount - 1) + 0.5;
+    if (player.targetTrickCount < MAX_FLIP_COUNT && totalProgress >= minProgress) {
+      player.targetTrickCount++;
+      return true;
+    }
+    return false;
+  }
+
   if (player.activeTrick !== TrickType.NONE) return false; // can't switch pose tricks
-  // Allow starting a pose trick while flipping (combo)
   player.activeTrick = TrickType.SUPERMAN;
   player.trickProgress = 0;
   player.trickPhase = "extend";
+  player.targetTrickCount = 1;
+  player.trickCompletions = 0;
   return true;
 }
 
 export function startNoHander(player: PlayerState): boolean {
   if (player.isOnGround || player.ridingObstacle) return false;
-  if (player.activeTrick !== TrickType.NONE) return false; // can't switch pose tricks
-  // Allow starting a pose trick while flipping (combo)
+
+  // If already doing a no-hander, queue an additional cycle
+  if (player.activeTrick === TrickType.NO_HANDER) {
+    const cycleProgress = player.trickPhase === "extend"
+      ? player.trickProgress * 0.5
+      : 0.5 + (1 - player.trickProgress) * 0.5;
+    const totalProgress = player.trickCompletions + cycleProgress;
+    const minProgress = (player.targetTrickCount - 1) + 0.5;
+    if (player.targetTrickCount < MAX_FLIP_COUNT && totalProgress >= minProgress) {
+      player.targetTrickCount++;
+      return true;
+    }
+    return false;
+  }
+
+  if (player.activeTrick !== TrickType.NONE) return false;
   player.activeTrick = TrickType.NO_HANDER;
   player.trickProgress = 0;
   player.trickPhase = "extend";
+  player.targetTrickCount = 1;
+  player.trickCompletions = 0;
   return true;
 }
 
@@ -104,8 +168,10 @@ export function updatePlayer(
   }
 
   if (!player.isOnGround) {
-    // Straight ramp boost: reduced gravity for more horizontal distance
-    const effectiveGravity = player.rampBoost === "straight" ? GRAVITY * 0.5 : GRAVITY;
+    // Ramp boost: reduced gravity for more airtime
+    const effectiveGravity =
+      player.rampBoost ? GRAVITY * RAMP_GRAVITY_MULTIPLIER :
+      GRAVITY;
     player.velocityY += effectiveGravity * dt;
     player.y += player.velocityY * dt;
 
@@ -124,22 +190,39 @@ export function updatePlayer(
 
   // --- Backflip / frontflip rotation ---
   if (player.isBackflipping) {
-    player.backflipAngle += BACKFLIP_SPEED * dt;
+    const targetAngle = player.targetFlipCount * Math.PI * 2;
+    const remaining = targetAngle - player.backflipAngle;
+
+    if (remaining > 0) {
+      // Decelerate as we approach the target angle
+      const decelZone = Math.PI * 0.6; // ~108° before target, start slowing
+      let speedFactor = 1.0;
+      if (remaining < decelZone) {
+        speedFactor = 0.3 + 0.7 * (remaining / decelZone);
+      }
+      player.backflipAngle = Math.min(
+        player.backflipAngle + BACKFLIP_SPEED * speedFactor * dt,
+        targetAngle,
+      );
+    }
   }
 
   // --- Pose trick animation (superman, no hander) ---
-  if (player.activeTrick !== TrickType.NONE) {
-    const speed = player.activeTrick === TrickType.SUPERMAN ? SUPERMAN_SPEED : NO_HANDER_SPEED;
+  if (player.activeTrick !== TrickType.NONE && player.trickCompletions < player.targetTrickCount) {
+    const trickSpeed = player.activeTrick === TrickType.SUPERMAN ? SUPERMAN_SPEED : NO_HANDER_SPEED;
     if (player.trickPhase === "extend") {
-      player.trickProgress = Math.min(1, player.trickProgress + speed * dt);
+      player.trickProgress = Math.min(1, player.trickProgress + trickSpeed * dt);
       if (player.trickProgress >= 1) {
         player.trickPhase = "return";
       }
     } else {
-      player.trickProgress = Math.max(0, player.trickProgress - speed * dt);
+      player.trickProgress = Math.max(0, player.trickProgress - trickSpeed * dt);
       if (player.trickProgress <= 0) {
         player.trickCompletions++;
-        player.trickPhase = "extend"; // ready for next chain
+        // Only start a new cycle if the player has queued more
+        if (player.trickCompletions < player.targetTrickCount) {
+          player.trickPhase = "extend";
+        }
       }
     }
   }
@@ -153,21 +236,30 @@ export function updatePlayer(
       player.riderCrouch += (0 - player.riderCrouch) * 0.3 * dt;
       player.legTuck += (0 - player.legTuck) * 0.3 * dt;
     } else {
+      // BMX bunnyhop phases driven by normalizedVel (1 = launch, 0 = peak, <0 = descent)
       const normalizedVel = -player.velocityY / 12;
 
-      // Bike tilt: front wheel up while ascending, nose down while descending
-      const targetTilt = Math.max(-0.3, Math.min(0.45, -player.velocityY * 0.03));
-      player.bikeTilt += (targetTilt - player.bikeTilt) * 0.15 * dt;
+      // Phase 1 (early ascent): Rider leans back hard and crouches low — loading the rear
+      const leanBack = Math.max(0, normalizedVel) ** 0.7 * 0.55;
+      const targetLean = leanBack;
+      player.riderLean += (targetLean - player.riderLean) * 0.18 * dt;
 
-      // Rider lean: lean back on ascent, forward on descent (staggered phase 1)
-      const targetLean = normalizedVel * 0.35;
-      player.riderLean += (targetLean - player.riderLean) * 0.13 * dt;
+      // Rider crouch: LOW early (crouching into the jump), then extends/stands up at peak
+      // Negative normalizedVel-offset makes crouch peak during early ascent
+      const crouchDown = Math.max(0, normalizedVel - 0.2) * 1.2; // crouch in early ascent
+      const standUp = Math.max(0, 0.3 - Math.abs(normalizedVel)) * 2.5; // stand near peak
+      const targetCrouch = Math.min(1, Math.max(standUp - crouchDown * 0.5, -0.3));
+      player.riderCrouch += (targetCrouch - player.riderCrouch) * 0.15 * dt;
 
-      // Rider crouch/stand: peaks mid-ascent at normalizedVel ≈ 0.3 (staggered phase 2)
-      const targetCrouch = Math.max(0, 1 - Math.abs(normalizedVel - 0.3) * 2.5);
-      player.riderCrouch += (targetCrouch - player.riderCrouch) * 0.13 * dt;
+      // Phase 2 (slightly delayed): Bike tilts backward — front wheel lifts
+      // Delayed onset: only kicks in once normalizedVel drops below ~0.85
+      const tiltPhase = Math.max(0, Math.min(1, (1 - normalizedVel) * 2.5));
+      const ascentTilt = tiltPhase * Math.max(0, normalizedVel) * 0.35;
+      const descentTilt = Math.min(0, normalizedVel) * 0.03;
+      const targetTilt = Math.max(-0.04, Math.min(0.35, ascentTilt + descentTilt));
+      player.bikeTilt += (targetTilt - player.bikeTilt) * 0.14 * dt;
 
-      // Leg tuck: peaks just past peak at normalizedVel ≈ -0.15 (staggered phase 3)
+      // Phase 4 (descent): Leg tuck peaks just past peak
       const targetTuck = Math.max(0, 1 - Math.abs(normalizedVel + 0.15) * 2);
       player.legTuck += (targetTuck - player.legTuck) * 0.13 * dt;
     }

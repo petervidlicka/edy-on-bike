@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { getTopScores, addScore } from "@/lib/leaderboard";
+import { getTopScores, getTotalPlayers, addScore } from "@/lib/leaderboard";
 
 // Allow requests from the Capacitor native app (iOS: capacitor://localhost, Android: http://localhost)
 const ALLOWED_ORIGINS = [
@@ -65,8 +65,11 @@ async function isRateLimited(ip: string): Promise<boolean> {
 const MAX_SCORE = 99999;
 
 export async function GET(request: NextRequest) {
-  const scores = await getTopScores(20);
-  return NextResponse.json(scores, { headers: corsHeaders(request) });
+  const [scores, totalPlayers] = await Promise.all([
+    getTopScores(20),
+    getTotalPlayers(),
+  ]);
+  return NextResponse.json({ scores, totalPlayers }, { headers: corsHeaders(request) });
 }
 
 export async function POST(request: NextRequest) {
@@ -84,14 +87,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { name?: string; score?: number };
+  let body: { name?: string; score?: number; skin?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400, headers: cors });
   }
 
-  const { name, score } = body;
+  const { name, score, skin } = body;
 
   if (typeof name !== "string" || name.trim().length === 0) {
     return NextResponse.json({ error: "Name is required." }, { status: 400, headers: cors });
@@ -118,7 +121,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await addScore(name.trim(), Math.floor(score));
+  const skinStr = typeof skin === "string" && skin.trim().length <= 30 ? skin.trim() : undefined;
+  await addScore(name.trim(), Math.floor(score), skinStr);
 
   return NextResponse.json({ ok: true }, { headers: cors });
 }

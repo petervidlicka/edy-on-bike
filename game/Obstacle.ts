@@ -16,6 +16,16 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.STRAIGHT_RAMP]:   { width: 90, height: 30 },
   [ObstacleType.CURVED_RAMP]:     { width: 75, height: 36 },
   [ObstacleType.CONTAINER_WITH_RAMP]: { width: 176, height: 75 },
+
+  // Dubai biome obstacles
+  [ObstacleType.CAMEL]:           { width: 50, height: 48 },
+  [ObstacleType.SAND_TRAP]:       { width: 120, height: 28 },
+  [ObstacleType.LAND_CRUISER]:    { width: 80, height: 42 },
+  [ObstacleType.PINK_G_CLASS]:    { width: 76, height: 46 },
+  [ObstacleType.CACTUS]:          { width: 22, height: 60 },
+  [ObstacleType.DUBAI_CHOCOLATE]: { width: 176, height: 75 },
+  [ObstacleType.LAMBORGHINI_HURACAN]: { width: 88, height: 28 },
+  [ObstacleType.DUBAI_BILLBOARD]:    { width: 309, height: 92 },
 };
 
 function weightedRandom(types: WeightedType[]): ObstacleType {
@@ -28,6 +38,28 @@ function weightedRandom(types: WeightedType[]): ObstacleType {
   return types[types.length - 1].type;
 }
 
+export function createObstacle(
+  type: ObstacleType,
+  canvasWidth: number,
+  groundY: number
+): ObstacleInstance {
+  const spec = OBSTACLE_SPECS[type];
+  // Ramps keep exact positioning (physics-dependent), everything else sits
+  // slightly into the road so obstacles look grounded rather than floating.
+  // Offset is capped at (height - 17) to guarantee collision overlap remains.
+  const isRamp = type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP || type === ObstacleType.CONTAINER_WITH_RAMP;
+  const yOffset = isRamp ? 0 : Math.max(0, Math.min(spec.height - 17, 10));
+  return {
+    type,
+    x: canvasWidth + 60,
+    y: groundY - spec.height + yOffset,
+    width: spec.width,
+    height: spec.height,
+    rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER || type === ObstacleType.CONTAINER_WITH_RAMP || type === ObstacleType.DUBAI_CHOCOLATE || type === ObstacleType.DUBAI_BILLBOARD,
+    ramp: type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP,
+  };
+}
+
 export function spawnObstacle(
   canvasWidth: number,
   groundY: number,
@@ -35,16 +67,7 @@ export function spawnObstacle(
   envDef: EnvironmentDefinition
 ): ObstacleInstance {
   const type = weightedRandom(envDef.obstaclePool.getWeightedTypes(elapsedMs));
-  const spec = OBSTACLE_SPECS[type];
-  return {
-    type,
-    x: canvasWidth + 60,
-    y: groundY - spec.height,
-    width: spec.width,
-    height: spec.height,
-    rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER || type === ObstacleType.CONTAINER_WITH_RAMP,
-    ramp: type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP,
-  };
+  return createObstacle(type, canvasWidth, groundY);
 }
 
 // Returns the pixel distance to wait before spawning the next obstacle.

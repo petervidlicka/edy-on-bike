@@ -38,14 +38,16 @@ export function checkRideableCollision(
   const oy1 = obstacle.y;
   const oy2 = obstacle.y + obstacle.height - HITBOX_PADDING;
 
-  // For CONTAINER_WITH_RAMP, extend the collision top in the ramp zone
-  // so players landing on the visual ramp aren't clipping through it.
+  // For CONTAINER_WITH_RAMP, follow the actual curved ramp surface so
+  // landings at any point on the ramp are detected correctly (not just the peak).
   let effectiveOy1 = oy1;
   if (obstacle.type === ObstacleType.CONTAINER_WITH_RAMP) {
     const rampX = obstacle.x + obstacle.width - CONTAINER_RAMP_W;
     const playerCenterX = (px1 + px2) / 2;
     if (playerCenterX >= rampX) {
-      effectiveOy1 = obstacle.y - CONTAINER_RAMP_H;
+      const t = Math.min(1, (playerCenterX - rampX) / CONTAINER_RAMP_W);
+      const curvedT = t * t; // quadratic ease-in matching the renderer
+      effectiveOy1 = obstacle.y - curvedT * CONTAINER_RAMP_H;
     }
   }
 
@@ -58,6 +60,7 @@ export function checkRideableCollision(
   // 1. Player must be falling (velocityY > 0)
   // 2. Player's bottom edge must be near the top of the obstacle
   // 3. At least 25% of the player's width overlaps the obstacle (allows rear-wheel landings)
+  //    Except when hitting the back edge (leaving the obstacle), where any overlap is fine.
   const playerBottom = py2;
   const obstacleTop = effectiveOy1;
   const overlapLeft = Math.max(px1, ox1);
@@ -65,11 +68,14 @@ export function checkRideableCollision(
   const overlapWidth = overlapRight - overlapLeft;
   const playerWidth = px2 - px1;
 
+  const isLeaving = px2 > ox2;
+  const requiredOverlapRatio = isLeaving ? 0 : 0.25;
+
   if (
     player.velocityY > 0 &&
     playerBottom >= obstacleTop &&
     playerBottom <= obstacleTop + TOP_LANDING_TOLERANCE &&
-    overlapWidth / playerWidth >= 0.25
+    overlapWidth / playerWidth >= requiredOverlapRatio
   ) {
     return "land_on_top";
   }

@@ -1,50 +1,42 @@
-import { GameState, ObstacleInstance, ObstacleType, TrickType } from "./types";
+import { GameState, AmbulancePhase, AmbulanceState, CrashState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
   SPEED_INCREASE,
   SPEED_INTERVAL,
   SCORE_PER_PX,
-  BACKFLIP_BONUS,
-  SUPERMAN_BONUS,
-  NO_HANDER_BONUS,
-  TRICK_COMPLETION_THRESHOLD,
-  DOUBLE_CHAIN_BONUS,
-  TRIPLE_CHAIN_BONUS,
-  JUMP_FORCE,
-  RAMP_HEIGHT_MULTIPLIER,
   MAX_SPEED_MULTIPLIER,
-  COMBO_MULTIPLIER,
+  FLIP_TOLERANCE,
+  SKETCHY_TOLERANCE,
+  AMBULANCE_CHANCE,
+  CRASH_DURATION,
 } from "./constants";
+import {
+  FloatingText,
+  createTrickFloatingText,
+  updateFloatingTexts,
+  processTrickLanding,
+  TrickContext
+} from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers } from "./Background";
-import { drawBackground, drawPlayer, drawObstacle, drawFloatingText } from "./Renderer";
-import { spawnObstacle, nextSpawnGap } from "./Obstacle";
-import { checkCollision, checkRideableCollision, checkRampCollision } from "./Collision";
+import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider, createParticles, updateParticles, drawParticles, drawAmbulance, drawReviveFlash } from "./rendering";
+import type { Particle } from "./rendering";
+import type { ParticleOverlayConfig } from "./environments/types";
+import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
+import { checkCollision, checkRideableCollision } from "./Collision";
+import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
-
-function computeTrickScore(baseName: string, basePoints: number, count: number): { label: string; totalBonus: number } {
-  if (count === 1) return { label: baseName, totalBonus: basePoints };
-  if (count === 2) return { label: `Double ${baseName}`, totalBonus: 2 * basePoints + DOUBLE_CHAIN_BONUS };
-  const prefix = count === 3 ? "Triple" : `${count}x`;
-  return { label: `${prefix} ${baseName}`, totalBonus: count * basePoints + TRIPLE_CHAIN_BONUS };
-}
-
-interface FloatingText {
-  text: string;
-  x: number;
-  y: number;
-  opacity: number;
-  velocityY: number;
-}
+import { getSkinById } from "./skins";
+import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
   onGameOver: (score: number) => void;
   onStateChange: (state: GameState) => void;
   onSpeedUpdate?: (speed: number) => void;
-  onTrickLanded?: (trickName: string, points: number) => void;
+  onTrickLanded?: (trickName: string, points: number, sketchy?: boolean) => void;
 };
 
 export class Engine {
@@ -71,6 +63,24 @@ export class Engine {
   private groundY: number = 0;
   private callbacks: EngineCallbacks;
   private sound = new SoundManager();
+  private ambulance: AmbulanceState | null = null;
+  private hasBeenResurrected = false;
+  private iddqdActive = false;
+  private skin: SkinDefinition = getSkinById("default");
+  private debugSequence: ObstacleType[] | null = null;
+  private debugIndex: number = 0;
+  private debugGap: number = 500;
+  private crashState: CrashState = {
+    elapsed: 0, duration: CRASH_DURATION,
+    shakeIntensity: 0, shakeOffsetX: 0, shakeOffsetY: 0,
+    riderX: 0, riderY: 0, riderVX: 0, riderVY: 0,
+    riderAngle: 0, riderAngularVel: 0, riderBounceCount: 0,
+    bikeX: 0, bikeY: 0, bikeVX: 0, bikeVY: 0,
+    bikeAngle: 0, bikeAngularVel: 0, bikeBounceCount: 0,
+    bikeWheelRotation: 0,
+  };
+  private particles: Particle[] = [];
+  private particleConfig: ParticleOverlayConfig | null = null;
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
@@ -88,7 +98,7 @@ export class Engine {
     this.canvas.width = w;
     this.canvas.height = h;
     this.layers = createBackgroundLayers(w, this.groundY, this.envManager.getCurrentEnvironment());
-    if (this.state !== GameState.RUNNING) {
+    if (this.state !== GameState.RUNNING && this.state !== GameState.AMBULANCE) {
       this.player = createPlayer(this.groundY, w);
     } else {
       this.player.y = Math.min(this.player.y, this.groundY - this.player.height);
@@ -104,7 +114,11 @@ export class Engine {
   }
 
   restart(): void {
+    this.sound.stopSiren();
     this.sound.stopMusic();
+    this.ambulance = null;
+    this.hasBeenResurrected = false;
+    this.iddqdActive = false;
     this.state = GameState.IDLE;
     this.speed = INITIAL_SPEED;
     this.score = 0;
@@ -114,9 +128,12 @@ export class Engine {
     this.lastTime = 0;
     this.distanceSinceLastObstacle = 0;
     this.nextObstacleGap = 0;
+    this.debugIndex = 0;
     this.obstacles = [];
     this.floatingTexts = [];
     this.envManager.reset();
+    this.particles = [];
+    this.particleConfig = null;
     this.player = createPlayer(this.groundY, this.canvasW);
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
@@ -166,6 +183,15 @@ export class Engine {
 
     if (this.state === GameState.RUNNING) {
       this.update(dt, rawDt);
+    } else if (this.state === GameState.CRASHING) {
+      this.updateCrash(dt, rawDt);
+    } else if (this.state === GameState.AMBULANCE) {
+      this.updateAmbulance(dt, rawDt);
+    }
+
+    // Continue driving out ambulance after game resumes
+    if (this.state === GameState.RUNNING && this.ambulance) {
+      this.updateAmbulance(dt, rawDt);
     }
 
     this.render();
@@ -174,12 +200,21 @@ export class Engine {
 
   private update(dt: number, rawDt: number): void {
     // Environment progression
-    const envResult = this.envManager.update(dt, this.score);
+    const envResult = this.envManager.update(dt, this.elapsedMs);
     if (envResult.musicCrossfade) {
       this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
     }
     if (envResult.regenerateBackground) {
       this.layers = createBackgroundLayers(this.canvasW, this.groundY, envResult.regenerateBackground);
+      // Initialize particles if the new biome has a particle overlay
+      const overlay = envResult.regenerateBackground.particleOverlay;
+      if (overlay) {
+        this.particleConfig = overlay;
+        this.particles = createParticles(this.canvasW, this.canvasH, overlay);
+      } else {
+        this.particleConfig = null;
+        this.particles = [];
+      }
     }
 
     // Speed progression
@@ -208,30 +243,26 @@ export class Engine {
     const prevFlipDirection = this.player.flipDirection;
     updatePlayer(this.player, dt, this.groundY, this.speed);
     updateLayers(this.layers, this.speed, dt);
+    if (this.particleConfig && this.particles.length > 0) {
+      updateParticles(this.particles, this.particleConfig, dt, this.canvasW, this.canvasH);
+    }
 
-    // Flip landing tolerance: allow landing with up to 30° remaining
-    const FLIP_TOLERANCE = Math.PI / 6; // 30 degrees
     const FULL_FLIP = Math.PI * 2;
+    const trickCtx: TrickContext = {
+      player: this.player,
+      onCrash: () => this.startCrash(),
+      onAwardBonus: (label, bonus, sketchy) => this.awardTrickBonus(label, bonus, sketchy)
+    };
 
     // Trick landing checks — unified to support combos (pose + flip simultaneously)
     if (wasAirborne && this.player.isOnGround) {
       const hadFlip = wasBackflipping;
       const hadPose = this.player.activeTrick !== TrickType.NONE;
-      if (hadFlip && hadPose) {
-        if (this.handleComboLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
-      } else if (hadFlip) {
-        if (this.handleFlipLanding(prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
-      } else if (hadPose) {
-        if (this.handlePoseTrickLanding()) return;
-      }
+      if (processTrickLanding(trickCtx, hadFlip, hadPose, prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
     }
 
     // Update floating texts (float up + fade out)
-    for (const ft of this.floatingTexts) {
-      ft.y += ft.velocityY * dt;
-      ft.opacity -= 0.01333 * dt;
-    }
-    this.floatingTexts = this.floatingTexts.filter((ft) => ft.opacity > 0);
+    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
 
     // Move obstacles and cull off-screen ones
     for (const obs of this.obstacles) {
@@ -241,86 +272,26 @@ export class Engine {
 
     // Obstacle spawning
     this.distanceSinceLastObstacle += this.speed * dt;
-    if (this.distanceSinceLastObstacle >= this.nextObstacleGap) {
-      this.obstacles.push(
-        spawnObstacle(this.canvasW, this.groundY, this.elapsedMs, this.envManager.getCurrentEnvironment())
-      );
+    const gap = this.debugSequence ? this.debugGap : this.nextObstacleGap;
+    if (this.distanceSinceLastObstacle >= gap) {
+      if (this.debugSequence) {
+        const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
+        this.obstacles.push(createObstacle(type, this.canvasW, this.groundY));
+        this.debugIndex++;
+      } else {
+        this.obstacles.push(
+          spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment())
+        );
+      }
       this.distanceSinceLastObstacle = 0;
-      this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs);
+      if (!this.debugSequence) {
+        this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs);
+      }
     }
 
     // Ramp interaction (before collision checks)
-    let onAnyRamp = false;
-    for (const obs of this.obstacles) {
-      if (!obs.ramp) continue;
-      if (!this.player.isOnGround && !this.player.ridingObstacle) continue;
-      const rampResult = checkRampCollision(this.player, obs);
-      if (rampResult.onRamp) {
-        onAnyRamp = true;
-        this.player.y = rampResult.surfaceY - this.player.height;
-        this.player.rampSurfaceAngle = rampResult.surfaceAngle;
-        this.player.rampBoost = rampResult.rampType;
-      }
-    }
-    if (!onAnyRamp) {
-      // Check if player just left a ramp (was elevated, now past the ramp end)
-      if (this.player.rampBoost && this.player.isOnGround) {
-        const groundPos = this.groundY - this.player.height;
-        if (this.player.y < groundPos - 2) {
-          // Auto-launch: player is above ground after riding off ramp
-          // Half boost for passive roll-off; active jump gives full boost
-          this.player.isOnGround = false;
-          this.player.jumpCount = 1; // can still double-jump
-          if (this.player.rampBoost === "curved") {
-            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.5;
-          } else {
-            this.player.velocityY = JUMP_FORCE * 0.5;
-          }
-        }
-      }
-      // Smooth angle decay
-      this.player.rampSurfaceAngle *= 0.85;
-      if (Math.abs(this.player.rampSurfaceAngle) < 0.01) {
-        this.player.rampSurfaceAngle = 0;
-      }
-    }
-
-    // Riding state: check if obstacle scrolled past player
-    if (this.player.ridingObstacle) {
-      const obs = this.player.ridingObstacle;
-      if (obs.x + obs.width < this.player.x + 8) {
-        // Apply half-boost for passive roll-off from container ramp
-        if (this.player.rampBoost) {
-          this.player.jumpCount = 1;
-          if (this.player.rampBoost === "curved") {
-            this.player.velocityY = JUMP_FORCE * RAMP_HEIGHT_MULTIPLIER * 0.5;
-          } else {
-            this.player.velocityY = JUMP_FORCE * 0.5;
-          }
-        }
-        this.player.ridingObstacle = null;
-      } else if (obs.type === ObstacleType.CONTAINER_WITH_RAMP) {
-        // Container with ramp: last 75px has a curved ramp on top
-        const rampW = 75;
-        const rampH = 36;
-        const rampX = obs.x + obs.width - rampW;
-        const playerCenterX = this.player.x + this.player.width / 2;
-        if (playerCenterX >= rampX) {
-          // Player is on the ramp section
-          const t = (playerCenterX - rampX) / rampW;
-          const curvedT = t * t;
-          const surfaceY = obs.y - curvedT * rampH;
-          this.player.y = surfaceY - this.player.height;
-          this.player.rampBoost = "curved";
-          this.player.rampSurfaceAngle = Math.atan2((-2 * t * rampH) / rampW, 1);
-          onAnyRamp = true;
-        } else {
-          this.player.y = obs.y - this.player.height;
-        }
-      } else {
-        this.player.y = obs.y - this.player.height;
-      }
-    }
+    processRampInteractions(this.player, this.obstacles, this.groundY);
+    processRidingState(this.player);
 
     // Collision detection
     for (const obs of this.obstacles) {
@@ -330,20 +301,14 @@ export class Engine {
       if (obs.rideable) {
         const result = checkRideableCollision(this.player, obs);
         if (result === "crash") {
-          this.gameOver();
+          this.startCrash();
           return;
         }
         if (result === "land_on_top") {
           // Check trick landing on rideable (combo-aware)
           const landFlip = this.player.isBackflipping;
           const landPose = this.player.activeTrick !== TrickType.NONE;
-          if (landFlip && landPose) {
-            if (this.handleComboLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
-          } else if (landFlip) {
-            if (this.handleFlipLanding(this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE)) return;
-          } else if (landPose) {
-            if (this.handlePoseTrickLanding()) return;
-          }
+          if (processTrickLanding(trickCtx, landFlip, landPose, this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
           this.player.ridingObstacle = obs;
           this.player.y = obs.y - this.player.height;
           this.player.velocityY = 0;
@@ -352,137 +317,115 @@ export class Engine {
         }
       } else {
         if (checkCollision(this.player, obs)) {
-          this.gameOver();
+          this.startCrash();
           return;
         }
       }
     }
   }
 
-  private gameOver(): void {
-    this.state = GameState.GAME_OVER;
+  private startCrash(): void {
+    this.state = GameState.CRASHING;
     this.sound.stopMusic();
     this.sound.playCrash();
+    initCrashPhysics(this.crashState, this.player, this.speed);
+    this.callbacks.onStateChange(this.state);
+  }
+
+  private gameOver(): void {
+    if (!this.hasBeenResurrected && (this.iddqdActive || Math.random() < AMBULANCE_CHANCE)) {
+      this.hasBeenResurrected = true;
+      this.iddqdActive = false;
+      this.startAmbulanceSequence();
+    } else {
+      this.finalGameOver();
+    }
+  }
+
+  private finalGameOver(): void {
+    this.state = GameState.GAME_OVER;
     this.callbacks.onStateChange(this.state);
     this.callbacks.onGameOver(this.score);
   }
 
-  /** Handle flip landing. Returns true if game over (crash). */
-  private handleFlipLanding(angle: number, direction: number, fullFlip: number, tolerance: number): boolean {
-    const completedFlips = Math.floor(angle / fullFlip);
-    const remainder = angle - completedFlips * fullFlip;
-    const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
-
-    if (totalFlips >= 1) {
-      const baseName = direction >= 0 ? "Backflip" : "Frontflip";
-      const { label, totalBonus } = computeTrickScore(baseName, BACKFLIP_BONUS, totalFlips);
-      this.awardTrickBonus(label, totalBonus);
-      this.player.backflipAngle = 0;
-      this.player.isBackflipping = false;
-      return false;
-    }
-    // Too incomplete — crash
-    this.gameOver();
-    return true;
+  private startAmbulanceSequence(): void {
+    this.state = GameState.AMBULANCE;
+    this.ambulance = createAmbulanceState(this.player.x, this.player.width, this.canvasW, this.groundY);
+    this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
+    this.sound.playSiren();
+    this.callbacks.onStateChange(this.state);
   }
 
-  /** Handle pose trick landing. Returns true if game over (crash). */
-  private handlePoseTrickLanding(): boolean {
-    const completions = this.player.trickCompletions;
-    const progress = this.player.trickProgress;
-    const safeProgress = 1 - TRICK_COMPLETION_THRESHOLD; // 0.1
+  private updateAmbulance(dt: number, rawDt: number): void {
+    if (!this.ambulance) return;
 
-    const safeToLand = completions >= 1 && progress <= safeProgress;
+    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
 
-    if (safeToLand) {
-      const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
-      const baseName = isSuperman ? "Superman" : "No Hander";
-      const basePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
-      const { label, totalBonus } = computeTrickScore(baseName, basePoints, completions);
-      this.awardTrickBonus(label, totalBonus);
-    } else if (completions === 0) {
-      // Trick started but never completed — crash
-      this.player.activeTrick = TrickType.NONE;
-      this.player.trickProgress = 0;
-      this.player.trickCompletions = 0;
-      this.gameOver();
-      return true;
+    const action = updateAmbulanceLogic(this.ambulance, dt, rawDt, this.canvasW);
+
+    if (action === AmbulanceAction.STOP_SIREN) {
+      this.sound.stopSiren();
+    } else if (action === AmbulanceAction.REVIVE) {
+      this.revivePlayer();
+      this.sound.playRevive();
+    } else if (action === AmbulanceAction.RESUME_GAME) {
+      this.state = GameState.RUNNING;
+      this.sound.startMusic();
+      this.callbacks.onStateChange(this.state);
+    } else if (action === AmbulanceAction.REMOVE) {
+      this.ambulance = null;
     }
-
-    this.player.activeTrick = TrickType.NONE;
-    this.player.trickProgress = 0;
-    this.player.trickCompletions = 0;
-    return false;
   }
 
-  /** Handle combo landing (pose trick + flip simultaneously). Returns true if crash. */
-  private handleComboLanding(angle: number, direction: number, fullFlip: number, tolerance: number): boolean {
-    // Validate flip
-    const completedFlips = Math.floor(angle / fullFlip);
-    const remainder = angle - completedFlips * fullFlip;
-    const totalFlips = completedFlips + (remainder >= fullFlip - tolerance ? 1 : 0);
+  private revivePlayer(): void {
+    // Clear obstacles near the player
+    const clearZone = this.player.x + this.player.width + 200;
+    this.obstacles = this.obstacles.filter((obs) => obs.x > clearZone);
 
-    // Validate pose trick — relaxed for combos:
-    // Accept if at least one full cycle completed, OR if the trick reached peak extension
-    // (trickPhase === "return" means it extended fully and started returning)
-    const poseCompletions = this.player.trickCompletions;
-    const posePhase = this.player.trickPhase;
-    const poseSafe = poseCompletions >= 1 || posePhase === "return";
-
-    if (totalFlips >= 1 && poseSafe) {
-      const flipName = direction >= 0 ? "backflip" : "frontflip";
-      const isSuperman = this.player.activeTrick === TrickType.SUPERMAN;
-      const poseName = isSuperman ? "superman" : "no-hander";
-      const posePoints = isSuperman ? SUPERMAN_BONUS : NO_HANDER_BONUS;
-      const effectivePoseCount = Math.max(poseCompletions, 1); // at least 1 since combo validated
-      const baseScore = BACKFLIP_BONUS * totalFlips + posePoints * effectivePoseCount;
-      const comboScore = baseScore * COMBO_MULTIPLIER;
-
-      this.score += comboScore;
-      this.distance = this.score * SCORE_PER_PX;
-      this.callbacks.onScoreUpdate(this.score);
-      this.sound.playBackflipSuccess();
-      this.floatingTexts.push({
-        text: `Combo: ${poseName} ${flipName}, ${comboScore} pts!`,
-        x: this.player.x + this.player.width / 2,
-        y: this.player.y - 10,
-        opacity: 1,
-        velocityY: -1.5,
-      });
-      this.callbacks.onTrickLanded?.(`Combo: ${poseName} ${flipName}`, comboScore);
-
-      // Reset all trick state
-      this.player.backflipAngle = 0;
-      this.player.isBackflipping = false;
-      this.player.activeTrick = TrickType.NONE;
-      this.player.trickProgress = 0;
-      this.player.trickCompletions = 0;
-      return false;
-    }
-
-    // Either component failed — crash
+    // Reset player state to ground
+    this.player.y = this.groundY - this.player.height;
+    this.player.velocityY = 0;
+    this.player.isOnGround = true;
+    this.player.jumpCount = 0;
+    this.player.bikeTilt = 0;
+    this.player.riderLean = 0;
+    this.player.riderCrouch = 0;
+    this.player.legTuck = 0;
+    this.player.ridingObstacle = null;
     this.player.backflipAngle = 0;
     this.player.isBackflipping = false;
-    this.player.activeTrick = TrickType.NONE;
-    this.player.trickProgress = 0;
-    this.player.trickCompletions = 0;
-    this.gameOver();
-    return true;
+
+    // Mercy slowdown
+    this.speed *= 0.85;
+    this.callbacks.onSpeedUpdate?.(this.speed);
+
+    // Big gap after revive
+    this.distanceSinceLastObstacle = 0;
+    this.nextObstacleGap = 500;
+
+    this.floatingTexts.push({
+      text: "REVIVED!",
+      x: this.player.x + this.player.width / 2,
+      y: this.player.y - 20,
+      opacity: 1,
+      velocityY: -1.2,
+      color: "#00ff88",
+    });
   }
 
-  private awardTrickBonus(label: string, bonus: number): void {
+  private updateCrash(dt: number, rawDt: number): void {
+    if (updateCrashPhysics(this.crashState, dt, rawDt, this.groundY)) {
+      this.gameOver();
+    }
+  }
+
+  private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): void {
     this.score += bonus;
     this.distance = this.score * SCORE_PER_PX;
     this.callbacks.onScoreUpdate(this.score);
     this.sound.playBackflipSuccess();
-    this.floatingTexts.push({
-      text: `${label}! +${bonus}`,
-      x: this.player.x + this.player.width / 2,
-      y: this.player.y - 10,
-      opacity: 1,
-      velocityY: -1.5,
-    });
-    this.callbacks.onTrickLanded?.(label, bonus);
+    this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width, sketchy ?? false));
+    this.callbacks.onTrickLanded?.(label, bonus, sketchy);
   }
 
   private render(): void {
@@ -490,13 +433,45 @@ export class Engine {
     const palette = this.envManager.getCurrentPalette();
     const drawers = this.envManager.getBackgroundDrawers();
     ctx.clearRect(0, 0, canvasW, canvasH);
+
+    const crashing = this.state === GameState.CRASHING;
+    if (crashing) {
+      ctx.save();
+      ctx.translate(this.crashState.shakeOffsetX, this.crashState.shakeOffsetY);
+    }
+
     drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
+    if (this.particleConfig && this.particles.length > 0) {
+      drawParticles(ctx, this.particles, this.particleConfig);
+    }
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs, palette);
     }
-    drawPlayer(ctx, this.player, palette);
+
+    const ambulancePreRevive = this.state === GameState.AMBULANCE
+      && this.ambulance
+      && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
+
+    if (crashing || ambulancePreRevive) {
+      drawCrashBike(ctx, this.crashState, this.skin);
+      drawCrashRider(ctx, this.crashState, this.skin);
+    } else {
+      drawPlayer(ctx, this.player, this.skin);
+    }
+
+    if (this.ambulance) {
+      drawAmbulance(ctx, this.ambulance);
+      if (this.ambulance.reviveFlashOpacity > 0) {
+        drawReviveFlash(ctx, this.ambulance.reviveFlashOpacity, canvasW, canvasH);
+      }
+    }
+
     for (const ft of this.floatingTexts) {
-      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity);
+      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color);
+    }
+
+    if (crashing) {
+      ctx.restore();
     }
   }
 
@@ -509,12 +484,26 @@ export class Engine {
   getState(): GameState {
     return this.state;
   }
+  activateIddqd(): void {
+    this.iddqdActive = true;
+    this.floatingTexts.push({
+      text: "GOD MODE",
+      x: this.canvasW / 2,
+      y: this.canvasH * 0.35,
+      opacity: 1,
+      velocityY: -0.8,
+      color: "#ff4444",
+    });
+  }
+
   pause(): void {
     if (this.isPaused) return;
     this.isPaused = true;
     cancelAnimationFrame(this.rafId);
     if (this.state === GameState.RUNNING) {
       this.sound.pauseMusic();
+    } else if (this.state === GameState.AMBULANCE) {
+      this.sound.stopSiren();
     }
   }
 
@@ -525,6 +514,8 @@ export class Engine {
     this.rafId = requestAnimationFrame(this.loop);
     if (this.state === GameState.RUNNING) {
       this.sound.resumeMusic();
+    } else if (this.state === GameState.AMBULANCE && this.ambulance?.phase === AmbulancePhase.DRIVING_IN) {
+      this.sound.playSiren();
     }
   }
 
@@ -534,6 +525,34 @@ export class Engine {
 
   setSfxMuted(muted: boolean): void {
     this.sound.setSfxMuted(muted);
+  }
+
+  setSkin(skin: SkinDefinition): void {
+    this.skin = skin;
+  }
+
+  setDebugObstacles(sequence: ObstacleType[] | null, gap?: number): void {
+    this.debugSequence = sequence;
+    this.debugIndex = 0;
+    if (gap !== undefined) this.debugGap = gap;
+  }
+
+  forceNextBiome(): void {
+    const result = this.envManager.forceNextBiome();
+    if (result.musicCrossfade) {
+      this.sound.crossfadeTo(result.musicCrossfade.track, result.musicCrossfade.durationMs);
+    }
+    // Immediately regenerate background with the target environment
+    const env = this.envManager.getCurrentEnvironment();
+    this.layers = createBackgroundLayers(this.canvasW, this.groundY, env);
+    const overlay = env.particleOverlay;
+    if (overlay) {
+      this.particleConfig = overlay;
+      this.particles = createParticles(this.canvasW, this.canvasH, overlay);
+    } else {
+      this.particleConfig = null;
+      this.particles = [];
+    }
   }
 
   destroy(): void {

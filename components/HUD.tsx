@@ -1,9 +1,12 @@
 import { INITIAL_SPEED } from "@/game/constants";
 
+const TRICK_COLOR_CLEAN = "#1a7a2e";
+const TRICK_COLOR_SKETCHY = "#d97706";
+
 interface HUDProps {
   score: number;
   speed: number;
-  trickFeedback: { name: string; points: number } | null;
+  trickFeedback: { name: string; points: number; sketchy?: boolean } | null;
   musicMuted: boolean;
   sfxMuted: boolean;
   onToggleMusic: () => void;
@@ -138,7 +141,9 @@ export default function HUD({
       >
         <span
           style={{
-            color: trickFeedback ? "#f0c030" : "#1e293b",
+            color: trickFeedback
+              ? trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN
+              : "#1e293b",
             fontFamily: "var(--font-space-mono), monospace",
             fontSize: "1.25rem",
             fontWeight: "bold",
@@ -159,7 +164,7 @@ export default function HUD({
         {trickFeedback && (
           <span
             style={{
-              color: "#f0c030",
+              color: trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN,
               fontFamily: "var(--font-space-mono), monospace",
               fontSize: "0.7rem",
               fontWeight: "bold",

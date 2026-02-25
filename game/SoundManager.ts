@@ -4,6 +4,10 @@ export class SoundManager {
   private musicMuted = false;
   private sfxMuted = false;
   private musicPlaying = false;
+  // Siren oscillators for ambulance
+  private sirenOsc1: OscillatorNode | null = null;
+  private sirenOsc2: OscillatorNode | null = null;
+  private sirenGain: GainNode | null = null;
 
   // Dual-slot music system for crossfading between biome tracks
   private musicAudioA: HTMLAudioElement | null = null;
@@ -17,6 +21,9 @@ export class SoundManager {
   private getCtx(): AudioContext {
     if (!this.ctx) {
       this.ctx = new AudioContext();
+    }
+    if (this.ctx.state === "suspended") {
+      this.ctx.resume();
     }
     return this.ctx;
   }
@@ -250,7 +257,100 @@ export class SoundManager {
     });
   }
 
+  playSiren(): void {
+    if (this.sfxMuted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.18, now);
+    gain.connect(ctx.destination);
+    this.sirenGain = gain;
+
+    // Two-tone wee-woo siren — alternating 600/800 Hz
+    const osc1 = ctx.createOscillator();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(600, now);
+    for (let i = 0; i < 30; i++) {
+      const t = now + i * 0.3;
+      osc1.frequency.setValueAtTime(i % 2 === 0 ? 600 : 800, t);
+    }
+    osc1.connect(gain);
+    osc1.start(now);
+    this.sirenOsc1 = osc1;
+
+    // Slight detuned second oscillator for richness
+    const osc2 = ctx.createOscillator();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(603, now);
+    for (let i = 0; i < 30; i++) {
+      const t = now + i * 0.3;
+      osc2.frequency.setValueAtTime(i % 2 === 0 ? 603 : 803, t);
+    }
+    const gain2 = ctx.createGain();
+    gain2.gain.setValueAtTime(0.08, now);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now);
+    this.sirenOsc2 = osc2;
+  }
+
+  stopSiren(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    if (this.sirenGain) {
+      this.sirenGain.gain.linearRampToValueAtTime(0, now + 0.15);
+    }
+    if (this.sirenOsc1) {
+      this.sirenOsc1.stop(now + 0.2);
+      this.sirenOsc1 = null;
+    }
+    if (this.sirenOsc2) {
+      this.sirenOsc2.stop(now + 0.2);
+      this.sirenOsc2 = null;
+    }
+    this.sirenGain = null;
+  }
+
+  playRevive(): void {
+    if (this.sfxMuted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+
+    // Ascending major chord arpeggio: C5 → E5 → G5 → C6
+    const notes = [523.25, 659.25, 783.99, 1046.50];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const t = now + i * 0.08;
+      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      osc.start(t);
+      osc.stop(t + 0.25);
+    });
+
+    // Shimmer — high frequency sparkle
+    const shimmer = ctx.createOscillator();
+    const shimmerGain = ctx.createGain();
+    shimmer.type = "sine";
+    shimmer.frequency.setValueAtTime(2093, now + 0.32);
+    shimmer.frequency.exponentialRampToValueAtTime(3000, now + 0.6);
+    shimmerGain.gain.setValueAtTime(0.1, now + 0.32);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    shimmer.connect(shimmerGain);
+    shimmerGain.connect(ctx.destination);
+    shimmer.start(now + 0.32);
+    shimmer.stop(now + 0.6);
+  }
+
   destroy(): void {
+    this.stopSiren();
     this.stopMusic();
     if (this.musicAudioA) {
       this.musicAudioA.src = "";

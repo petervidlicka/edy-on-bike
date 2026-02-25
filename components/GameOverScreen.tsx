@@ -24,6 +24,7 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [totalPlayers, setTotalPlayers] = useState(0);
 
   // Pre-fill name from localStorage — no auto-focus so Space works freely
   useEffect(() => {
@@ -34,7 +35,8 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
   const fetchLeaderboard = useCallback(async () => {
     try {
       const data = await fetch("/api/leaderboard").then((r) => r.json());
-      setLeaderboard(data);
+      setLeaderboard(data.scores ?? []);
+      setTotalPlayers(data.totalPlayers ?? 0);
     } catch {}
   }, []);
 
@@ -122,6 +124,7 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
 
   return (
     <div
+      onClick={step === 2 ? onRestart : undefined}
       style={{
         position: "fixed",
         inset: 0,
@@ -129,7 +132,8 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        pointerEvents: "none",
+        pointerEvents: step === 2 ? "auto" : "none",
+        cursor: step === 2 ? "pointer" : undefined,
         gap: "0.4rem",
         fontFamily: "var(--font-nunito), Arial, sans-serif",
       }}
@@ -295,7 +299,7 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
                   fontFamily: "var(--font-space-mono), monospace",
                 }}
               >
-                {leaderboard.slice(0, 10).map((entry, i) => (
+                {leaderboard.slice(0, 7).map((entry, i) => (
                   <li key={i} style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
                     <span style={{ fontWeight: 600, flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
                     {entry.skin && (
@@ -307,6 +311,18 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
                   </li>
                 ))}
               </ol>
+              {totalPlayers > 0 && (
+                <p style={{
+                  margin: "0.45rem 0 0",
+                  fontSize: "0.72rem",
+                  color: "#64748b",
+                  textAlign: "center",
+                  fontWeight: 600,
+                  fontFamily: "var(--font-nunito), Arial, sans-serif",
+                }}>
+                  {totalPlayers} total player{totalPlayers !== 1 ? "s" : ""}
+                </p>
+              )}
             </div>
           ) : (
             <p style={{ color: "#475569", fontSize: "0.85rem", margin: "0.5rem 0" }}>
@@ -314,21 +330,15 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
             </p>
           )}
 
-          <button
-            onClick={onRestart}
-            style={{
-              ...glassBtn,
-              marginTop: "0.75rem",
-              fontSize: "1rem",
-              padding: "0.6rem 2rem",
-              letterSpacing: "0.06em",
-            }}
-          >
-            PLAY AGAIN
-            <span style={{ display: "block", fontSize: "0.7rem", fontWeight: 600, color: "#64748b", letterSpacing: "0.04em", marginTop: "0.15rem" }}>
-              or press Space
-            </span>
-          </button>
+          <p style={{
+            marginTop: "1rem",
+            fontSize: "0.8rem",
+            fontWeight: 600,
+            color: "#64748b",
+            letterSpacing: "0.04em",
+          }}>
+            click or press Space to continue
+          </p>
         </>
       )}
     </div>

@@ -131,6 +131,14 @@ export async function getTopScores(
   return getTopScoresFile(limit);
 }
 
+export async function getTotalPlayers(): Promise<number> {
+  const redis = getRedis();
+  if (redis) {
+    return redis.zcard(LEADERBOARD_KEY);
+  }
+  return readFileStore().length;
+}
+
 export async function addScore(name: string, score: number, skin?: string): Promise<void> {
   const redis = getRedis();
   if (redis) {

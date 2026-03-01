@@ -1,0 +1,8 @@
+{
+  "name": "edy-on-bike-multiplayer",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "partykit": "^0.0.111"
+  }
+}

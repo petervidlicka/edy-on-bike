@@ -3,6 +3,7 @@ import { SUBURBAN_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
   EnvironmentPalette,
+  RNG,
   WeightedType,
 } from "./types";
 
@@ -96,7 +97,8 @@ export const SUBURBAN_PALETTE: EnvironmentPalette = {
 function generateSuburbanElements(
   canvasWidth: number,
   groundY: number,
-  palette: EnvironmentPalette
+  palette: EnvironmentPalette,
+  rng: RNG = Math
 ): BackgroundElement[] {
   const elements: BackgroundElement[] = [];
 
@@ -104,15 +106,15 @@ function generateSuburbanElements(
   let lastType = "";
 
   while (x < canvasWidth * 2.5) {
-    const roll = Math.random();
+    const roll = rng.random();
 
     if (roll > 0.35) {
       // House (65% chance)
-      const variant = Math.floor(Math.random() * 3); // 0 = cottage, 1 = village, 2 = tall
-      const w = variant === 2 ? 40 + Math.random() * 15 : 50 + Math.random() * 30;
-      const h = variant === 2 ? 55 + Math.random() * 20 : 40 + Math.random() * 20;
+      const variant = Math.floor(rng.random() * 3); // 0 = cottage, 1 = village, 2 = tall
+      const w = variant === 2 ? 40 + rng.random() * 15 : 50 + rng.random() * 30;
+      const h = variant === 2 ? 55 + rng.random() * 20 : 40 + rng.random() * 20;
       const scheme =
-        palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
+        palette.buildings[Math.floor(rng.random() * palette.buildings.length)];
       elements.push({
         type: "house",
         x,
@@ -123,18 +125,18 @@ function generateSuburbanElements(
         roofColor: scheme.roof,
         variant,
       });
-      const gap = 20 + Math.random() * 30;
+      const gap = 20 + rng.random() * 30;
       x += w + gap;
 
       // Maybe add a deer or person in the gap
       if (
         gap > 25 &&
-        Math.random() > 0.6 &&
+        rng.random() > 0.6 &&
         lastType !== "deer" &&
         lastType !== "walking_person"
       ) {
-        const isAnimal = Math.random() > 0.45;
-        const vergeOffset = Math.random() * 18; // random depth within the 22px strip
+        const isAnimal = rng.random() > 0.45;
+        const vergeOffset = rng.random() * 18; // random depth within the 22px strip
         if (isAnimal) {
           elements.push({
             type: "deer",
@@ -161,16 +163,16 @@ function generateSuburbanElements(
       }
     } else {
       // Tree — 3 size tiers: small / medium / large
-      const sizeTier = Math.random();
+      const sizeTier = rng.random();
       const tw =
-        sizeTier < 0.33 ? 18 + Math.random() * 6   // small:  18-24
-        : sizeTier < 0.66 ? 26 + Math.random() * 8  // medium: 26-34
-        : 34 + Math.random() * 10;                  // large:  34-44
+        sizeTier < 0.33 ? 18 + rng.random() * 6   // small:  18-24
+        : sizeTier < 0.66 ? 26 + rng.random() * 8  // medium: 26-34
+        : 34 + rng.random() * 10;                  // large:  34-44
       const th =
-        sizeTier < 0.33 ? 40 + Math.random() * 14  // small:  40-54
-        : sizeTier < 0.66 ? 56 + Math.random() * 16 // medium: 56-72
-        : 76 + Math.random() * 18;                  // large:  76-94
-      const treeVergeOffset = Math.random() * 18;
+        sizeTier < 0.33 ? 40 + rng.random() * 14  // small:  40-54
+        : sizeTier < 0.66 ? 56 + rng.random() * 16 // medium: 56-72
+        : 76 + rng.random() * 18;                  // large:  76-94
+      const treeVergeOffset = rng.random() * 18;
       elements.push({
         type: "tree_silhouette",
         x,
@@ -179,7 +181,7 @@ function generateSuburbanElements(
         height: th,
         color: palette.treeSilhouette,
       });
-      x += tw + 12 + Math.random() * 20;
+      x += tw + 12 + rng.random() * 20;
       lastType = "tree";
     }
   }

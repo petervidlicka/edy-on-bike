@@ -48,3 +48,6 @@ export const AMBULANCE_REVIVE_MS = 600;
 export const PLAYER_X_RATIO = 0.20; // 20% from the left of the canvas
 export const PLAYER_WIDTH = 64;
 export const PLAYER_HEIGHT = 58;
+
+// Multiplayer
+export const NETWORK_SYNC_INTERVAL_MS = 67; // ~15 Hz

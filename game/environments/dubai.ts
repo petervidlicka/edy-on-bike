@@ -3,6 +3,7 @@ import { DUBAI_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
   EnvironmentPalette,
+  RNG,
   WeightedType,
 } from "./types";
 
@@ -118,7 +119,8 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
 function generateDubaiElements(
   canvasWidth: number,
   groundY: number,
-  palette: EnvironmentPalette
+  palette: EnvironmentPalette,
+  rng: RNG = Math
 ): BackgroundElement[] {
   const elements: BackgroundElement[] = [];
 
@@ -128,7 +130,7 @@ function generateDubaiElements(
   let genericsSinceLandmark = 99; // allow landmark on first pick
 
   while (x < canvasWidth * 2.5) {
-    const roll = Math.random();
+    const roll = rng.random();
 
     if (roll > 0.30) {
       // Skyscraper (70% chance)
@@ -138,43 +140,43 @@ function generateDubaiElements(
 
       // Decide generic vs landmark: ~20% landmark chance, but only when
       // at least 3 generics have appeared since the last landmark
-      const tryLandmark = Math.random() < 0.20 && genericsSinceLandmark >= 3;
+      const tryLandmark = rng.random() < 0.20 && genericsSinceLandmark >= 3;
       if (tryLandmark) {
         // Pick a landmark variant (5-8) that isn't the same as the last one
         const landmarks = [5, 6, 7, 8].filter(v => v !== lastLandmarkVariant);
-        variant = landmarks[Math.floor(Math.random() * landmarks.length)];
+        variant = landmarks[Math.floor(rng.random() * landmarks.length)];
         // Add 20px breathing room BEFORE the landmark so it stands out
         x += 20;
       } else {
-        variant = Math.floor(Math.random() * 5); // generic 0-4
+        variant = Math.floor(rng.random() * 5); // generic 0-4
       }
 
       switch (variant) {
         // Generic skyscrapers (0-4) — tall with variety
         case 0: case 1: case 2: case 3: case 4:
-          w = 35 + Math.random() * 25;
-          h = 150 + Math.random() * 100;
+          w = 35 + rng.random() * 25;
+          h = 150 + rng.random() * 100;
           break;
         // Landmarks
         case 5: // Burj Khalifa — narrow and extremely tall (double tallest generic)
-          w = 30 + Math.random() * 10;
-          h = 390 + Math.random() * 130;
+          w = 30 + rng.random() * 10;
+          h = 390 + rng.random() * 130;
           break;
         case 6: // Museum of the Future — wide oval, half the height of generic
-          w = 60 + Math.random() * 20;
-          h = 48 + Math.random() * 16;
+          w = 60 + rng.random() * 20;
+          h = 48 + rng.random() * 16;
           break;
         case 7: // Burj Al Arab — sail shape, very tall
-          w = 50 + Math.random() * 15;
-          h = 225 + Math.random() * 50;
+          w = 50 + rng.random() * 15;
+          h = 225 + rng.random() * 50;
           break;
         case 8: // Dubai Frame — two pillars with bridge, very tall
-          w = 45 + Math.random() * 10;
-          h = 200 + Math.random() * 50;
+          w = 45 + rng.random() * 10;
+          h = 200 + rng.random() * 50;
           break;
         default:
-          w = 35 + Math.random() * 25;
-          h = 150 + Math.random() * 100;
+          w = 35 + rng.random() * 25;
+          h = 150 + rng.random() * 100;
       }
 
       // Track landmark vs generic for deduplication
@@ -186,7 +188,7 @@ function generateDubaiElements(
       }
 
       const scheme =
-        palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
+        palette.buildings[Math.floor(rng.random() * palette.buildings.length)];
       elements.push({
         type: "skyscraper",
         x,
@@ -206,12 +208,8 @@ function generateDubaiElements(
       if (isLandmark) {
         gap = 20;                            // 20px after the landmark
       } else {
-        gap = -8 + Math.random() * 10;       // –8 to +2 px (tight / overlapping)
+        gap = -8 + rng.random() * 10;       // –8 to +2 px (tight / overlapping)
       }
-      // If the NEXT element will be a landmark, peek-add 20px before it.
-      // We can't truly peek, so instead ensure the gap after a landmark
-      // covers both sides: add the pre-gap of the next building here.
-      // (Non-landmark gap already tight, so no extra padding needed.)
 
       x += w + gap;
 
@@ -219,12 +217,12 @@ function generateDubaiElements(
       // (generics are too tightly packed for figures)
       if (
         isLandmark &&
-        Math.random() > 0.5 &&
+        rng.random() > 0.5 &&
         lastType !== "bg_camel" &&
         lastType !== "walking_person"
       ) {
-        const isAnimal = Math.random() > 0.4;
-        const vergeOffset = Math.random() * 18;
+        const isAnimal = rng.random() > 0.4;
+        const vergeOffset = rng.random() * 18;
         if (isAnimal) {
           elements.push({
             type: "bg_camel",
@@ -251,10 +249,10 @@ function generateDubaiElements(
       }
     } else {
       // Palm tree (30% chance) — stays same size
-      const sizeTier = Math.random();
-      const tw = sizeTier < 0.5 ? 16 + Math.random() * 6 : 22 + Math.random() * 8;
-      const th = sizeTier < 0.5 ? 50 + Math.random() * 20 : 70 + Math.random() * 25;
-      const vergeOffset = Math.random() * 18;
+      const sizeTier = rng.random();
+      const tw = sizeTier < 0.5 ? 16 + rng.random() * 6 : 22 + rng.random() * 8;
+      const th = sizeTier < 0.5 ? 50 + rng.random() * 20 : 70 + rng.random() * 25;
+      const vergeOffset = rng.random() * 18;
       elements.push({
         type: "palm_tree",
         x,
@@ -263,7 +261,7 @@ function generateDubaiElements(
         height: th,
         color: palette.treeSilhouette,
       });
-      x += tw + 12 + Math.random() * 20;
+      x += tw + 12 + rng.random() * 20;
       lastType = "palm_tree";
     }
   }

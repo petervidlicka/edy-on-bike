@@ -109,6 +109,133 @@ function ArrowSVG({ points }: { points: string }) {
   );
 }
 
+export type TrickFeedbackData = { name: string; points: number; sketchy?: boolean };
+
+export function AudioControls({
+  musicMuted,
+  sfxMuted,
+  onToggleMusic,
+  onToggleSfx,
+}: {
+  musicMuted: boolean;
+  sfxMuted: boolean;
+  onToggleMusic: () => void;
+  onToggleSfx: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: "1rem",
+        left: "1.5rem",
+        display: "flex",
+        gap: "0.4rem",
+      }}
+    >
+      <button
+        onClick={onToggleMusic}
+        title={musicMuted ? "Music on" : "Music off"}
+        style={btnStyle}
+      >
+        <MusicIcon muted={musicMuted} />
+      </button>
+      <button
+        onClick={onToggleSfx}
+        title={sfxMuted ? "Sound on" : "Sound off"}
+        style={btnStyle}
+      >
+        <SpeakerIcon muted={sfxMuted} />
+      </button>
+    </div>
+  );
+}
+
+export function TrickFeedbackPopup({
+  trickFeedback,
+}: {
+  trickFeedback: TrickFeedbackData | null;
+}) {
+  if (!trickFeedback) return null;
+  return (
+    <span
+      style={{
+        color: trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN,
+        fontFamily: "var(--font-space-mono), monospace",
+        fontSize: "0.7rem",
+        fontWeight: "bold",
+        textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+      }}
+    >
+      {trickFeedback.name} +{trickFeedback.points}
+    </span>
+  );
+}
+
+export function TrickDpad({
+  onBackflip,
+  onFrontflip,
+  onSuperman,
+  onNoHander,
+}: {
+  onBackflip: () => void;
+  onFrontflip: () => void;
+  onSuperman: () => void;
+  onNoHander: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: "1.5rem",
+        right: "1.5rem",
+        display: "grid",
+        gridTemplateColumns: "48px 48px 48px",
+        gridTemplateRows: "48px 48px 48px",
+        gap: "4px",
+      }}
+    >
+      {/* Row 1: _, Up (Frontflip), _ */}
+      <div />
+      <button
+        onTouchStart={(e) => { e.preventDefault(); onFrontflip(); }}
+        title="Frontflip (↑)"
+        style={dpadBtnStyle}
+      >
+        <ArrowSVG points="6 15 12 9 18 15" />
+      </button>
+      <div />
+
+      {/* Row 2: Left (Superman), _, Right (No Hander) */}
+      <button
+        onTouchStart={(e) => { e.preventDefault(); onSuperman(); }}
+        title="Superman (←)"
+        style={dpadBtnStyle}
+      >
+        <ArrowSVG points="15 6 9 12 15 18" />
+      </button>
+      <div />
+      <button
+        onTouchStart={(e) => { e.preventDefault(); onNoHander(); }}
+        title="No Hander (→)"
+        style={dpadBtnStyle}
+      >
+        <ArrowSVG points="9 6 15 12 9 18" />
+      </button>
+
+      {/* Row 3: _, Down (Backflip), _ */}
+      <div />
+      <button
+        onTouchStart={(e) => { e.preventDefault(); onBackflip(); }}
+        title="Backflip (↓)"
+        style={dpadBtnStyle}
+      >
+        <ArrowSVG points="6 9 12 15 18 9" />
+      </button>
+      <div />
+    </div>
+  );
+}
+
 export default function HUD({
   score,
   speed,
@@ -161,98 +288,22 @@ export default function HUD({
         >
           &times;{multiplier}
         </span>
-        {trickFeedback && (
-          <span
-            style={{
-              color: trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN,
-              fontFamily: "var(--font-space-mono), monospace",
-              fontSize: "0.7rem",
-              fontWeight: "bold",
-              textShadow: "0 1px 2px rgba(0,0,0,0.3)",
-            }}
-          >
-            {trickFeedback.name} +{trickFeedback.points}
-          </span>
-        )}
+        <TrickFeedbackPopup trickFeedback={trickFeedback} />
       </div>
 
-      {/* Audio toggles — top left */}
-      <div
-        style={{
-          position: "fixed",
-          top: "1rem",
-          left: "1.5rem",
-          display: "flex",
-          gap: "0.4rem",
-        }}
-      >
-        <button
-          onClick={onToggleMusic}
-          title={musicMuted ? "Music on" : "Music off"}
-          style={btnStyle}
-        >
-          <MusicIcon muted={musicMuted} />
-        </button>
-        <button
-          onClick={onToggleSfx}
-          title={sfxMuted ? "Sound on" : "Sound off"}
-          style={btnStyle}
-        >
-          <SpeakerIcon muted={sfxMuted} />
-        </button>
-      </div>
+      <AudioControls
+        musicMuted={musicMuted}
+        sfxMuted={sfxMuted}
+        onToggleMusic={onToggleMusic}
+        onToggleSfx={onToggleSfx}
+      />
 
-      {/* D-pad — bottom right (mobile trick controls) */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: "1.5rem",
-          right: "1.5rem",
-          display: "grid",
-          gridTemplateColumns: "48px 48px 48px",
-          gridTemplateRows: "48px 48px 48px",
-          gap: "4px",
-        }}
-      >
-        {/* Row 1: _, Up (Frontflip), _ */}
-        <div />
-        <button
-          onTouchStart={(e) => { e.preventDefault(); onFrontflip(); }}
-          title="Frontflip (↑)"
-          style={dpadBtnStyle}
-        >
-          <ArrowSVG points="6 15 12 9 18 15" />
-        </button>
-        <div />
-
-        {/* Row 2: Left (Superman), _, Right (No Hander) */}
-        <button
-          onTouchStart={(e) => { e.preventDefault(); onSuperman(); }}
-          title="Superman (←)"
-          style={dpadBtnStyle}
-        >
-          <ArrowSVG points="15 6 9 12 15 18" />
-        </button>
-        <div />
-        <button
-          onTouchStart={(e) => { e.preventDefault(); onNoHander(); }}
-          title="No Hander (→)"
-          style={dpadBtnStyle}
-        >
-          <ArrowSVG points="9 6 15 12 9 18" />
-        </button>
-
-        {/* Row 3: _, Down (Backflip), _ */}
-        <div />
-        <button
-          onTouchStart={(e) => { e.preventDefault(); onBackflip(); }}
-          title="Backflip (↓)"
-          style={dpadBtnStyle}
-        >
-          <ArrowSVG points="6 9 12 15 18 9" />
-        </button>
-        <div />
-      </div>
+      <TrickDpad
+        onBackflip={onBackflip}
+        onFrontflip={onFrontflip}
+        onSuperman={onSuperman}
+        onNoHander={onNoHander}
+      />
     </>
   );
 }

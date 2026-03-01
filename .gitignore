@@ -45,3 +45,7 @@ next-env.d.ts
 *.diff
 *.patch
 pr_review*.md
+
+# partykit
+party/node_modules
+party/.partykit

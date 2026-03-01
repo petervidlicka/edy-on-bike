@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SkinId } from "@/game/types";
 import SkinPicker from "./SkinPicker";
 
@@ -88,6 +89,25 @@ export default function StartScreen({
           or tap on mobile
         </span>
       </div>
+      <Link href="/multiplayer" style={{ textDecoration: "none", pointerEvents: "auto" }}>
+        <div style={{
+          color: "#1e3a5f",
+          fontSize: "0.9rem",
+          fontWeight: 700,
+          background: "rgba(100,150,255,0.22)",
+          backdropFilter: "blur(24px) saturate(200%)",
+          WebkitBackdropFilter: "blur(24px) saturate(200%)",
+          border: "1.5px solid rgba(100,150,255,0.45)",
+          borderRadius: "18px",
+          padding: "0.55rem 2rem",
+          letterSpacing: "0.06em",
+          textAlign: "center",
+          boxShadow: "0 2px 20px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
+          cursor: "pointer",
+        }}>
+          MULTIPLAYER
+        </div>
+      </Link>
     </div>
   );
 }

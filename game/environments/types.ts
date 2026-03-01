@@ -119,6 +119,12 @@ export type BackgroundDrawFn = (
   variant?: number
 ) => void;
 
+// ── RNG interface — compatible with SeededRNG and Math ──
+
+export interface RNG {
+  random(): number;
+}
+
 // ── Background generation config ──
 
 export interface BackgroundGeneratorConfig {
@@ -132,7 +138,8 @@ export interface BackgroundGeneratorConfig {
   generateElements: (
     canvasWidth: number,
     groundY: number,
-    palette: EnvironmentPalette
+    palette: EnvironmentPalette,
+    rng?: RNG
   ) => BackgroundElement[];
 }
 

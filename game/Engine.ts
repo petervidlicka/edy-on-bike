@@ -19,7 +19,7 @@ import {
   TrickContext
 } from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
-import { createBackgroundLayers, updateLayers } from "./Background";
+import { createBackgroundLayers, updateLayers, getTotalLayerWidth } from "./Background";
 import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider, createParticles, updateParticles, drawParticles, drawAmbulance, drawReviveFlash } from "./rendering";
 import type { Particle } from "./rendering";
 import type { ParticleOverlayConfig } from "./environments/types";
@@ -115,7 +115,7 @@ export class Engine {
 
   restart(): void {
     this.sound.stopSiren();
-    this.sound.stopMusic();
+    this.sound.reset();
     this.ambulance = null;
     this.hasBeenResurrected = false;
     this.iddqdActive = false;
@@ -203,6 +203,18 @@ export class Engine {
     const envResult = this.envManager.update(dt, this.elapsedMs);
     if (envResult.musicCrossfade) {
       this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
+    }
+    if (envResult.appendBackground) {
+      // Append new biome buildings to the end of the existing layer so they scroll in naturally
+      const toEnv = envResult.appendBackground.toEnv;
+      const buildingLayer = this.layers[1];
+      const totalWidth = getTotalLayerWidth(buildingLayer, this.canvasW);
+      const gap = 300;
+      const newElements = toEnv.background.generateElements(this.canvasW, this.groundY, toEnv.palette);
+      for (const el of newElements) {
+        el.x += totalWidth + gap;
+      }
+      buildingLayer.elements.push(...newElements);
     }
     if (envResult.regenerateBackground) {
       this.layers = createBackgroundLayers(this.canvasW, this.groundY, envResult.regenerateBackground);
@@ -452,7 +464,7 @@ export class Engine {
       && this.ambulance
       && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
 
-    if (crashing || ambulancePreRevive) {
+    if (crashing || ambulancePreRevive || this.state === GameState.GAME_OVER) {
       drawCrashBike(ctx, this.crashState, this.skin);
       drawCrashRider(ctx, this.crashState, this.skin);
     } else {

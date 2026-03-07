@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Edy on Bike</string>
+    <string name="title_activity_main">Edy on Bike</string>
+    <string name="package_name">com.edyonbike.app</string>
+    <string name="custom_url_scheme">com.edyonbike.app</string>
+</resources>

@@ -364,6 +364,13 @@ export class SoundManager {
     this.ctx = null;
   }
 
+  /** Full reset: stop music and revert to the default suburban track. Call on game restart. */
+  reset(): void {
+    this.stopMusic();
+    this.currentTrack = "/music.mp3";
+    this.activeSlot = "A";
+  }
+
   private cancelCrossfade(): void {
     if (this.crossfadeTimer) {
       clearInterval(this.crossfadeTimer);

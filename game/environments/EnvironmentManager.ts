@@ -41,7 +41,9 @@ const MUSIC_CROSSFADE_MS = 3000;
 export interface EnvUpdateResult {
   /** If set, Engine should crossfade music to the new track. */
   musicCrossfade?: { track: string; durationMs: number };
-  /** If set, Engine should regenerate background with the new environment. */
+  /** If set, Engine should append new biome buildings to the existing layer (transition start). */
+  appendBackground?: { toEnv: EnvironmentDefinition };
+  /** If set, Engine should fully replace background layers with this environment (transition end). */
   regenerateBackground?: EnvironmentDefinition;
 }
 
@@ -92,6 +94,9 @@ export class EnvironmentManager {
             this.startTransition(nextEnv);
             this.currentBiomeIndex = nextIndex;
 
+            // Signal Engine to append new biome buildings to the existing layer
+            result.appendBackground = { toEnv: nextEnv };
+
             // Signal Engine to crossfade music if track changed
             if (nextEnv.musicTrack !== this.currentEnv.musicTrack) {
               result.musicCrossfade = {
@@ -108,16 +113,12 @@ export class EnvironmentManager {
     if (this.transitioning) {
       this.transitionProgress += dt / TRANSITION_DURATION;
       if (this.transitionProgress >= 1) {
+        const completedEnv = this.toEnv;
         this.completeTransition();
-      }
-
-      // At ~50% progress, signal Engine to regenerate background with new biome
-      if (
-        this.toEnv &&
-        this.transitionProgress >= 0.5 &&
-        this.transitionProgress - dt / TRANSITION_DURATION < 0.5
-      ) {
-        result.regenerateBackground = this.toEnv;
+        // Signal Engine to do a clean rebuild with just the new biome
+        if (completedEnv) {
+          result.regenerateBackground = completedEnv;
+        }
       }
     }
 
@@ -167,11 +168,11 @@ export class EnvironmentManager {
 
   /**
    * Returns background drawers for the current state.
-   * After 50% transition, uses the target environment's drawers.
+   * During transition, merges both biomes' drawers so elements from both can be rendered.
    */
   getBackgroundDrawers(): Record<string, BackgroundDrawFn> {
-    if (this.transitioning && this.toEnv && this.transitionProgress >= 0.5) {
-      return this.toEnv.backgroundDrawers;
+    if (this.transitioning && this.fromEnv && this.toEnv) {
+      return { ...this.fromEnv.backgroundDrawers, ...this.toEnv.backgroundDrawers };
     }
     return this.currentEnv.backgroundDrawers;
   }

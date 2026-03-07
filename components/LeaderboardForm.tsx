@@ -17,8 +17,12 @@ export default function LeaderboardForm({
 
   useEffect(() => {
     const saved = localStorage.getItem("edy-player-name");
-    if (saved) setName(saved);
+    if (saved) {
+      setTimeout(() => setName(saved), 0);
+    }
   }, []);
+
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
 
   const saveAndAdvance = useCallback(
     async (nameToSave: string) => {
@@ -26,18 +30,18 @@ export default function LeaderboardForm({
       setSubmitting(true);
       if (trimmed) {
         try {
-          await fetch("/api/leaderboard", {
+          await fetch(`${apiBase}/api/leaderboard`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: trimmed, score, skin: skinName }),
           });
           localStorage.setItem("edy-player-name", trimmed);
-        } catch {}
+        } catch { }
       }
       setSubmitting(false);
       onSaved();
     },
-    [score, skinName, onSaved],
+    [score, skinName, onSaved, apiBase],
   );
 
   const handleSaveScore = async () => {

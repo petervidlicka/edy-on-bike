@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.capacitor
+!.env.local.example
 
 # vercel
 .vercel
@@ -42,6 +44,15 @@ next-env.d.ts
 
 # local dev leaderboard data
 /data/
+
+# Capacitor native build artifacts (keep ios/ and android/ project files)
+ios/App/Pods/
+ios/capacitor-cordova-ios-plugins/
+android/.gradle/
+android/app/build/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+
 *.diff
 *.patch
 pr_review*.md

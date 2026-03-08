@@ -57,14 +57,18 @@ export class Terrain {
     this.generateSegments(this.hillsStartX + 5000);
   }
 
+  /** Pre-generate segments up to the given world X. Call once per frame from Engine. */
+  ensureSegments(worldX: number): void {
+    this.generateSegments(worldX + 3000);
+  }
+
   /**
    * Returns Y offset from base groundY at a given world X position.
    * Negative = higher ground (hill peak). Positive = lower ground (valley).
+   * Call ensureSegments() once per frame before using this method.
    */
   getGroundYOffset(worldX: number): number {
     if (!this.hillsActive || this.config.hillAmplitude === 0) return 0;
-
-    this.generateSegments(worldX + 3000);
 
     const seg = this.getSegmentAt(worldX);
     if (!seg || seg.type === "flat") {
@@ -93,8 +97,6 @@ export class Terrain {
    */
   isFlatZone(worldX: number, width: number): boolean {
     if (!this.hillsActive || this.config.hillAmplitude === 0) return true;
-
-    this.generateSegments(worldX + width + 2000);
 
     const transition = this.config.transitionLength;
     // Check if the entire range falls within a flat segment's safe interior
@@ -126,8 +128,14 @@ export class Terrain {
   /** Remove segments that are far behind the camera to save memory. */
   cullOldSegments(currentWorldX: number): void {
     const cullBefore = currentWorldX - 1000;
-    while (this.segments.length > 1 && this.segments[0].startX + this.segments[0].length < cullBefore) {
-      this.segments.shift();
+    let removeCount = 0;
+    while (removeCount < this.segments.length - 1) {
+      const seg = this.segments[removeCount];
+      if (seg.startX + seg.length >= cullBefore) break;
+      removeCount++;
+    }
+    if (removeCount > 0) {
+      this.segments.splice(0, removeCount);
     }
   }
 

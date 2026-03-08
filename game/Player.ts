@@ -1,5 +1,5 @@
 import { PlayerState, TrickType } from "./types";
-import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, RAMP_GRAVITY_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED, MAX_FLIP_COUNT } from "./constants";
+import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, RAMP_GRAVITY_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED, MAX_FLIP_COUNT, TERRAIN_DROP_THRESHOLD } from "./constants";
 
 export function createPlayer(groundY: number, canvasWidth: number): PlayerState {
   return {
@@ -170,7 +170,7 @@ export function updatePlayer(
   // When on ground, follow terrain. If terrain drops away, go airborne.
   if (player.isOnGround) {
     const groundPos = groundY - player.height;
-    if (groundPos > player.y + 3) {
+    if (groundPos > player.y + TERRAIN_DROP_THRESHOLD) {
       // Terrain dropped away — player launches into air
       player.isOnGround = false;
       player.jumpCount = 0;

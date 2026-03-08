@@ -244,7 +244,8 @@ export class Engine {
     const currentEnv = this.envManager.getCurrentEnvironment();
     if (!this.hillsActivated && this.elapsedMs >= currentEnv.terrain.hillStartDelayMs) {
       this.hillsActivated = true;
-      this.terrain.activateHills(this.distance);
+      // Pass right screen edge so hills start off-screen
+      this.terrain.activateHills(this.distance + this.canvasW);
     }
 
     // Pre-generate terrain segments once per frame (covers player + obstacle spawn zone)
@@ -491,7 +492,7 @@ export class Engine {
 
   private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): void {
     this.score += bonus;
-    this.distance = this.score * SCORE_PER_PX;
+    // Don't sync distance from score — that would jump worldX and shift terrain
     this.callbacks.onScoreUpdate(this.score);
     this.sound.playBackflipSuccess();
     this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width, sketchy ?? false));

@@ -42,8 +42,8 @@ export class Terrain {
   activateHills(currentWorldX: number): void {
     if (this.hillsActive) return;
     this.hillsActive = true;
-    // First hill segment starts 300px ahead of current position
-    this.hillsStartX = currentWorldX + 300;
+    // First hill segment starts ahead of the given position (typically right screen edge)
+    this.hillsStartX = currentWorldX + 200;
 
     // Replace the initial flat segment with a properly-sized one
     this.segments = [{
@@ -143,9 +143,10 @@ export class Terrain {
 
   private rawHillHeight(worldX: number, amplitude: number, wavelength: number): number {
     const freq = Math.PI * 2 / wavelength;
+    // Primary wave + gentle secondary for natural variation (not sharp peaks)
     return amplitude * (
-      0.6 * Math.sin(worldX * freq) +
-      0.4 * Math.sin(worldX * freq * 1.7 + 2.1)
+      0.8 * Math.sin(worldX * freq) +
+      0.2 * Math.sin(worldX * freq * 0.6 + 1.4)
     );
   }
 

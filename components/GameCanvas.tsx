@@ -259,6 +259,7 @@ export default function GameCanvas() {
           sfxMuted={sfxMuted}
           onToggleMusic={() => setMusicMuted((m) => !m)}
           onToggleSfx={() => setSfxMuted((m) => !m)}
+          onJump={() => engineRef.current?.jump()}
           onBackflip={() => engineRef.current?.backflip()}
           onFrontflip={() => engineRef.current?.frontflip()}
           onSuperman={() => engineRef.current?.superman()}

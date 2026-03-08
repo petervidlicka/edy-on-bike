@@ -364,6 +364,13 @@ export class SoundManager {
     this.ctx = null;
   }
 
+  /** Full reset: stop music and revert to the given track. Call on game restart. */
+  reset(defaultTrack?: string): void {
+    this.stopMusic();
+    this.currentTrack = defaultTrack ?? this.currentTrack;
+    this.activeSlot = "A";
+  }
+
   private cancelCrossfade(): void {
     if (this.crossfadeTimer) {
       clearInterval(this.crossfadeTimer);

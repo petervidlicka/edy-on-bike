@@ -1,5 +1,5 @@
 import { ObstacleInstance, ObstacleType } from "./types";
-import { MIN_OBSTACLE_GAP, MIN_OBSTACLE_GAP_LATE } from "./constants";
+import { MIN_OBSTACLE_GAP, MIN_OBSTACLE_GAP_LATE, FLAT_GROUND_MIN_WIDTH } from "./constants";
 import type { EnvironmentDefinition, WeightedType } from "./environments/types";
 
 // Dimensions for each obstacle type
@@ -41,7 +41,8 @@ function weightedRandom(types: WeightedType[]): ObstacleType {
 export function createObstacle(
   type: ObstacleType,
   canvasWidth: number,
-  groundY: number
+  groundY: number,
+  terrainYOffset: number = 0,
 ): ObstacleInstance {
   const spec = OBSTACLE_SPECS[type];
   // Ramps keep exact positioning (physics-dependent), everything else sits
@@ -52,12 +53,38 @@ export function createObstacle(
   return {
     type,
     x: canvasWidth + 60,
-    y: groundY - spec.height + yOffset,
+    y: groundY + terrainYOffset - spec.height + yOffset,
     width: spec.width,
     height: spec.height,
     rideable: type === ObstacleType.BUS_STOP || type === ObstacleType.SHIPPING_CONTAINER || type === ObstacleType.CONTAINER_WITH_RAMP || type === ObstacleType.DUBAI_CHOCOLATE || type === ObstacleType.DUBAI_BILLBOARD,
     ramp: type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP,
   };
+}
+
+/** Select an obstacle type from the environment's weighted pool. */
+export function selectObstacleType(
+  envDef: EnvironmentDefinition,
+  elapsedMs: number,
+): ObstacleType {
+  return weightedRandom(envDef.obstaclePool.getWeightedTypes(elapsedMs));
+}
+
+/** Check if an obstacle type requires flat terrain (wide obstacles + ramps). */
+export function needsFlatGround(type: ObstacleType): boolean {
+  const spec = OBSTACLE_SPECS[type];
+  if (spec.width >= FLAT_GROUND_MIN_WIDTH) return true;
+  if (type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP || type === ObstacleType.CONTAINER_WITH_RAMP) return true;
+  return false;
+}
+
+/** Select an obstacle type that is safe to place on hilly terrain. */
+export function selectHillSafeObstacleType(
+  envDef: EnvironmentDefinition,
+  elapsedMs: number,
+): ObstacleType {
+  const types = envDef.obstaclePool.getWeightedTypes(elapsedMs).filter(t => !needsFlatGround(t.type));
+  if (types.length === 0) return ObstacleType.ROCK;
+  return weightedRandom(types);
 }
 
 export function spawnObstacle(

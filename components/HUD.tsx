@@ -1,5 +1,8 @@
 import { INITIAL_SPEED } from "@/game/constants";
 
+/** Guards against browsers firing both onTouchStart and onClick. */
+let lastTouchTime = 0;
+
 const TRICK_COLOR_CLEAN = "#1a7a2e";
 const TRICK_COLOR_SKETCHY = "#d97706";
 
@@ -11,6 +14,7 @@ interface HUDProps {
   sfxMuted: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  onJump: () => void;
   onBackflip: () => void;
   onFrontflip: () => void;
   onSuperman: () => void;
@@ -117,6 +121,7 @@ export default function HUD({
   sfxMuted,
   onToggleMusic,
   onToggleSfx,
+  onJump,
   onBackflip,
   onFrontflip,
   onSuperman,
@@ -202,6 +207,34 @@ export default function HUD({
         </button>
       </div>
 
+      {/* Jump button — bottom left */}
+      <button
+        onTouchStart={(e) => { e.preventDefault(); lastTouchTime = Date.now(); onJump(); }}
+        onClick={() => { if (Date.now() - lastTouchTime < 500) return; onJump(); }}
+        title="Jump (tap or space)"
+        style={{
+          position: "fixed",
+          bottom: "1.5rem",
+          left: "1.5rem",
+          width: "72px",
+          height: "72px",
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.35)",
+          border: "2px solid rgba(30,41,59,0.3)",
+          color: "#1e293b",
+          cursor: "pointer",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "2px",
+          padding: 0,
+        }}
+      >
+        <ArrowSVG points="6 15 12 9 18 15" />
+        <span style={{ fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
+      </button>
+
       {/* D-pad — bottom right (mobile trick controls) */}
       <div
         style={{
@@ -225,7 +258,7 @@ export default function HUD({
         </button>
         <div />
 
-        {/* Row 2: Left (Superman), _, Right (No Hander) */}
+        {/* Row 2: Left (Superman), Tricks label, Right (No Hander) */}
         <button
           onTouchStart={(e) => { e.preventDefault(); onSuperman(); }}
           title="Superman (←)"
@@ -233,7 +266,9 @@ export default function HUD({
         >
           <ArrowSVG points="15 6 9 12 15 18" />
         </button>
-        <div />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", color: "rgba(30,41,59,0.65)", textAlign: "center", lineHeight: 1.1, pointerEvents: "none" }}>
+          Tricks
+        </div>
         <button
           onTouchStart={(e) => { e.preventDefault(); onNoHander(); }}
           title="No Hander (→)"

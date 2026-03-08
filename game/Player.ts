@@ -167,6 +167,19 @@ export function updatePlayer(
     return;
   }
 
+  // When on ground, follow terrain. If terrain drops away, go airborne.
+  if (player.isOnGround) {
+    const groundPos = groundY - player.height;
+    if (groundPos > player.y + 3) {
+      // Terrain dropped away — player launches into air
+      player.isOnGround = false;
+      player.jumpCount = 0;
+      player.velocityY = 0; // gravity takes over
+    } else {
+      player.y = groundPos;
+    }
+  }
+
   if (!player.isOnGround) {
     // Ramp boost: reduced gravity for more airtime
     const effectiveGravity =

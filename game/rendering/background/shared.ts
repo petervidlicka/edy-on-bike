@@ -29,7 +29,7 @@ function drawCloud(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 // --- Ground ---
 
-function drawGround(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, groundY: number, offset: number, palette: EnvironmentPalette) {
+function drawGroundFlat(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, groundY: number, offset: number, palette: EnvironmentPalette) {
   // Grass verge — sits above the road, grounds the buildings
   ctx.fillStyle = palette.ground;
   ctx.fillRect(0, groundY - 22, canvasW, 22);
@@ -53,6 +53,55 @@ function drawGround(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: num
   ctx.setLineDash([]);
 }
 
+function drawGroundTerrain(
+  ctx: CanvasRenderingContext2D,
+  canvasW: number, canvasH: number,
+  groundY: number, offset: number,
+  palette: EnvironmentPalette,
+  getTerrainOffset: (screenX: number) => number,
+) {
+  const step = 4; // sample every 4px for smooth curves
+
+  // Grass verge + ground fill — one polygon from terrain top to canvas bottom
+  ctx.fillStyle = palette.ground;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY + getTerrainOffset(0) - 22);
+  for (let x = step; x <= canvasW; x += step) {
+    ctx.lineTo(x, groundY + getTerrainOffset(x) - 22);
+  }
+  ctx.lineTo(canvasW, canvasH);
+  ctx.lineTo(0, canvasH);
+  ctx.closePath();
+  ctx.fill();
+
+  // Road surface — polygon following terrain curve, 20px thick
+  ctx.fillStyle = palette.road;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY + getTerrainOffset(0));
+  for (let x = step; x <= canvasW; x += step) {
+    ctx.lineTo(x, groundY + getTerrainOffset(x));
+  }
+  // Return along the bottom edge of the road
+  for (let x = canvasW; x >= 0; x -= step) {
+    ctx.lineTo(x, groundY + getTerrainOffset(x) + 20);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // Dashed center line — follows terrain curve
+  ctx.strokeStyle = palette.roadLine;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([20, 15]);
+  ctx.lineDashOffset = offset;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY + getTerrainOffset(0) + 10);
+  for (let x = step; x <= canvasW; x += step) {
+    ctx.lineTo(x, groundY + getTerrainOffset(x) + 10);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
 // --- Background layers ---
 
 export function drawBackground(
@@ -62,7 +111,8 @@ export function drawBackground(
   canvasH: number,
   groundY: number,
   palette: EnvironmentPalette,
-  drawers: Record<string, BackgroundDrawFn>
+  drawers: Record<string, BackgroundDrawFn>,
+  getTerrainOffset?: (screenX: number) => number,
 ) {
   drawSky(ctx, canvasW, groundY, palette);
 
@@ -95,7 +145,11 @@ export function drawBackground(
   }
 
   // Layer 2: ground + road
-  drawGround(ctx, canvasW, canvasH, groundY, layers[2].offset, palette);
+  if (getTerrainOffset) {
+    drawGroundTerrain(ctx, canvasW, canvasH, groundY, layers[2].offset, palette, getTerrainOffset);
+  } else {
+    drawGroundFlat(ctx, canvasW, canvasH, groundY, layers[2].offset, palette);
+  }
 }
 
 // --- Walking person (simple side-view figure, shared across biomes) ---

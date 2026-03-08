@@ -160,6 +160,27 @@ export interface ParticleOverlayConfig {
   opacity: number;
 }
 
+// ── Terrain config ──
+
+export interface TerrainConfig {
+  /** Maximum height offset of hills in pixels. 0 = completely flat. */
+  hillAmplitude: number;
+  /** Wavelength of primary sine wave in pixels (one full cycle). */
+  hillWavelength: number;
+  /** Minimum length of a hill segment in pixels. */
+  hillSegmentMin: number;
+  /** Maximum length of a hill segment in pixels. */
+  hillSegmentMax: number;
+  /** Minimum length of flat segments between hills. */
+  flatSegmentMin: number;
+  /** Maximum length of flat segments between hills. */
+  flatSegmentMax: number;
+  /** Pixel distance to smoothly blend between flat and hilly terrain. */
+  transitionLength: number;
+  /** Milliseconds of gameplay before hills activate. 0 = immediate. */
+  hillStartDelayMs: number;
+}
+
 // ── Full environment definition ──
 
 export interface EnvironmentDefinition {
@@ -174,4 +195,6 @@ export interface EnvironmentDefinition {
   musicTrack: string;
   /** Optional particle overlay (snow, sand, etc.) */
   particleOverlay?: ParticleOverlayConfig;
+  /** Terrain configuration for rolling hills */
+  terrain: TerrainConfig;
 }

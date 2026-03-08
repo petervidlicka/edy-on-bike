@@ -333,4 +333,14 @@ export const DUBAI_ENVIRONMENT: EnvironmentDefinition = {
     color: "#d4b878",
     opacity: 0.3,
   },
+  terrain: {
+    hillAmplitude: 15,
+    hillWavelength: 500,
+    hillSegmentMin: 600,
+    hillSegmentMax: 1000,
+    flatSegmentMin: 500,
+    flatSegmentMax: 900,
+    transitionLength: 120,
+    hillStartDelayMs: 0,
+  },
 };

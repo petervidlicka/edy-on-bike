@@ -48,3 +48,7 @@ export const AMBULANCE_REVIVE_MS = 600;
 export const PLAYER_X_RATIO = 0.20; // 20% from the left of the canvas
 export const PLAYER_WIDTH = 64;
 export const PLAYER_HEIGHT = 58;
+
+// Terrain
+export const FLAT_GROUND_MIN_WIDTH = 70; // obstacles wider than this need flat terrain
+export const HILL_OBSTACLE_GAP_MULTIPLIER = 1.5; // obstacles spaced further apart on hills

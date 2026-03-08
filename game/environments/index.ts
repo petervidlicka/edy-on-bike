@@ -12,4 +12,5 @@ export type {
   ObstaclePoolConfig,
   WeightedType,
   ParticleOverlayConfig,
+  TerrainConfig,
 } from "./types";

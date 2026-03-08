@@ -33,9 +33,22 @@ export class Terrain {
     }];
   }
 
-  /** Update terrain config (e.g. on biome change). New segments use the new config. */
-  setConfig(config: TerrainConfig): void {
+  /** Update terrain config (e.g. on biome change). Trims pre-generated segments beyond the camera. */
+  setConfig(config: TerrainConfig, currentWorldX: number): void {
     this.config = config;
+    // Remove segments the player hasn't reached yet so they regenerate with the new config
+    const keepUpTo = currentWorldX + 1500;
+    while (this.segments.length > 1) {
+      const last = this.segments[this.segments.length - 1];
+      if (last.startX <= keepUpTo) break;
+      this.segments.pop();
+    }
+    // Trim the last segment if it extends far beyond the camera
+    const last = this.segments[this.segments.length - 1];
+    const maxEnd = keepUpTo + 500;
+    if (last.startX + last.length > maxEnd) {
+      last.length = maxEnd - last.startX;
+    }
   }
 
   /** Activate hills starting from a world X position (called when delay elapses). */
@@ -142,12 +155,11 @@ export class Terrain {
   // ── Internal ──
 
   private rawHillHeight(worldX: number, amplitude: number, wavelength: number): number {
-    const freq = Math.PI * 2 / wavelength;
-    // Primary wave + gentle secondary for natural variation (not sharp peaks)
-    return amplitude * (
-      0.8 * Math.sin(worldX * freq) +
-      0.2 * Math.sin(worldX * freq * 0.6 + 1.4)
-    );
+    // sin² creates smooth rolling hills that never dip below baseline (no valleys/dropoffs)
+    const freq = Math.PI / wavelength; // sin² at this freq has period = wavelength
+    const base = Math.sin(worldX * freq);
+    const variation = Math.sin(worldX * freq * 0.6 + 1.4);
+    return amplitude * (0.8 * base * base + 0.2 * variation * variation);
   }
 
   private computeEnvelope(worldX: number, seg: TerrainSegment): number {

@@ -236,8 +236,8 @@ export class Engine {
         this.particleConfig = null;
         this.particles = [];
       }
-      // Update terrain config for the new biome
-      this.terrain.setConfig(envResult.regenerateBackground.terrain);
+      // Update terrain config for the new biome — trims pre-generated suburban segments
+      this.terrain.setConfig(envResult.regenerateBackground.terrain, this.distance);
     }
 
     // Activate hills after the configured delay
@@ -617,7 +617,7 @@ export class Engine {
     // Immediately regenerate background with the target environment
     const env = this.envManager.getCurrentEnvironment();
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, env);
-    this.terrain.setConfig(env.terrain);
+    this.terrain.setConfig(env.terrain, this.distance);
     const overlay = env.particleOverlay;
     if (overlay) {
       this.particleConfig = overlay;

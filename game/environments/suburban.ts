@@ -235,7 +235,7 @@ export const SUBURBAN_ENVIRONMENT: EnvironmentDefinition = {
   },
   musicTrack: "/music.mp3",
   terrain: {
-    hillAmplitude: 52,
+    hillAmplitude: 65,
     hillWavelength: 600,
     hillSegmentMin: 1200,
     hillSegmentMax: 2200,

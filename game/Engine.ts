@@ -10,8 +10,6 @@ import {
   SKETCHY_TOLERANCE,
   AMBULANCE_CHANCE,
   CRASH_DURATION,
-  BUILDING_LAYER_INDEX,
-  BIOME_APPEND_GAP,
 } from "./constants";
 import {
   FloatingText,
@@ -122,7 +120,7 @@ export class Engine {
 
   restart(): void {
     this.sound.stopSiren();
-    this.sound.reset(this.envManager.getCurrentEnvironment().musicTrack);
+    this.sound.reset();
     this.ambulance = null;
     this.hasBeenResurrected = false;
     this.iddqdActive = false;
@@ -216,9 +214,9 @@ export class Engine {
     if (envResult.appendBackground) {
       // Append new biome buildings to the end of the existing layer so they scroll in naturally
       const toEnv = envResult.appendBackground.toEnv;
-      const buildingLayer = this.layers[BUILDING_LAYER_INDEX];
+      const buildingLayer = this.layers[1];
       const totalWidth = getTotalLayerWidth(buildingLayer, this.canvasW);
-      const gap = BIOME_APPEND_GAP;
+      const gap = 300;
       const newElements = toEnv.background.generateElements(this.canvasW, this.groundY, toEnv.palette);
       for (const el of newElements) {
         el.x += totalWidth + gap;
@@ -246,9 +244,6 @@ export class Engine {
       this.hillsActivated = true;
       this.terrain.activateHills(this.distance);
     }
-
-    // Pre-generate terrain segments once per frame (covers player + obstacle spawn zone)
-    this.terrain.ensureSegments(this.distance + this.canvasW + 3000);
 
     // Speed progression
     this.speedTimer += rawDt;

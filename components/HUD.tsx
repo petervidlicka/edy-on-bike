@@ -1,8 +1,5 @@
 import { INITIAL_SPEED } from "@/game/constants";
 
-/** Guards against browsers firing both onTouchStart and onClick. */
-let lastTouchTime = 0;
-
 const TRICK_COLOR_CLEAN = "#1a7a2e";
 const TRICK_COLOR_SKETCHY = "#d97706";
 
@@ -209,8 +206,8 @@ export default function HUD({
 
       {/* Jump button — bottom left */}
       <button
-        onTouchStart={(e) => { e.preventDefault(); lastTouchTime = Date.now(); onJump(); }}
-        onClick={() => { if (Date.now() - lastTouchTime < 500) return; onJump(); }}
+        onTouchStart={(e) => { e.preventDefault(); onJump(); }}
+        onClick={onJump}
         title="Jump (tap or space)"
         style={{
           position: "fixed",

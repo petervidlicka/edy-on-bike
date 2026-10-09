@@ -1,11 +1,23 @@
+/**
+ * Leaderboard storage: an Upstash Redis sorted set in production, with a
+ * JSON-file fallback for local development when no Redis credentials exist.
+ */
 import { Redis } from "@upstash/redis";
 import fs from "fs";
 import path from "path";
+import { LEADERBOARD_SIZE } from "./leaderboardConfig";
 
+/** One row of the public leaderboard, as returned by the API. */
 export interface LeaderboardEntry {
   name: string;
   score: number;
   skin?: string;
+}
+
+/** Upstash REST credentials. */
+export interface RedisConfig {
+  url: string;
+  token: string;
 }
 
 const LEADERBOARD_KEY = "edy-on-bike:leaderboard";
@@ -13,17 +25,32 @@ const SKIN_HASH_KEY = "edy-on-bike:leaderboard:skins";
 
 // --- Upstash Redis store ---
 
-function getRedis(): Redis | null {
+/**
+ * Reads Upstash credentials, accepting both the Vercel KV / Marketplace names
+ * (`KV_REST_API_*`) and the plain Upstash names (`UPSTASH_REDIS_REST_*`).
+ * The store and the API rate limiter both use this, so they can never
+ * disagree about whether Redis is available.
+ *
+ * @returns The REST URL and token, or `null` when Redis is not configured.
+ */
+export function getRedisConfig(): RedisConfig | null {
   const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  return url && token ? { url, token } : null;
+}
 
-  if (url && token) {
-    return new Redis({
-      url,
-      token,
-    });
+// undefined = not created yet; null = Redis not configured
+let redisClient: Redis | null | undefined;
+
+function getRedis(): Redis | null {
+  if (redisClient === undefined) {
+    const config = getRedisConfig();
+    // Names are arbitrary player input. With automatic deserialization the client
+    // JSON-parses every reply, so a stored name like "true" or "123" would come
+    // back as a boolean or number instead of the string the player typed.
+    redisClient = config ? new Redis({ ...config, automaticDeserialization: false }) : null;
   }
-  return null;
+  return redisClient;
 }
 
 async function getTopScoresRedis(
@@ -35,23 +62,24 @@ async function getTopScoresRedis(
     withScores: true,
   });
 
-  // zrange with withScores returns [member, score, member, score, ...]
+  // zrange with withScores returns [member, score, member, score, ...] as raw strings
   const entries: LeaderboardEntry[] = [];
-  for (let i = 0; i < raw.length; i += 2) {
-    entries.push({
-      name: raw[i],
-      score: Number(raw[i + 1]),
-    });
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    const score = Number(raw[i + 1]);
+    if (!Number.isFinite(score)) continue;
+    entries.push({ name: String(raw[i]), score });
   }
 
   // Fetch skin metadata only for the entries we retrieved (avoids full hash scan)
   if (entries.length > 0) {
-    const names = entries.map(e => e.name);
-    const skins = (await redis.hmget(SKIN_HASH_KEY, ...names)) as Record<string, string | null>;
-    for (const entry of entries) {
-      const skin = skins[entry.name];
-      if (skin) entry.skin = skin;
-    }
+    const names = entries.map((e) => e.name);
+    // Without automatic deserialization, hmget returns the raw reply: one value per
+    // requested field, in order, with null for fields that have no skin stored.
+    const skins = (await redis.hmget(SKIN_HASH_KEY, ...names)) as unknown as (string | null)[] | null;
+    entries.forEach((entry, i) => {
+      const skin = skins?.[i];
+      if (typeof skin === "string" && skin.length > 0) entry.skin = skin;
+    });
   }
 
   return entries;
@@ -121,8 +149,14 @@ function addScoreFile(name: string, score: number, skin?: string): void {
 
 // --- Public API ---
 
+/**
+ * Highest scores first, from Redis when configured, otherwise the local file store.
+ *
+ * @param limit - Maximum number of entries to return.
+ * @returns Entries with string names and finite numeric scores.
+ */
 export async function getTopScores(
-  limit: number = 20,
+  limit: number = LEADERBOARD_SIZE,
 ): Promise<LeaderboardEntry[]> {
   const redis = getRedis();
   if (redis) {
@@ -131,14 +165,26 @@ export async function getTopScores(
   return getTopScoresFile(limit);
 }
 
+/**
+ * Number of distinct names that have ever submitted a score.
+ *
+ * @returns The size of the leaderboard set.
+ */
 export async function getTotalPlayers(): Promise<number> {
   const redis = getRedis();
   if (redis) {
-    return redis.zcard(LEADERBOARD_KEY);
+    return Number(await redis.zcard(LEADERBOARD_KEY));
   }
   return readFileStore().length;
 }
 
+/**
+ * Records a score, keeping each name's best only.
+ *
+ * @param name - Display name, already validated and trimmed by the API route.
+ * @param score - Non-negative integer score.
+ * @param skin - Optional bike skin shown next to the name.
+ */
 export async function addScore(name: string, score: number, skin?: string): Promise<void> {
   const redis = getRedis();
   if (redis) {

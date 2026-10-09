@@ -364,10 +364,10 @@ export class SoundManager {
     this.ctx = null;
   }
 
-  /** Full reset: stop music and revert to the given track. Call on game restart. */
-  reset(defaultTrack?: string): void {
+  /** Full reset: stop music and revert to the default suburban track. Call on game restart. */
+  reset(): void {
     this.stopMusic();
-    this.currentTrack = defaultTrack ?? this.currentTrack;
+    this.currentTrack = "/music.mp3";
     this.activeSlot = "A";
   }
 

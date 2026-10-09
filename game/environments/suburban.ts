@@ -234,14 +234,4 @@ export const SUBURBAN_ENVIRONMENT: EnvironmentDefinition = {
     getWeightedTypes: suburbanWeightedTypes,
   },
   musicTrack: "/music.mp3",
-  terrain: {
-    hillAmplitude: 52,
-    hillWavelength: 600,
-    hillSegmentMin: 1200,
-    hillSegmentMax: 2200,
-    flatSegmentMin: 600,
-    flatSegmentMax: 1000,
-    transitionLength: 250,
-    hillStartDelayMs: 15_000,
-  },
 };

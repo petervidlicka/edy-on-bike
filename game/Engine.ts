@@ -10,8 +10,6 @@ import {
   SKETCHY_TOLERANCE,
   AMBULANCE_CHANCE,
   CRASH_DURATION,
-  BUILDING_LAYER_INDEX,
-  BIOME_APPEND_GAP,
 } from "./constants";
 import {
   FloatingText,
@@ -25,9 +23,7 @@ import { createBackgroundLayers, updateLayers, getTotalLayerWidth } from "./Back
 import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider, createParticles, updateParticles, drawParticles, drawAmbulance, drawReviveFlash } from "./rendering";
 import type { Particle } from "./rendering";
 import type { ParticleOverlayConfig } from "./environments/types";
-import { spawnObstacle, createObstacle, nextSpawnGap, selectObstacleType, needsFlatGround, selectHillSafeObstacleType } from "./Obstacle";
-import { Terrain } from "./Terrain";
-import { HILL_OBSTACLE_GAP_MULTIPLIER } from "./constants";
+import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
@@ -85,14 +81,11 @@ export class Engine {
   };
   private particles: Particle[] = [];
   private particleConfig: ParticleOverlayConfig | null = null;
-  private terrain: Terrain;
-  private hillsActivated = false;
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
     this.callbacks = callbacks;
-    this.terrain = new Terrain(this.envManager.getCurrentEnvironment().terrain);
     this.loop = this.loop.bind(this);
     this.resize(window.innerWidth, window.innerHeight);
     this.rafId = requestAnimationFrame(this.loop);
@@ -122,7 +115,7 @@ export class Engine {
 
   restart(): void {
     this.sound.stopSiren();
-    this.sound.reset(this.envManager.getCurrentEnvironment().musicTrack);
+    this.sound.reset();
     this.ambulance = null;
     this.hasBeenResurrected = false;
     this.iddqdActive = false;
@@ -139,8 +132,6 @@ export class Engine {
     this.obstacles = [];
     this.floatingTexts = [];
     this.envManager.reset();
-    this.terrain.reset(this.envManager.getCurrentEnvironment().terrain);
-    this.hillsActivated = false;
     this.particles = [];
     this.particleConfig = null;
     this.player = createPlayer(this.groundY, this.canvasW);
@@ -216,9 +207,9 @@ export class Engine {
     if (envResult.appendBackground) {
       // Append new biome buildings to the end of the existing layer so they scroll in naturally
       const toEnv = envResult.appendBackground.toEnv;
-      const buildingLayer = this.layers[BUILDING_LAYER_INDEX];
+      const buildingLayer = this.layers[1];
       const totalWidth = getTotalLayerWidth(buildingLayer, this.canvasW);
-      const gap = BIOME_APPEND_GAP;
+      const gap = 300;
       const newElements = toEnv.background.generateElements(this.canvasW, this.groundY, toEnv.palette);
       for (const el of newElements) {
         el.x += totalWidth + gap;
@@ -236,20 +227,7 @@ export class Engine {
         this.particleConfig = null;
         this.particles = [];
       }
-      // Update terrain config for the new biome — trims pre-generated suburban segments
-      this.terrain.setConfig(envResult.regenerateBackground.terrain, this.distance);
     }
-
-    // Activate hills after the configured delay
-    const currentEnv = this.envManager.getCurrentEnvironment();
-    if (!this.hillsActivated && this.elapsedMs >= currentEnv.terrain.hillStartDelayMs) {
-      this.hillsActivated = true;
-      // Pass right screen edge so hills start off-screen
-      this.terrain.activateHills(this.distance + this.canvasW);
-    }
-
-    // Pre-generate terrain segments once per frame (covers player + obstacle spawn zone)
-    this.terrain.ensureSegments(this.distance + this.canvasW + 3000);
 
     // Speed progression
     this.speedTimer += rawDt;
@@ -270,23 +248,12 @@ export class Engine {
       this.callbacks.onScoreUpdate(this.score);
     }
 
-    // Compute terrain-adjusted ground Y for the player's position
-    const playerWorldX = this.player.x + this.distance;
-    const playerTerrainOffset = this.terrain.getGroundYOffset(playerWorldX);
-    const effectiveGroundY = this.groundY + playerTerrainOffset;
-
     // Update player and background
     const wasAirborne = !this.player.isOnGround;
     const wasBackflipping = this.player.isBackflipping;
     const prevBackflipAngle = this.player.backflipAngle;
     const prevFlipDirection = this.player.flipDirection;
-    updatePlayer(this.player, dt, effectiveGroundY, this.speed);
-
-    // Match bike tilt to terrain slope when on ground
-    if (this.player.isOnGround && !this.player.ridingObstacle) {
-      this.player.rampSurfaceAngle = this.terrain.getSlopeAngle(playerWorldX);
-    }
-
+    updatePlayer(this.player, dt, this.groundY, this.speed);
     updateLayers(this.layers, this.speed, dt);
     if (this.particleConfig && this.particles.length > 0) {
       updateParticles(this.particles, this.particleConfig, dt, this.canvasW, this.canvasH);
@@ -319,42 +286,23 @@ export class Engine {
     this.distanceSinceLastObstacle += this.speed * dt;
     const gap = this.debugSequence ? this.debugGap : this.nextObstacleGap;
     if (this.distanceSinceLastObstacle >= gap) {
-      const obstacleWorldX = this.distance + this.canvasW + 60;
-      const obstacleTerrainOffset = this.terrain.getGroundYOffset(obstacleWorldX);
-      const isFlat = this.terrain.isFlatZone(obstacleWorldX, 200);
-
       if (this.debugSequence) {
         const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
-        this.obstacles.push(createObstacle(type, this.canvasW, this.groundY, obstacleTerrainOffset));
+        this.obstacles.push(createObstacle(type, this.canvasW, this.groundY));
         this.debugIndex++;
       } else {
-        const biomeMs = this.envManager.getBiomeElapsedMs(this.elapsedMs);
-        const env = this.envManager.getCurrentEnvironment();
-        let type = selectObstacleType(env, biomeMs);
-
-        // If the selected obstacle needs flat ground but terrain isn't flat, re-roll
-        if (!isFlat && needsFlatGround(type)) {
-          type = selectHillSafeObstacleType(env, biomeMs);
-        }
-
-        this.obstacles.push(createObstacle(type, this.canvasW, this.groundY, obstacleTerrainOffset));
+        this.obstacles.push(
+          spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment())
+        );
       }
       this.distanceSinceLastObstacle = 0;
       if (!this.debugSequence) {
-        let nextGap = nextSpawnGap(this.speed, this.elapsedMs);
-        // Obstacles are less frequent on hilly terrain
-        if (!isFlat) {
-          nextGap *= HILL_OBSTACLE_GAP_MULTIPLIER;
-        }
-        this.nextObstacleGap = nextGap;
+        this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs);
       }
     }
 
-    // Periodically cull old terrain segments
-    this.terrain.cullOldSegments(this.distance);
-
     // Ramp interaction (before collision checks)
-    processRampInteractions(this.player, this.obstacles, effectiveGroundY);
+    processRampInteractions(this.player, this.obstacles, this.groundY);
     processRidingState(this.player);
 
     // Collision detection
@@ -414,9 +362,7 @@ export class Engine {
 
   private startAmbulanceSequence(): void {
     this.state = GameState.AMBULANCE;
-    const ambWorldX = this.player.x + this.distance;
-    const ambTerrainOffset = this.terrain.getGroundYOffset(ambWorldX);
-    this.ambulance = createAmbulanceState(this.player.x, this.player.width, this.canvasW, this.groundY + ambTerrainOffset);
+    this.ambulance = createAmbulanceState(this.player.x, this.player.width, this.canvasW, this.groundY);
     this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
     this.sound.playSiren();
     this.callbacks.onStateChange(this.state);
@@ -448,10 +394,8 @@ export class Engine {
     const clearZone = this.player.x + this.player.width + 200;
     this.obstacles = this.obstacles.filter((obs) => obs.x > clearZone);
 
-    // Reset player state to ground (terrain-adjusted)
-    const reviveWorldX = this.player.x + this.distance;
-    const reviveTerrainOffset = this.terrain.getGroundYOffset(reviveWorldX);
-    this.player.y = this.groundY + reviveTerrainOffset - this.player.height;
+    // Reset player state to ground
+    this.player.y = this.groundY - this.player.height;
     this.player.velocityY = 0;
     this.player.isOnGround = true;
     this.player.jumpCount = 0;
@@ -482,17 +426,14 @@ export class Engine {
   }
 
   private updateCrash(dt: number, rawDt: number): void {
-    // Use terrain-adjusted groundY for crash bounce surface
-    const crashWorldX = this.crashState.riderX + this.distance;
-    const crashTerrainOffset = this.terrain.getGroundYOffset(crashWorldX);
-    if (updateCrashPhysics(this.crashState, dt, rawDt, this.groundY + crashTerrainOffset)) {
+    if (updateCrashPhysics(this.crashState, dt, rawDt, this.groundY)) {
       this.gameOver();
     }
   }
 
   private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): void {
     this.score += bonus;
-    // Don't sync distance from score — that would jump worldX and shift terrain
+    this.distance = this.score * SCORE_PER_PX;
     this.callbacks.onScoreUpdate(this.score);
     this.sound.playBackflipSuccess();
     this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width, sketchy ?? false));
@@ -511,8 +452,7 @@ export class Engine {
       ctx.translate(this.crashState.shakeOffsetX, this.crashState.shakeOffsetY);
     }
 
-    const terrainFn = (screenX: number) => this.terrain.getGroundYOffset(screenX + this.distance);
-    drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers, terrainFn);
+    drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
     if (this.particleConfig && this.particles.length > 0) {
       drawParticles(ctx, this.particles, this.particleConfig);
     }
@@ -617,7 +557,6 @@ export class Engine {
     // Immediately regenerate background with the target environment
     const env = this.envManager.getCurrentEnvironment();
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, env);
-    this.terrain.setConfig(env.terrain, this.distance);
     const overlay = env.particleOverlay;
     if (overlay) {
       this.particleConfig = overlay;

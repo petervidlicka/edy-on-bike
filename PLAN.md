@@ -139,4 +139,4 @@ Implement independently after the app is live in stores.
 - **Shared leaderboard** — both web and native users share the same leaderboard via the Vercel API.
 - **Updating the app** — run `npm run build:mobile`, then submit new build to the stores. For minor updates, explore Capacitor live update plugins later.
 - **Dev testing** — use `npx cap run ios` / `npx cap run android` for quick on-device testing.
-- **CORS** — the Vercel API may need CORS headers added for the native app (requests come from `capacitor://localhost` on iOS and `http://localhost` on Android). Add `Access-Control-Allow-Origin` to the leaderboard route if needed.
+- **CORS** — the leaderboard route allows the native apps' origins: `capacitor://localhost` on iOS and `https://localhost` on Android (Capacitor 6+ defaults `androidScheme` to `https`). If `server.androidScheme` is ever changed in `capacitor.config.ts`, update `ALLOWED_ORIGINS` in `app/api/leaderboard/route.ts` to match.

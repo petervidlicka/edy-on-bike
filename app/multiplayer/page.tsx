@@ -2,7 +2,7 @@
 
 /**
  * /multiplayer route: switches between lobby, race and results based on the
- * room phase reported by the PartyKit server (via useMultiplayerRoom).
+ * room phase reported by the multiplayer server (via useMultiplayerRoom).
  */
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";

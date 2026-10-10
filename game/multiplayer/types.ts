@@ -70,6 +70,8 @@ export type ClientMessage =
   | { type: "ready" }
   | { type: "player_update"; snapshot: GhostSnapshot }
   | { type: "player_crashed"; score: number }
+  /** "Play Again" from the results screen — keeps the group in the same room. */
+  | { type: "rematch" }
   | { type: "leave" };
 
 // ── Server → Client messages ──
@@ -106,4 +108,6 @@ export type ServerMessage =
       type: "race_finished";
       rankings: RankingEntry[];
     }
+  /** Room went back to the lobby for a rematch; everyone is un-ready with scores cleared. */
+  | { type: "room_reset"; players: PlayerInfo[] }
   | { type: "error"; message: string };

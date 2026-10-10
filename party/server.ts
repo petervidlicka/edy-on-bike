@@ -38,6 +38,7 @@ type ClientMessage =
   | { type: "ready" }
   | { type: "player_update"; snapshot: unknown }
   | { type: "player_crashed"; score: unknown }
+  | { type: "rematch" }
   | { type: "leave" };
 
 /**
@@ -101,6 +102,9 @@ export default class MultiplayerServer implements Party.Server {
       case "player_crashed":
         this.handlePlayerCrashed(data, sender);
         break;
+      case "rematch":
+        this.handleRematch(sender);
+        break;
       case "leave":
         this.handleLeave(sender);
         break;
@@ -130,6 +134,8 @@ export default class MultiplayerServer implements Party.Server {
     this.connections.delete(conn.id);
 
     this.checkFinishCondition();
+    // Everyone left may now be ready (e.g. the one holdout just left)
+    this.maybeStartCountdown();
 
     if (this.players.size === 0) {
       this.cleanup();
@@ -200,11 +206,23 @@ export default class MultiplayerServer implements Party.Server {
     player.ready = true;
 
     this.broadcast({ type: "player_ready", playerId: sender.id });
+    this.maybeStartCountdown();
+  }
 
-    // Check if all players are ready and there are at least 2
-    if (this.players.size >= 2 && this.allPlayersReady()) {
-      this.startCountdown();
+  /**
+   * First "Play Again" after a race resets the room to a fresh lobby with the same
+   * players, so a group can keep racing on one code. Players still on the results
+   * screen stay un-ready, which holds the next countdown until they opt in or leave.
+   */
+  private handleRematch(sender: Party.Connection) {
+    if (!this.players.has(sender.id) || this.phase !== "finished") return;
+    this.phase = "lobby";
+    for (const player of this.players.values()) {
+      player.ready = false;
+      player.alive = true;
+      player.score = 0;
     }
+    this.broadcast({ type: "room_reset", players: Array.from(this.players.values()) });
   }
 
   private handlePlayerUpdate(data: { type: "player_update"; snapshot: unknown }, sender: Party.Connection) {
@@ -260,6 +278,8 @@ export default class MultiplayerServer implements Party.Server {
     );
 
     this.checkFinishCondition();
+    // Everyone left may now be ready (e.g. the one holdout just left)
+    this.maybeStartCountdown();
 
     if (this.players.size === 0) {
       this.cleanup();
@@ -267,6 +287,13 @@ export default class MultiplayerServer implements Party.Server {
   }
 
   // ── Game flow ────────────────────────────────────────────────────────
+
+  /** Starts the race once at least 2 players are in the lobby and all are ready. */
+  private maybeStartCountdown() {
+    if (this.phase === "lobby" && this.players.size >= 2 && this.allPlayersReady()) {
+      this.startCountdown();
+    }
+  }
 
   private startCountdown() {
     this.phase = "countdown";
@@ -341,14 +368,9 @@ export default class MultiplayerServer implements Party.Server {
       rank: i + 1,
     }));
 
+    // Abandoned results screens are closed by the inactivity timer; a fixed timer here
+    // would also kick players who went back to the lobby for a rematch.
     this.broadcast({ type: "race_finished", rankings });
-
-    // Auto-cleanup after 5 minutes
-    setTimeout(() => {
-      for (const conn of this.connections.values()) {
-        conn.close();
-      }
-    }, 5 * 60 * 1000);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────

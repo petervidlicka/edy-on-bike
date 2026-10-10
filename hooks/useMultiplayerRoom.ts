@@ -80,6 +80,15 @@ export function useMultiplayerRoom() {
 
     let opened = false;
     let joined = false;
+    let myId = "";
+
+    /** One adapter per race: it accumulates crash/score state, so a rematch needs a fresh one. */
+    const startAdapter = (roster: PlayerInfo[]) => {
+      adapterRef.current?.destroy();
+      const next = new MultiplayerAdapter(ws, myId, roster, { onPlayersUpdate: setPlayers });
+      adapterRef.current = next;
+      setAdapter(next);
+    };
     ws.onopen = () => {
       opened = true;
       setConnectionState("connected");
@@ -93,24 +102,21 @@ export function useMultiplayerRoom() {
       switch (msg.type) {
         case "room_joined": {
           joined = true;
+          myId = msg.playerId;
           setLocalPlayerId(msg.playerId);
           setPlayers(msg.players);
           setPhase(msg.phase);
           setSeed(msg.seed);
           setRoomCode(msg.roomCode);
-
-          const newAdapter = new MultiplayerAdapter(ws, msg.playerId, msg.players, {
-            onRemotePlayerCrashed: () => {},
-            onRaceFinished: (r) => {
-              setRankings(r);
-              setPhase("finished");
-            },
-            onPlayersUpdate: setPlayers,
-          });
-          adapterRef.current = newAdapter;
-          setAdapter(newAdapter);
+          startAdapter(msg.players);
           break;
         }
+        case "room_reset":
+          // Someone chose Play Again. Players still on results stay there (phase
+          // "finished" locally) until they click Play Again themselves.
+          setPlayers(msg.players);
+          startAdapter(msg.players);
+          break;
         case "player_joined":
           setPlayers((prev) => [...prev, msg.player]);
           adapterRef.current?.handleServerMessage(msg);
@@ -207,6 +213,21 @@ export function useMultiplayerRoom() {
     setError(null);
   }, [releaseConnection, resetRoomState]);
 
+  /** Back to this room's lobby for another race with the same group. */
+  const playAgain = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // Room was idled out while on the results screen — start fresh instead
+      disconnect();
+      return;
+    }
+    const msg: ClientMessage = { type: "rematch" };
+    ws.send(JSON.stringify(msg));
+    raceFinishedRef.current = false;
+    setRankings([]);
+    setPhase("lobby");
+  }, [disconnect]);
+
   return {
     connectionState,
     roomCode,
@@ -221,6 +242,7 @@ export function useMultiplayerRoom() {
     createRoom,
     joinRoom,
     setReady,
+    playAgain,
     disconnect,
   };
 }

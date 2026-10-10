@@ -24,12 +24,9 @@ export default function MultiplayerPage() {
     createRoom,
     joinRoom,
     setReady,
+    playAgain,
     disconnect,
   } = useMultiplayerRoom();
-
-  const handlePlayAgain = useCallback(() => {
-    disconnect();
-  }, [disconnect]);
 
   const handleLeave = useCallback(() => {
     disconnect();
@@ -79,7 +76,7 @@ export default function MultiplayerPage() {
         <MultiplayerResults
           rankings={rankings}
           localPlayerId={localPlayerId}
-          onPlayAgain={handlePlayAgain}
+          onPlayAgain={playAgain}
           onLeave={handleLeave}
         />
       )}

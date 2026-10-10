@@ -2,17 +2,18 @@ import { SkinId, SkinUnlockState } from "./types";
 
 const STORAGE_KEY = "edy-skin-state";
 
-const DEFAULT_STATE: SkinUnlockState = {
+/** Fresh-player state; also what server-rendered markup assumes before localStorage is read. */
+export const DEFAULT_SKIN_STATE: SkinUnlockState = {
   selectedSkinId: "default",
   bestScore: 0,
   cheatUnlocked: false,
 };
 
 export function loadSkinState(): SkinUnlockState {
-  if (typeof window === "undefined") return DEFAULT_STATE;
+  if (typeof window === "undefined") return DEFAULT_SKIN_STATE;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_STATE;
+    if (!raw) return DEFAULT_SKIN_STATE;
     const parsed = JSON.parse(raw);
     return {
       selectedSkinId: parsed.selectedSkinId ?? "default",
@@ -20,7 +21,7 @@ export function loadSkinState(): SkinUnlockState {
       cheatUnlocked: parsed.cheatUnlocked ?? false,
     };
   } catch {
-    return DEFAULT_STATE;
+    return DEFAULT_SKIN_STATE;
   }
 }
 

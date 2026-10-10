@@ -74,7 +74,8 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   );
 }
 
-const btnStyle: React.CSSProperties = {
+/** Shared glass style for small HUD buttons, so screens composing HUD pieces match. */
+export const btnStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.22)",
   backdropFilter: "blur(24px) saturate(200%)",
   WebkitBackdropFilter: "blur(24px) saturate(200%)",
@@ -110,6 +111,146 @@ function ArrowSVG({ points }: { points: string }) {
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points={points} />
     </svg>
+  );
+}
+
+/** A landed trick to flash in the HUD (single-player and multiplayer share the popup). */
+export type TrickFeedbackData = { name: string; points: number; sketchy?: boolean };
+
+/**
+ * Music/SFX toggles, top left. Extracted so the multiplayer race screen can reuse
+ * them and append its own buttons (e.g. LEAVE) via children.
+ */
+export function AudioControls({
+  musicMuted,
+  sfxMuted,
+  onToggleMusic,
+  onToggleSfx,
+  children,
+}: {
+  musicMuted: boolean;
+  sfxMuted: boolean;
+  onToggleMusic: () => void;
+  onToggleSfx: () => void;
+  /** Extra buttons appended to the same top-left row (e.g. multiplayer's Leave). */
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: "1rem",
+        left: "1.5rem",
+        display: "flex",
+        gap: "0.4rem",
+      }}
+    >
+      <button
+        onClick={onToggleMusic}
+        title={musicMuted ? "Music on" : "Music off"}
+        style={btnStyle}
+      >
+        <MusicIcon muted={musicMuted} />
+      </button>
+      <button
+        onClick={onToggleSfx}
+        title={sfxMuted ? "Sound on" : "Sound off"}
+        style={btnStyle}
+      >
+        <SpeakerIcon muted={sfxMuted} />
+      </button>
+      {children}
+    </div>
+  );
+}
+
+/** "Backflip +50"-style feedback; renders nothing when there's no recent trick. */
+export function TrickFeedbackPopup({
+  trickFeedback,
+}: {
+  trickFeedback: TrickFeedbackData | null;
+}) {
+  if (!trickFeedback) return null;
+  return (
+    <span
+      style={{
+        color: trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN,
+        fontFamily: "var(--font-space-mono), monospace",
+        fontSize: "0.7rem",
+        fontWeight: "bold",
+        textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+      }}
+    >
+      {trickFeedback.name} +{trickFeedback.points}
+    </span>
+  );
+}
+
+/** Touch D-pad for tricks (bottom right), shared by single-player and multiplayer. */
+export function TrickDpad({
+  onBackflip,
+  onFrontflip,
+  onSuperman,
+  onNoHander,
+}: {
+  onBackflip: () => void;
+  onFrontflip: () => void;
+  onSuperman: () => void;
+  onNoHander: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: "1.5rem",
+        right: "1.5rem",
+        display: "grid",
+        gridTemplateColumns: "48px 48px 48px",
+        gridTemplateRows: "48px 48px 48px",
+        gap: "4px",
+      }}
+    >
+      {/* Row 1: _, Up (Frontflip), _ */}
+      <div />
+      <button
+        onTouchStart={(e) => { e.preventDefault(); onFrontflip(); }}
+        title="Frontflip (↑)"
+        style={dpadBtnStyle}
+      >
+        <ArrowSVG points="6 15 12 9 18 15" />
+      </button>
+      <div />
+
+      {/* Row 2: Left (Superman), Tricks label, Right (No Hander) */}
+      <button
+        onTouchStart={(e) => { e.preventDefault(); onSuperman(); }}
+        title="Superman (←)"
+        style={dpadBtnStyle}
+      >
+        <ArrowSVG points="15 6 9 12 15 18" />
+      </button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", color: "rgba(30,41,59,0.65)", textAlign: "center", lineHeight: 1.1, pointerEvents: "none" }}>
+        Tricks
+      </div>
+      <button
+        onTouchStart={(e) => { e.preventDefault(); onNoHander(); }}
+        title="No Hander (→)"
+        style={dpadBtnStyle}
+      >
+        <ArrowSVG points="9 6 15 12 9 18" />
+      </button>
+
+      {/* Row 3: _, Down (Backflip), _ */}
+      <div />
+      <button
+        onTouchStart={(e) => { e.preventDefault(); onBackflip(); }}
+        title="Backflip (↓)"
+        style={dpadBtnStyle}
+      >
+        <ArrowSVG points="6 9 12 15 18 9" />
+      </button>
+      <div />
+    </div>
   );
 }
 
@@ -166,46 +307,15 @@ export default function HUD({
         >
           &times;{multiplier}
         </span>
-        {trickFeedback && (
-          <span
-            style={{
-              color: trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN,
-              fontFamily: "var(--font-space-mono), monospace",
-              fontSize: "0.7rem",
-              fontWeight: "bold",
-              textShadow: "0 1px 2px rgba(0,0,0,0.3)",
-            }}
-          >
-            {trickFeedback.name} +{trickFeedback.points}
-          </span>
-        )}
+        <TrickFeedbackPopup trickFeedback={trickFeedback} />
       </div>
 
-      {/* Audio toggles — top left */}
-      <div
-        style={{
-          position: "fixed",
-          top: "1rem",
-          left: "1.5rem",
-          display: "flex",
-          gap: "0.4rem",
-        }}
-      >
-        <button
-          onClick={onToggleMusic}
-          title={musicMuted ? "Music on" : "Music off"}
-          style={btnStyle}
-        >
-          <MusicIcon muted={musicMuted} />
-        </button>
-        <button
-          onClick={onToggleSfx}
-          title={sfxMuted ? "Sound on" : "Sound off"}
-          style={btnStyle}
-        >
-          <SpeakerIcon muted={sfxMuted} />
-        </button>
-      </div>
+      <AudioControls
+        musicMuted={musicMuted}
+        sfxMuted={sfxMuted}
+        onToggleMusic={onToggleMusic}
+        onToggleSfx={onToggleSfx}
+      />
 
       {/* Jump button — bottom left */}
       <button
@@ -235,59 +345,12 @@ export default function HUD({
         <span style={{ fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
       </button>
 
-      {/* D-pad — bottom right (mobile trick controls) */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: "1.5rem",
-          right: "1.5rem",
-          display: "grid",
-          gridTemplateColumns: "48px 48px 48px",
-          gridTemplateRows: "48px 48px 48px",
-          gap: "4px",
-        }}
-      >
-        {/* Row 1: _, Up (Frontflip), _ */}
-        <div />
-        <button
-          onTouchStart={(e) => { e.preventDefault(); onFrontflip(); }}
-          title="Frontflip (↑)"
-          style={dpadBtnStyle}
-        >
-          <ArrowSVG points="6 15 12 9 18 15" />
-        </button>
-        <div />
-
-        {/* Row 2: Left (Superman), Tricks label, Right (No Hander) */}
-        <button
-          onTouchStart={(e) => { e.preventDefault(); onSuperman(); }}
-          title="Superman (←)"
-          style={dpadBtnStyle}
-        >
-          <ArrowSVG points="15 6 9 12 15 18" />
-        </button>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", color: "rgba(30,41,59,0.65)", textAlign: "center", lineHeight: 1.1, pointerEvents: "none" }}>
-          Tricks
-        </div>
-        <button
-          onTouchStart={(e) => { e.preventDefault(); onNoHander(); }}
-          title="No Hander (→)"
-          style={dpadBtnStyle}
-        >
-          <ArrowSVG points="9 6 15 12 9 18" />
-        </button>
-
-        {/* Row 3: _, Down (Backflip), _ */}
-        <div />
-        <button
-          onTouchStart={(e) => { e.preventDefault(); onBackflip(); }}
-          title="Backflip (↓)"
-          style={dpadBtnStyle}
-        >
-          <ArrowSVG points="6 9 12 15 18 9" />
-        </button>
-        <div />
-      </div>
+      <TrickDpad
+        onBackflip={onBackflip}
+        onFrontflip={onFrontflip}
+        onSuperman={onSuperman}
+        onNoHander={onNoHander}
+      />
     </>
   );
 }

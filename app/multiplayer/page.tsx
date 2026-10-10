@@ -19,7 +19,6 @@ export default function MultiplayerPage() {
     localPlayerId,
     rankings,
     adapter,
-    countdownEndMs,
     error,
     createRoom,
     joinRoom,
@@ -54,6 +53,7 @@ export default function MultiplayerPage() {
       {(phase === "countdown" || phase === "racing") && adapter && (
         <MultiplayerGameCanvas
           seed={seed}
+          raceStarted={phase === "racing"}
           players={players}
           localPlayerId={localPlayerId}
           adapter={adapter}

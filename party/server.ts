@@ -47,6 +47,8 @@ type ClientMessage =
  * otherwise the race could never finish for everyone else.
  */
 const STALE_PLAYER_MS = 10_000;
+/** Lobby → race. Clients count 3-2-1 locally and start on race_start, not on their own timer. */
+const COUNTDOWN_MS = 3_000;
 const STALE_CHECK_INTERVAL_MS = 2_000;
 
 // ── Server ─────────────────────────────────────────────────────────────
@@ -298,11 +300,9 @@ export default class MultiplayerServer implements Party.Server {
   private startCountdown() {
     this.phase = "countdown";
     this.seed = Math.floor(Math.random() * 2147483647);
-    const startAtMs = Date.now() + 3000;
 
     this.broadcast({
       type: "countdown_start",
-      startAtMs,
       seed: this.seed,
     });
 
@@ -310,7 +310,7 @@ export default class MultiplayerServer implements Party.Server {
       this.phase = "racing";
       this.broadcast({ type: "race_start" });
       this.startStaleCheck();
-    }, 3000);
+    }, COUNTDOWN_MS);
   }
 
   /** Periodically counts out racers who stopped sending updates. */

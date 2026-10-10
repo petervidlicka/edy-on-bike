@@ -14,9 +14,13 @@ import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
 
 /** Scores stream in at ~15 Hz per player; a few standings refreshes per second is plenty. */
 const STANDINGS_REFRESH_MS = 250;
+/** How long "GO!" stays up after the race starts. */
+const GO_DISPLAY_MS = 700;
 
 interface MultiplayerGameCanvasProps {
   seed: number;
+  /** Server sent race_start — the shared moment every client starts its engine. */
+  raceStarted: boolean;
   players: PlayerInfo[];
   localPlayerId: string;
   adapter: MultiplayerAdapter;
@@ -26,6 +30,7 @@ interface MultiplayerGameCanvasProps {
 
 export default function MultiplayerGameCanvas({
   seed,
+  raceStarted,
   players,
   localPlayerId,
   adapter,
@@ -41,7 +46,10 @@ export default function MultiplayerGameCanvas({
   const [sfxMuted, setSfxMuted] = useState(false);
   const [trickFeedback, setTrickFeedback] = useState<TrickFeedbackData | null>(null);
   const trickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [countdown, setCountdown] = useState<3 | 2 | 1 | "GO" | null>(3);
+  const [countdown, setCountdown] = useState<3 | 2 | 1>(3);
+  const [goVisible, setGoVisible] = useState(true);
+  /** 3-2-1 counts locally; "GO!" and the engine start wait for the server's race_start. */
+  const overlay: 3 | 2 | 1 | "GO" | null = raceStarted ? (goVisible ? "GO" : null) : countdown;
   const [playerStandings, setPlayerStandings] = useState<PlayerInfo[]>(() => adapter.getPlayers());
 
   // The adapter holds live scores (local sends + remote snapshots); room-level `players`
@@ -53,23 +61,12 @@ export default function MultiplayerGameCanvas({
     return () => clearInterval(timer);
   }, [adapter]);
 
-  // Countdown logic
+  // Count 3 → 2 → 1 and hold at 1 until the server says go
   useEffect(() => {
-    if (countdown === null) return;
-
-    const timer = setTimeout(() => {
-      if (countdown === 3) setCountdown(2);
-      else if (countdown === 2) setCountdown(1);
-      else if (countdown === 1) setCountdown("GO");
-      else if (countdown === "GO") {
-        setCountdown(null);
-        // Start the engine after GO disappears
-        engineRef.current?.start();
-      }
-    }, 1000);
-
+    if (raceStarted || countdown === 1) return;
+    const timer = setTimeout(() => setCountdown(countdown === 3 ? 2 : 1), 1000);
     return () => clearTimeout(timer);
-  }, [countdown]);
+  }, [countdown, raceStarted]);
 
   // Initialize engine
   useEffect(() => {
@@ -115,6 +112,15 @@ export default function MultiplayerGameCanvas({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Start on the server's race_start rather than a local timer, so all clients begin together.
+  // Declared after the engine effect so the engine exists if the race is already on at mount.
+  useEffect(() => {
+    if (!raceStarted) return;
+    engineRef.current?.start();
+    const timer = setTimeout(() => setGoVisible(false), GO_DISPLAY_MS);
+    return () => clearTimeout(timer);
+  }, [raceStarted]);
 
   // Keyboard input
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -273,7 +279,7 @@ export default function MultiplayerGameCanvas({
       )}
 
       {/* Countdown overlay */}
-      {countdown !== null && (
+      {overlay !== null && (
         <div
           style={{
             position: "fixed",
@@ -295,13 +301,13 @@ export default function MultiplayerGameCanvas({
                 "0 4px 24px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3)",
             }}
           >
-            {countdown === "GO" ? "GO!" : countdown}
+            {overlay === "GO" ? "GO!" : overlay}
           </span>
         </div>
       )}
 
       {/* Multiplayer HUD — player standings + speed + tricks */}
-      {countdown === null && (
+      {overlay === null && (
         <>
           <div
             style={{

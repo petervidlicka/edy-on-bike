@@ -90,7 +90,6 @@ export type ServerMessage =
   | { type: "player_ready"; playerId: string }
   | {
       type: "countdown_start";
-      startAtMs: number;
       seed: number;
     }
   | { type: "race_start" }

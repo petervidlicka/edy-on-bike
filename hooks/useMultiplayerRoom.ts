@@ -26,7 +26,6 @@ export function useMultiplayerRoom() {
   const [localPlayerId, setLocalPlayerId] = useState<string>("");
   const [rankings, setRankings] = useState<RankingEntry[]>([]);
   const [adapter, setAdapter] = useState<MultiplayerAdapter | null>(null);
-  const [countdownEndMs, setCountdownEndMs] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -59,7 +58,6 @@ export function useMultiplayerRoom() {
     setSeed(0);
     setLocalPlayerId("");
     setRankings([]);
-    setCountdownEndMs(null);
   }, []);
 
   // Leaving the page (back button, route change) must close the socket — otherwise the
@@ -137,7 +135,6 @@ export function useMultiplayerRoom() {
         case "countdown_start":
           setPhase("countdown");
           setSeed(msg.seed);
-          setCountdownEndMs(msg.startAtMs);
           break;
         case "race_start":
           setPhase("racing");
@@ -240,7 +237,6 @@ export function useMultiplayerRoom() {
     localPlayerId,
     rankings,
     adapter,
-    countdownEndMs,
     error,
     createRoom,
     joinRoom,

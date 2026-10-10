@@ -1,12 +1,11 @@
 import { BackgroundLayer, BackgroundElement } from "./types";
-import type { EnvironmentDefinition, EnvironmentPalette, RNG } from "./environments/types";
+import type { EnvironmentDefinition, EnvironmentPalette } from "./environments/types";
 
 function generateClouds(
   canvasWidth: number,
   groundY: number,
   palette: EnvironmentPalette,
-  count: number,
-  rng: RNG = Math
+  count: number
 ): BackgroundElement[] {
   const clouds: BackgroundElement[] = [];
   const spacing = canvasWidth / 5;
@@ -14,9 +13,9 @@ function generateClouds(
     clouds.push({
       type: "cloud",
       x: i * spacing,
-      y: groundY * 0.08 + rng.random() * groundY * 0.25,
-      width: 60 + rng.random() * 50,
-      height: 20 + rng.random() * 15,
+      y: groundY * 0.08 + Math.random() * groundY * 0.25,
+      width: 60 + Math.random() * 50,
+      height: 20 + Math.random() * 15,
       color: palette.cloud,
     });
   }
@@ -26,18 +25,17 @@ function generateClouds(
 export function createBackgroundLayers(
   canvasWidth: number,
   groundY: number,
-  envDef: EnvironmentDefinition,
-  rng?: RNG
+  envDef: EnvironmentDefinition
 ): BackgroundLayer[] {
   const bg = envDef.background;
   return [
     {
-      elements: generateClouds(canvasWidth, groundY, envDef.palette, bg.cloudCount, rng),
+      elements: generateClouds(canvasWidth, groundY, envDef.palette, bg.cloudCount),
       speedRatio: bg.cloudSpeedRatio,
       offset: 0,
     },
     {
-      elements: bg.generateElements(canvasWidth, groundY, envDef.palette, rng),
+      elements: bg.generateElements(canvasWidth, groundY, envDef.palette),
       speedRatio: bg.buildingSpeedRatio,
       offset: 0,
     },

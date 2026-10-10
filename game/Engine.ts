@@ -42,7 +42,13 @@ export type EngineCallbacks = {
   onTrickLanded?: (trickName: string, points: number, sketchy?: boolean) => void;
 };
 
+/** Optional Engine dependencies, used by multiplayer to make runs reproducible across clients. */
 export interface EngineOptions {
+  /**
+   * Drives obstacle spawning only (type + gap), so every client seeded with the same
+   * value gets the same course. Never use it for anything whose number of draws depends
+   * on viewport size or frame timing (backgrounds, particles) — that would desync clients.
+   */
   rng?: { random(): number };
   multiplayer?: MultiplayerAdapter;
 }
@@ -109,7 +115,7 @@ export class Engine {
     this.groundY = Math.floor(h * GROUND_RATIO);
     this.canvas.width = w;
     this.canvas.height = h;
-    this.layers = createBackgroundLayers(w, this.groundY, this.envManager.getCurrentEnvironment(), this.rng);
+    this.layers = createBackgroundLayers(w, this.groundY, this.envManager.getCurrentEnvironment());
     if (this.state !== GameState.RUNNING && this.state !== GameState.AMBULANCE) {
       this.player = createPlayer(this.groundY, w);
     } else {
@@ -147,7 +153,7 @@ export class Engine {
     this.particles = [];
     this.particleConfig = null;
     this.player = createPlayer(this.groundY, this.canvasW);
-    this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment(), this.rng);
+    this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
     this.callbacks.onStateChange(this.state);
   }
@@ -229,7 +235,7 @@ export class Engine {
       buildingLayer.elements.push(...newElements);
     }
     if (envResult.regenerateBackground) {
-      this.layers = createBackgroundLayers(this.canvasW, this.groundY, envResult.regenerateBackground, this.rng);
+      this.layers = createBackgroundLayers(this.canvasW, this.groundY, envResult.regenerateBackground);
       // Initialize particles if the new biome has a particle overlay
       const overlay = envResult.regenerateBackground.particleOverlay;
       if (overlay) {
@@ -611,7 +617,7 @@ export class Engine {
     }
     // Immediately regenerate background with the target environment
     const env = this.envManager.getCurrentEnvironment();
-    this.layers = createBackgroundLayers(this.canvasW, this.groundY, env, this.rng);
+    this.layers = createBackgroundLayers(this.canvasW, this.groundY, env);
     const overlay = env.particleOverlay;
     if (overlay) {
       this.particleConfig = overlay;

@@ -10,8 +10,8 @@
     {
       "name": "party",
       "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd party && npx partykit dev"],
-      "port": 1999
+      "runtimeArgs": ["-c", "cd party && npx wrangler dev"],
+      "port": 8787
     }
   ]
 }

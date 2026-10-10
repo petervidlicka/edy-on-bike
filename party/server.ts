@@ -1,10 +1,11 @@
 /**
- * PartyKit room server for multiplayer races (one instance per room code).
+ * Multiplayer room server: a PartyServer Durable Object on Cloudflare, one
+ * instance per room code (see index.ts for routing, wrangler.jsonc for config).
  * Runs separately from the Next.js app — see MULTIPLAYER.md for dev/deploy.
  * It relays validated ghost snapshots, decides when races start and finish,
  * and ranks players; clients are untrusted (see validation.ts).
  */
-import type * as Party from "partykit/server";
+import { Server, type Connection } from "partyserver";
 import {
   MAX_MESSAGE_CHARS,
   MIN_UPDATE_INTERVAL_MS,
@@ -60,11 +61,18 @@ const STALE_CHECK_INTERVAL_MS = 2_000;
 // ── Server ─────────────────────────────────────────────────────────────
 
 /** Room lifecycle: lobby → countdown → racing → finished (→ lobby again on rematch). */
-export default class MultiplayerServer implements Party.Server {
+export class MultiplayerServer extends Server {
+  /**
+   * No hibernation: room state and the countdown/stale-check timers live in memory,
+   * so the Durable Object must stay resident while players are connected.
+   */
+  static options = { hibernate: false };
+
   players: Map<string, PlayerInfo> = new Map();
-  connections: Map<string, Party.Connection> = new Map();
+  /** Joined players' sockets only — spectators that never sent "join" aren't broadcast to. */
+  connections: Map<string, Connection> = new Map();
   phase: RoomPhase = "lobby";
-  seed: number;
+  seed = Math.floor(Math.random() * 2147483647);
   inactivityTimer: ReturnType<typeof setTimeout> | null = null;
   countdownTimer: ReturnType<typeof setTimeout> | null = null;
   staleCheckTimer: ReturnType<typeof setInterval> | null = null;
@@ -73,18 +81,14 @@ export default class MultiplayerServer implements Party.Server {
   /** Server-only: plausibility guard for each racer's client-reported score. */
   scoreGuards: Map<string, ScoreGuard> = new Map();
 
-  constructor(readonly room: Party.Room) {
-    this.seed = Math.floor(Math.random() * 2147483647);
-  }
-
   onConnect() {
     // Don't add as player yet — wait for "join" message.
-    // Connection is already tracked by PartyKit internally;
-    // we store it in our map only after a successful join.
+    // PartyServer tracks the socket internally; we add it to our map
+    // only after a successful join.
     this.resetInactivityTimer();
   }
 
-  onMessage(message: string | ArrayBuffer | ArrayBufferView, sender: Party.Connection) {
+  onMessage(sender: Connection, message: string | ArrayBuffer | ArrayBufferView) {
     if (typeof message !== "string" || message.length > MAX_MESSAGE_CHARS) return;
 
     let data: ClientMessage;
@@ -120,7 +124,7 @@ export default class MultiplayerServer implements Party.Server {
     }
   }
 
-  onClose(conn: Party.Connection) {
+  onClose(conn: Connection) {
     const player = this.players.get(conn.id);
     if (!player) {
       return;
@@ -129,12 +133,12 @@ export default class MultiplayerServer implements Party.Server {
     // If the player was in a race and still alive, treat as a crash
     if ((this.phase === "racing" || this.phase === "countdown") && player.alive) {
       player.alive = false;
-      this.broadcast(
+      this.sendToPlayers(
         { type: "player_crashed", playerId: player.id, score: player.score },
       );
     }
 
-    this.broadcast(
+    this.sendToPlayers(
       { type: "player_left", playerId: player.id },
       player.id,
     );
@@ -153,7 +157,7 @@ export default class MultiplayerServer implements Party.Server {
 
   // ── Message handlers ─────────────────────────────────────────────────
 
-  private handleJoin(data: { type: "join"; name: unknown; skinId: unknown; intent: unknown }, sender: Party.Connection) {
+  private handleJoin(data: { type: "join"; name: unknown; skinId: unknown; intent: unknown }, sender: Connection) {
     if (this.players.has(sender.id)) return; // duplicate join from the same socket
 
     const name = sanitizeName(data.name);
@@ -162,10 +166,10 @@ export default class MultiplayerServer implements Party.Server {
       return;
     }
 
-    // PartyKit spins up a room for any code, so a typo would otherwise drop the
+    // A room exists for any code as soon as someone connects, so a typo would otherwise drop the
     // player into a fresh empty room that looks exactly like a real lobby.
     if (data.intent === "join" && this.players.size === 0) {
-      this.rejectJoin(sender, `No room found with code ${this.room.id}. Check the code and try again.`);
+      this.rejectJoin(sender, `No room found with code ${this.name}. Check the code and try again.`);
       return;
     }
 
@@ -194,7 +198,7 @@ export default class MultiplayerServer implements Party.Server {
     // Send room_joined to the joining player
     sender.send(JSON.stringify({
       type: "room_joined",
-      roomCode: this.room.id,
+      roomCode: this.name,
       playerId: sender.id,
       players: Array.from(this.players.values()),
       phase: this.phase,
@@ -202,19 +206,19 @@ export default class MultiplayerServer implements Party.Server {
     }));
 
     // Broadcast player_joined to everyone else
-    this.broadcast(
+    this.sendToPlayers(
       { type: "player_joined", player: playerInfo },
       sender.id,
     );
   }
 
-  private handleReady(sender: Party.Connection) {
+  private handleReady(sender: Connection) {
     const player = this.players.get(sender.id);
     if (!player) return;
 
     player.ready = true;
 
-    this.broadcast({ type: "player_ready", playerId: sender.id });
+    this.sendToPlayers({ type: "player_ready", playerId: sender.id });
     this.maybeStartCountdown();
   }
 
@@ -223,7 +227,7 @@ export default class MultiplayerServer implements Party.Server {
    * players, so a group can keep racing on one code. Players still on the results
    * screen stay un-ready, which holds the next countdown until they opt in or leave.
    */
-  private handleRematch(sender: Party.Connection) {
+  private handleRematch(sender: Connection) {
     if (!this.players.has(sender.id) || this.phase !== "finished") return;
     this.phase = "lobby";
     for (const player of this.players.values()) {
@@ -231,10 +235,10 @@ export default class MultiplayerServer implements Party.Server {
       player.alive = true;
       player.score = 0;
     }
-    this.broadcast({ type: "room_reset", players: Array.from(this.players.values()) });
+    this.sendToPlayers({ type: "room_reset", players: Array.from(this.players.values()) });
   }
 
-  private handlePlayerUpdate(data: { type: "player_update"; snapshot: unknown }, sender: Party.Connection) {
+  private handlePlayerUpdate(data: { type: "player_update"; snapshot: unknown }, sender: Connection) {
     const player = this.players.get(sender.id);
     // Ignore racers already counted out (e.g. timed out, then their tab came back)
     if (!player || !player.alive || this.phase !== "racing") return;
@@ -252,13 +256,13 @@ export default class MultiplayerServer implements Party.Server {
     this.lastUpdateAt.set(sender.id, now);
 
     // Relay the cleaned snapshot to all other players
-    this.broadcast(
+    this.sendToPlayers(
       { type: "ghost_update", playerId: sender.id, snapshot },
       sender.id,
     );
   }
 
-  private handlePlayerCrashed(data: { type: "player_crashed"; score: unknown }, sender: Party.Connection) {
+  private handlePlayerCrashed(data: { type: "player_crashed"; score: unknown }, sender: Connection) {
     const player = this.players.get(sender.id);
     // Already out (timed out / disconnected) — keep the score we recorded then
     if (!player || !player.alive || this.phase !== "racing") return;
@@ -266,7 +270,7 @@ export default class MultiplayerServer implements Party.Server {
     player.alive = false;
     player.score = this.scoreGuards.get(sender.id)?.accept(data.score, Date.now()) ?? player.score;
 
-    this.broadcast({
+    this.sendToPlayers({
       type: "player_crashed",
       playerId: sender.id,
       score: player.score,
@@ -275,14 +279,14 @@ export default class MultiplayerServer implements Party.Server {
     this.checkFinishCondition();
   }
 
-  private handleLeave(sender: Party.Connection) {
+  private handleLeave(sender: Connection) {
     const player = this.players.get(sender.id);
     if (!player) return;
 
     this.players.delete(sender.id);
     this.connections.delete(sender.id);
 
-    this.broadcast(
+    this.sendToPlayers(
       { type: "player_left", playerId: player.id },
     );
 
@@ -308,14 +312,14 @@ export default class MultiplayerServer implements Party.Server {
     this.phase = "countdown";
     this.seed = Math.floor(Math.random() * 2147483647);
 
-    this.broadcast({
+    this.sendToPlayers({
       type: "countdown_start",
       seed: this.seed,
     });
 
     this.countdownTimer = setTimeout(() => {
       this.phase = "racing";
-      this.broadcast({ type: "race_start" });
+      this.sendToPlayers({ type: "race_start" });
       this.startStaleCheck();
     }, COUNTDOWN_MS);
   }
@@ -335,7 +339,7 @@ export default class MultiplayerServer implements Party.Server {
         if (!player.alive) continue;
         if (now - (this.lastUpdateAt.get(player.id) ?? raceStart) < STALE_PLAYER_MS) continue;
         player.alive = false;
-        this.broadcast({ type: "player_crashed", playerId: player.id, score: player.score });
+        this.sendToPlayers({ type: "player_crashed", playerId: player.id, score: player.score });
       }
       this.checkFinishCondition();
     }, STALE_CHECK_INTERVAL_MS);
@@ -377,17 +381,18 @@ export default class MultiplayerServer implements Party.Server {
 
     // Abandoned results screens are closed by the inactivity timer; a fixed timer here
     // would also kick players who went back to the lobby for a rematch.
-    this.broadcast({ type: "race_finished", rankings });
+    this.sendToPlayers({ type: "race_finished", rankings });
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
   /** Tells a client why it can't join; the client shows the message and drops the socket. */
-  private rejectJoin(sender: Party.Connection, message: string) {
+  private rejectJoin(sender: Connection, message: string) {
     sender.send(JSON.stringify({ type: "error", message }));
   }
 
-  private broadcast(msg: Record<string, unknown>, excludeId?: string) {
+  /** JSON-encodes and sends to every joined player (unlike Server#broadcast, which hits all sockets). */
+  private sendToPlayers(msg: Record<string, unknown>, excludeId?: string) {
     const raw = JSON.stringify(msg);
     for (const [id, conn] of this.connections) {
       if (id !== excludeId) {
@@ -428,5 +433,3 @@ export default class MultiplayerServer implements Party.Server {
     this.stopStaleCheck();
   }
 }
-
-MultiplayerServer satisfies Party.Worker;

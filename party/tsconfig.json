@@ -1,0 +1,16 @@
+{
+  // The multiplayer Worker is built by wrangler, separately from the Next.js app
+  // (the root tsconfig excludes party/). Type-check with `npx tsc -p party`.
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["es2022"],
+    "types": ["./worker-configuration.d.ts"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.ts"]
+}

@@ -1,0 +1,20 @@
+// Cloudflare Worker hosting the multiplayer rooms (PartyServer on Durable Objects).
+// Local: `npm run dev` (port 8787). Deploy: `npm run deploy` after `npx wrangler login`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "edy-on-bike-multiplayer",
+  "main": "index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      // One Durable Object per room code. routePartykitRequest kebab-cases the binding
+      // name into the URL, so clients connect to /parties/race/<ROOM CODE>.
+      { "name": "Race", "class_name": "MultiplayerServer" }
+    ]
+  },
+  "migrations": [
+    // Add a new entry (never edit this one) when renaming, adding or removing a class.
+    { "tag": "v1", "new_sqlite_classes": ["MultiplayerServer"] }
+  ]
+}

@@ -7,7 +7,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { PlayerInfo, RankingEntry, RoomPhase, ServerMessage, ClientMessage } from "@/game/multiplayer/types";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
-import { PARTYKIT_HOST, partyKitUrl } from "@/lib/multiplayerConfig";
+import { MULTIPLAYER_HOST, roomUrl } from "@/lib/multiplayerConfig";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
 
@@ -76,7 +76,7 @@ export function useMultiplayerRoom() {
 
   const connect = useCallback((code: string, name: string, skinId: string, intent: "create" | "join") => {
     if (wsRef.current) return;
-    if (!PARTYKIT_HOST) {
+    if (!MULTIPLAYER_HOST) {
       // Build has no multiplayer server configured; entry points are hidden, but the URL still works
       setError("Multiplayer isn't available right now.");
       return;
@@ -87,7 +87,7 @@ export function useMultiplayerRoom() {
     setConnectionState("connecting");
     setError(null);
 
-    const ws = new WebSocket(partyKitUrl(PARTYKIT_HOST, code));
+    const ws = new WebSocket(roomUrl(MULTIPLAYER_HOST, code));
     wsRef.current = ws;
 
     let opened = false;
@@ -190,7 +190,7 @@ export function useMultiplayerRoom() {
 
     // Every error is followed by a close event, which does the cleanup above
     ws.onerror = () => {
-      console.error(`[Multiplayer] WebSocket error connecting to ${PARTYKIT_HOST} — in local dev, is \`cd party && npx partykit dev\` running?`);
+      console.error(`[Multiplayer] WebSocket error connecting to ${MULTIPLAYER_HOST} — in local dev, is \`cd party && npm run dev\` running?`);
     };
   }, [releaseConnection, resetRoomState]);
 

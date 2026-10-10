@@ -66,11 +66,12 @@ export function useMultiplayerRoom() {
   // server keeps this player "alive" and the race can never finish for everyone else.
   useEffect(() => () => releaseConnection(false), [releaseConnection]);
 
-  const connect = useCallback((code: string, name: string, skinId: string) => {
+  const connect = useCallback((code: string, name: string, skinId: string, intent: "create" | "join") => {
     if (wsRef.current) return;
 
+    // roomCode is only set once the server confirms (room_joined) — setting it early
+    // showed a lobby the server might still reject.
     setConnectionState("connecting");
-    setRoomCode(code);
     setError(null);
 
     const protocol = PARTYKIT_HOST.startsWith("localhost") ? "ws" : "wss";
@@ -78,10 +79,11 @@ export function useMultiplayerRoom() {
     wsRef.current = ws;
 
     let opened = false;
+    let joined = false;
     ws.onopen = () => {
       opened = true;
       setConnectionState("connected");
-      const joinMsg: ClientMessage = { type: "join", name, skinId };
+      const joinMsg: ClientMessage = { type: "join", name, skinId, intent };
       ws.send(JSON.stringify(joinMsg));
     };
 
@@ -90,6 +92,7 @@ export function useMultiplayerRoom() {
 
       switch (msg.type) {
         case "room_joined": {
+          joined = true;
           setLocalPlayerId(msg.playerId);
           setPlayers(msg.players);
           setPhase(msg.phase);
@@ -102,7 +105,7 @@ export function useMultiplayerRoom() {
               setRankings(r);
               setPhase("finished");
             },
-            onPlayersUpdate: (p) => setPlayers([...p]),
+            onPlayersUpdate: setPlayers,
           });
           adapterRef.current = newAdapter;
           setAdapter(newAdapter);
@@ -141,7 +144,12 @@ export function useMultiplayerRoom() {
           adapterRef.current?.handleServerMessage(msg);
           break;
         case "error":
-          console.error("[Multiplayer] Server error:", msg.message);
+          if (!joined) {
+            // Join rejected (no such room / race running / full) — back to create/join
+            releaseConnection(false);
+            resetRoomState();
+          }
+          setError(msg.message);
           break;
       }
     };
@@ -173,14 +181,14 @@ export function useMultiplayerRoom() {
   const createRoom = useCallback(
     (name: string, skinId: string) => {
       const code = generateRoomCode();
-      connect(code, name, skinId);
+      connect(code, name, skinId, "create");
     },
     [connect]
   );
 
   const joinRoom = useCallback(
     (code: string, name: string, skinId: string) => {
-      connect(code.toUpperCase(), name, skinId);
+      connect(code.toUpperCase(), name, skinId, "join");
     },
     [connect]
   );

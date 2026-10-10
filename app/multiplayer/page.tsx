@@ -52,6 +52,7 @@ export default function MultiplayerPage() {
             players={players}
             phase={phase}
             error={error}
+            connecting={connectionState !== "disconnected" && !roomCode}
             onCreateRoom={createRoom}
             onJoinRoom={joinRoom}
             onReady={setReady}

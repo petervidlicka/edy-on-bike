@@ -23,7 +23,7 @@ interface RankingEntry {
 
 /** Messages a client may send. Mirrors ClientMessage in game/multiplayer/types.ts. */
 type ClientMessage =
-  | { type: "join"; name: string; skinId: string }
+  | { type: "join"; name: string; skinId: string; intent: "create" | "join" }
   | { type: "ready" }
   | { type: "player_update"; snapshot: unknown }
   | { type: "player_crashed"; score: number }
@@ -123,14 +123,23 @@ export default class MultiplayerServer implements Party.Server {
 
   // ── Message handlers ─────────────────────────────────────────────────
 
-  private handleJoin(data: { type: "join"; name: string; skinId: string }, sender: Party.Connection) {
+  private handleJoin(data: { type: "join"; name: string; skinId: string; intent: "create" | "join" }, sender: Party.Connection) {
+    if (this.players.has(sender.id)) return; // duplicate join from the same socket
+
+    // PartyKit spins up a room for any code, so a typo would otherwise drop the
+    // player into a fresh empty room that looks exactly like a real lobby.
+    if (data.intent === "join" && this.players.size === 0) {
+      this.rejectJoin(sender, `No room found with code ${this.room.id}. Check the code and try again.`);
+      return;
+    }
+
     if (this.phase !== "lobby") {
-      sender.send(JSON.stringify({ type: "error", message: "Game already in progress" }));
+      this.rejectJoin(sender, "That race has already started. Ask for a new room code.");
       return;
     }
 
     if (this.players.size >= 4) {
-      sender.send(JSON.stringify({ type: "error", message: "Room is full" }));
+      this.rejectJoin(sender, "That room is full (4 players max).");
       return;
     }
 
@@ -312,6 +321,11 @@ export default class MultiplayerServer implements Party.Server {
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
+  /** Tells a client why it can't join; the client shows the message and drops the socket. */
+  private rejectJoin(sender: Party.Connection, message: string) {
+    sender.send(JSON.stringify({ type: "error", message }));
+  }
+
   private broadcast(msg: Record<string, unknown>, excludeId?: string) {
     const raw = JSON.stringify(msg);
     for (const [id, conn] of this.connections) {
@@ -339,7 +353,9 @@ export default class MultiplayerServer implements Party.Server {
     }, 5 * 60 * 1000);
   }
 
+  /** Room is empty: stop timers and reset so the code can be used for a fresh lobby. */
   private cleanup() {
+    this.phase = "lobby";
     if (this.inactivityTimer) {
       clearTimeout(this.inactivityTimer);
       this.inactivityTimer = null;

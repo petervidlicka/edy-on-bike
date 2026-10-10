@@ -67,7 +67,8 @@ export interface RankingEntry {
 // ── Client → Server messages ──
 
 export type ClientMessage =
-  | { type: "join"; name: string; skinId: string }
+  /** `intent` lets the server reject joins to codes nobody is in, instead of silently creating a room. */
+  | { type: "join"; name: string; skinId: string; intent: "create" | "join" }
   | { type: "ready" }
   | { type: "player_update"; snapshot: GhostSnapshot }
   | { type: "player_crashed"; score: number }

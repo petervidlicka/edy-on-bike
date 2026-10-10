@@ -10,6 +10,8 @@ interface MultiplayerLobbyProps {
   players: PlayerInfo[];
   phase: RoomPhase;
   error?: string | null;
+  /** Waiting for the server to accept a create/join — buttons stay disabled until it answers. */
+  connecting?: boolean;
   onCreateRoom: (name: string, skinId: string) => void;
   onJoinRoom: (code: string, name: string, skinId: string) => void;
   onReady: () => void;
@@ -54,6 +56,7 @@ export default function MultiplayerLobby({
   players,
   phase,
   error,
+  connecting = false,
   onCreateRoom,
   onJoinRoom,
   onReady,
@@ -68,6 +71,9 @@ export default function MultiplayerLobby({
     (p) => p.name === name || players.length === 1
   );
   const isReady = localPlayer?.ready ?? false;
+
+  const canStart = !!name.trim() && !connecting;
+  const canJoin = canStart && joinCode.length === 4;
 
   const handleCreate = useCallback(() => {
     if (!name.trim()) return;
@@ -274,29 +280,35 @@ export default function MultiplayerLobby({
       >
         <button
           onClick={handleCreate}
-          disabled={!name.trim()}
+          disabled={!canStart}
           style={{
             ...glassBtn,
-            opacity: name.trim() ? 1 : 0.5,
-            cursor: name.trim() ? "pointer" : "default",
+            opacity: canStart ? 1 : 0.5,
+            cursor: canStart ? "pointer" : "default",
           }}
         >
           CREATE ROOM
         </button>
         <button
           onClick={() => setShowJoinInput(true)}
-          disabled={!name.trim()}
+          disabled={!canStart}
           style={{
             ...glassBtn,
-            opacity: name.trim() ? 1 : 0.5,
-            cursor: name.trim() ? "pointer" : "default",
+            opacity: canStart ? 1 : 0.5,
+            cursor: canStart ? "pointer" : "default",
           }}
         >
           JOIN ROOM
         </button>
       </div>
 
-      {error && (
+      {connecting && (
+        <span style={{ color: "#64748b", fontSize: "0.85rem", fontWeight: 600 }}>
+          Connecting…
+        </span>
+      )}
+
+      {!connecting && error && (
         <div
           style={{
             color: "#dc2626",
@@ -342,11 +354,11 @@ export default function MultiplayerLobby({
           />
           <button
             onClick={handleJoin}
-            disabled={joinCode.length !== 4}
+            disabled={!canJoin}
             style={{
               ...glassBtn,
-              opacity: joinCode.length === 4 ? 1 : 0.5,
-              cursor: joinCode.length === 4 ? "pointer" : "default",
+              opacity: canJoin ? 1 : 0.5,
+              cursor: canJoin ? "pointer" : "default",
               fontSize: "0.9rem",
               padding: "0.5rem 1.5rem",
             }}

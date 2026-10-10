@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { PlayerInfo, RoomPhase } from "@/game/multiplayer/types";
 import { SkinId } from "@/game/types";
 import SkinPicker from "@/components/SkinPicker";
+import { useSavedSkinState } from "@/hooks/useSavedSkinState";
 
 interface MultiplayerLobbyProps {
   roomCode: string | null;
@@ -66,7 +67,10 @@ export default function MultiplayerLobby({
   onLeave,
 }: MultiplayerLobbyProps) {
   const [name, setName] = useState("");
-  const [selectedSkinId, setSelectedSkinId] = useState<SkinId>("default");
+  // Same unlocks as single-player (best score + cheat code from this browser), so
+  // multiplayer isn't a back door to skins the player hasn't earned
+  const [skinState, handleSelectSkin] = useSavedSkinState();
+  const selectedSkinId: SkinId = skinState.selectedSkinId;
   const [joinCode, setJoinCode] = useState("");
   const [showJoinInput, setShowJoinInput] = useState(false);
 
@@ -265,9 +269,9 @@ export default function MultiplayerLobby({
 
       <SkinPicker
         selectedSkinId={selectedSkinId}
-        bestScore={9999}
-        cheatUnlocked={true}
-        onSelectSkin={setSelectedSkinId}
+        bestScore={skinState.bestScore}
+        cheatUnlocked={skinState.cheatUnlocked}
+        onSelectSkin={handleSelectSkin}
       />
 
       <div

@@ -23,11 +23,13 @@ export function drawGhostPlayer(
   if (!snap.a && snap.s <= 0) return; // ghost is dead with no data
 
   const playerX = Math.floor(canvasW * PLAYER_X_RATIO);
+  // Snapshots carry height above ground; rebuild y against *this* viewport's ground line
+  const y = groundY - snap.h;
 
   // Build a mock PlayerState from the snapshot
   const mockPlayer: PlayerState = {
     x: playerX,
-    y: snap.y,
+    y,
     width: PLAYER_WIDTH,
     height: PLAYER_HEIGHT,
     velocityY: 0,
@@ -66,7 +68,7 @@ export function drawGhostPlayer(
   ctx.font = "bold 11px var(--font-nunito), Arial, sans-serif";
   ctx.textAlign = "center";
   const labelX = playerX + PLAYER_WIDTH / 2;
-  const labelY = snap.y - 12;
+  const labelY = y - 12;
   ctx.fillText(ghost.name, labelX, labelY);
 
   // Score below name

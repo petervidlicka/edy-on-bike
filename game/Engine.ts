@@ -528,7 +528,7 @@ export class Engine {
     const p = this.player;
     return {
       t: performance.now(),
-      y: p.y,
+      h: this.groundY - p.y,
       og: p.isOnGround,
       wr: p.wheelRotation,
       bt: p.bikeTilt,

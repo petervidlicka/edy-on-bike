@@ -3,10 +3,16 @@ import type { TrickType } from "../types";
 // ── Ghost snapshot — minimal state sent at ~15 Hz per player ──
 
 export interface GhostSnapshot {
-  /** Timestamp ms (monotonic client clock) */
+  /**
+   * Sender's performance.now() in ms. Each page has its own time origin, so receivers
+   * must map this onto their clock (see InterpolationBuffer) rather than compare directly.
+   */
   t: number;
-  /** Height above ground (player.y) */
-  y: number;
+  /**
+   * Height of the rider's top edge above the ground line (groundY − player.y).
+   * Relative so it renders correctly on viewports with a different groundY.
+   */
+  h: number;
   /** Is on ground */
   og: boolean;
   /** Wheel rotation */

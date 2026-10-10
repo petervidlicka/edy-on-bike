@@ -62,7 +62,7 @@ export class MultiplayerAdapter {
           buf = new InterpolationBuffer();
           this.buffers.set(msg.playerId, buf);
         }
-        buf.push(msg.snapshot);
+        buf.push(msg.snapshot, performance.now());
         break;
       }
       case "player_crashed": {

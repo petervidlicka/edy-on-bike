@@ -546,7 +546,6 @@ export class Engine {
       at: p.activeTrick,
       tp: p.trickProgress,
       s: this.score,
-      a: this.state === GameState.RUNNING,
     };
   }
 

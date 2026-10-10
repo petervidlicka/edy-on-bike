@@ -40,6 +40,15 @@ export class InterpolationBuffer {
   }
 
   /**
+   * Time since the newest snapshot was (approximately) sent, on our clock.
+   * Normally < ~70ms at 15 Hz; grows once the sender stops (crash, hidden tab, stall).
+   */
+  msSinceLatest(nowMs: number): number {
+    const latest = this.snapshots[this.snapshots.length - 1];
+    return latest ? nowMs - (latest.t + this.clockOffset) : Infinity;
+  }
+
+  /**
    * Get the interpolated snapshot at the current time.
    * Returns null if we don't have any data yet.
    */
@@ -86,6 +95,5 @@ function lerpSnapshot(a: GhostSnapshot, b: GhostSnapshot, t: number): GhostSnaps
     at: t < 0.5 ? a.at : b.at,
     tp: lerpNum(a.tp, b.tp, t),
     s: Math.round(lerpNum(a.s, b.s, t)),
-    a: b.a, // alive state uses latest
   };
 }

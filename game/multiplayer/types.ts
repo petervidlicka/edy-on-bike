@@ -35,8 +35,6 @@ export interface GhostSnapshot {
   tp: number;
   /** Current score */
   s: number;
-  /** Player is alive */
-  a: boolean;
 }
 
 // ── Room phases ──

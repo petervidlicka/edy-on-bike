@@ -8,6 +8,8 @@ export interface GhostPlayer {
   name: string;
   skinId: string;
   snapshot: GhostSnapshot;
+  /** ms since this player's newest snapshot — lets the renderer fade out ghosts that stopped updating. */
+  staleMs: number;
 }
 
 export type MultiplayerCallbacks = {
@@ -139,6 +141,7 @@ export class MultiplayerAdapter {
         name: player.name,
         skinId: player.skinId,
         snapshot,
+        staleMs: buf.msSinceLatest(now),
       });
     }
     return ghosts;

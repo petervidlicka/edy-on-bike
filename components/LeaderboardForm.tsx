@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { glassBtn } from "./sharedStyles";
+import { loadPlayerName, savePlayerName } from "@/game/storage";
 interface LeaderboardFormProps {
   score: number;
   skinName: string;
@@ -16,7 +17,7 @@ export default function LeaderboardForm({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem("edy-player-name");
+    const saved = loadPlayerName();
     if (saved) {
       setTimeout(() => setName(saved), 0);
     }
@@ -35,7 +36,7 @@ export default function LeaderboardForm({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: trimmed, score, skin: skinName }),
           });
-          localStorage.setItem("edy-player-name", trimmed);
+          savePlayerName(trimmed);
         } catch { }
       }
       setSubmitting(false);
@@ -63,7 +64,7 @@ export default function LeaderboardForm({
       e.preventDefault();
       e.stopImmediatePropagation();
       const currentName =
-        name.trim() || (localStorage.getItem("edy-player-name") ?? "").trim();
+        name.trim() || loadPlayerName().trim();
       if (!currentName) {
         setError("Please enter your name to appear on the leaderboard");
         return;

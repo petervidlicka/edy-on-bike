@@ -9,6 +9,11 @@ import { PlayerInfo } from "@/game/multiplayer/types";
 import { SkinId } from "@/game/types";
 import SkinPicker from "@/components/SkinPicker";
 import { useSavedSkinState } from "@/hooks/useSavedSkinState";
+import { useSavedPlayerName } from "@/hooks/useSavedPlayerName";
+import { savePlayerName } from "@/game/storage";
+
+/** Matches the server's name limit (party/validation.ts). */
+const MAX_NAME_LENGTH = 16;
 
 interface MultiplayerLobbyProps {
   roomCode: string | null;
@@ -72,7 +77,11 @@ export default function MultiplayerLobby({
   onReady,
   onLeave,
 }: MultiplayerLobbyProps) {
-  const [name, setName] = useState("");
+  // Prefill with the last-used name (leaderboard or a previous race) until the player types,
+  // so it survives returning from a race or a dropped connection
+  const savedName = useSavedPlayerName();
+  const [typedName, setTypedName] = useState<string | null>(null);
+  const name = typedName ?? savedName.slice(0, MAX_NAME_LENGTH);
   // Same unlocks as single-player (best score + cheat code from this browser), so
   // multiplayer isn't a back door to skins the player hasn't earned
   const [skinState, handleSelectSkin] = useSavedSkinState();
@@ -88,11 +97,13 @@ export default function MultiplayerLobby({
 
   const handleCreate = useCallback(() => {
     if (!name.trim()) return;
+    savePlayerName(name.trim());
     onCreateRoom(name.trim(), selectedSkinId);
   }, [name, selectedSkinId, onCreateRoom]);
 
   const handleJoin = useCallback(() => {
     if (!name.trim() || joinCode.length !== 4) return;
+    savePlayerName(name.trim());
     onJoinRoom(joinCode.toUpperCase(), name.trim(), selectedSkinId);
   }, [name, joinCode, selectedSkinId, onJoinRoom]);
 
@@ -268,8 +279,8 @@ export default function MultiplayerLobby({
         type="text"
         placeholder="Your name"
         value={name}
-        onChange={(e) => setName(e.target.value)}
-        maxLength={16}
+        onChange={(e) => setTypedName(e.target.value)}
+        maxLength={MAX_NAME_LENGTH}
         style={inputStyle}
       />
 

@@ -10,6 +10,8 @@ import OrientationGuard from "@/components/OrientationGuard";
 import MultiplayerLobby from "@/components/MultiplayerLobby";
 import MultiplayerGameCanvas from "@/components/MultiplayerGameCanvas";
 import MultiplayerResults from "@/components/MultiplayerResults";
+import MultiplayerBackdrop from "@/components/MultiplayerBackdrop";
+import { useSavedSkinState } from "@/hooks/useSavedSkinState";
 import { useMultiplayerRoom } from "@/hooks/useMultiplayerRoom";
 
 /** Multiplayer entry point; owns the room connection for the whole lobby → race → results loop. */
@@ -31,6 +33,7 @@ export default function MultiplayerPage() {
     playAgain,
     disconnect,
   } = useMultiplayerRoom();
+  const [skinState] = useSavedSkinState();
 
   const handleLeave = useCallback(() => {
     disconnect();
@@ -39,6 +42,11 @@ export default function MultiplayerPage() {
 
   return (
     <OrientationGuard>
+      {/* Game scene behind lobby/results; the race screen draws its own */}
+      {(phase === "lobby" || phase === "finished") && (
+        <MultiplayerBackdrop skinId={skinState.selectedSkinId} />
+      )}
+
       {/* Lobby phase */}
       {phase === "lobby" && (
         <MultiplayerLobby

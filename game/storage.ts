@@ -56,3 +56,26 @@ export function activateCheat(): SkinUnlockState {
   saveSkinState(state);
   return state;
 }
+
+/** One saved display name shared by the leaderboard and multiplayer. */
+const PLAYER_NAME_KEY = "edy-player-name";
+
+/** @returns The name the player last used, or "" (always "" on the server). */
+export function loadPlayerName(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(PLAYER_NAME_KEY) ?? "";
+  } catch {
+    return ""; // localStorage may be disabled
+  }
+}
+
+/** Remembers the player's display name so the next form (leaderboard or lobby) is prefilled. */
+export function savePlayerName(name: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PLAYER_NAME_KEY, name);
+  } catch {
+    // localStorage may be full or disabled
+  }
+}

@@ -2,15 +2,16 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Engine } from "@/game/Engine";
-import { GameState, SkinId, ObstacleType } from "@/game/types";
+import { GameState, ObstacleType } from "@/game/types";
 import { INITIAL_SPEED } from "@/game/constants";
 import { getSkinById, SKINS } from "@/game/skins";
-import { loadSkinState, updateBestScore, selectSkin, activateCheat } from "@/game/storage";
+import { loadSkinState } from "@/game/storage";
 import StartScreen from "./StartScreen";
 import HUD from "./HUD";
 import GameOverScreen from "./GameOverScreen";
 
 import { useCheatCode } from "@/hooks/useCheatCode";
+import { useSavedSkinState, recordBestScore, unlockAllSkins } from "@/hooks/useSavedSkinState";
 
 const DEBUG_OBSTACLE_SEQUENCE = [
   ObstacleType.STRAIGHT_RAMP, ObstacleType.STRAIGHT_RAMP,
@@ -36,17 +37,9 @@ export default function GameCanvas() {
     return new URLSearchParams(window.location.search).get("obstacles") === "debug";
   });
 
-  // Skin state — lazy initializer reads from localStorage (SSR-safe)
-  const [skinState, setSkinState] = useState(() => {
-    if (typeof window === "undefined") {
-      return { selectedSkinId: "default" as SkinId, bestScore: 0, cheatUnlocked: false };
-    }
-    return loadSkinState();
-  });
-
-  const bestScore = skinState.bestScore;
-  const cheatUnlocked = skinState.cheatUnlocked;
-  const selectedSkinId = skinState.selectedSkinId;
+  // Saved skin state — defaults during prerender/hydration, then the stored value
+  const [skinState, chooseSkin] = useSavedSkinState();
+  const { bestScore, cheatUnlocked, selectedSkinId } = skinState;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -59,14 +52,12 @@ export default function GameCanvas() {
         setScore(finalScore);
         setGameState(GameState.GAME_OVER);
         // Determine newly unlocked skins before updating best score
-        const currentState = loadSkinState();
-        const previousBest = currentState.bestScore;
+        const previousBest = loadSkinState().bestScore;
         const unlocked = SKINS.filter(
           s => finalScore >= s.unlockScore && previousBest < s.unlockScore && s.unlockScore > 0
         );
         setNewlyUnlockedSkins(unlocked.map(s => s.name));
-        const updated = updateBestScore(finalScore);
-        setSkinState(updated);
+        recordBestScore(finalScore);
       },
       onStateChange: (state) => {
         setGameState(state);
@@ -87,9 +78,6 @@ export default function GameCanvas() {
       engine.setDebugObstacles(DEBUG_OBSTACLE_SEQUENCE, 700);
     }
 
-    // Apply initial skin
-    engine.setSkin(getSkinById(skinState.selectedSkinId));
-
     const handleResize = () => {
       engine.resize(window.innerWidth, window.innerHeight);
     };
@@ -101,18 +89,12 @@ export default function GameCanvas() {
       window.removeEventListener("resize", handleResize);
       if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync skin to engine when selection changes
+  // Sync skin to engine on mount, after hydration swaps in the saved skin, and on selection
   useEffect(() => {
     engineRef.current?.setSkin(getSkinById(selectedSkinId));
   }, [selectedSkinId]);
-
-  const handleSelectSkin = useCallback((id: SkinId) => {
-    const updated = selectSkin(id);
-    setSkinState(updated);
-  }, []);
 
   const handleRestart = useCallback(() => {
     engineRef.current?.restart();
@@ -174,11 +156,7 @@ export default function GameCanvas() {
   }, [sfxMuted]);
 
   // IDKFA cheat code — unlock all skins
-  const handleCheat = useCallback(() => {
-    const updated = activateCheat();
-    setSkinState(updated);
-  }, []);
-  useCheatCode("IDKFA", handleCheat);
+  useCheatCode("IDKFA", unlockAllSkins);
 
   // IDDQD cheat code — guaranteed ambulance resurrection
   const handleIddqd = useCallback(() => {
@@ -246,7 +224,7 @@ export default function GameCanvas() {
           bestScore={bestScore}
           cheatUnlocked={cheatUnlocked}
           selectedSkinId={selectedSkinId}
-          onSelectSkin={handleSelectSkin}
+          onSelectSkin={chooseSkin}
         />
       )}
 

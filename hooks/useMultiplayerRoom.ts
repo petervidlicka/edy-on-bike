@@ -3,10 +3,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { PlayerInfo, RankingEntry, RoomPhase, ServerMessage, ClientMessage } from "@/game/multiplayer/types";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
+import { PARTYKIT_HOST, partyKitUrl } from "@/lib/multiplayerConfig";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
 
-const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST ?? "localhost:1999";
 
 function generateRoomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 to avoid confusion
@@ -68,14 +68,18 @@ export function useMultiplayerRoom() {
 
   const connect = useCallback((code: string, name: string, skinId: string, intent: "create" | "join") => {
     if (wsRef.current) return;
+    if (!PARTYKIT_HOST) {
+      // Build has no multiplayer server configured; entry points are hidden, but the URL still works
+      setError("Multiplayer isn't available right now.");
+      return;
+    }
 
     // roomCode is only set once the server confirms (room_joined) — setting it early
     // showed a lobby the server might still reject.
     setConnectionState("connecting");
     setError(null);
 
-    const protocol = PARTYKIT_HOST.startsWith("localhost") ? "ws" : "wss";
-    const ws = new WebSocket(`${protocol}://${PARTYKIT_HOST}/party/${code}`);
+    const ws = new WebSocket(partyKitUrl(PARTYKIT_HOST, code));
     wsRef.current = ws;
 
     let opened = false;
@@ -174,13 +178,13 @@ export function useMultiplayerRoom() {
       setError(
         opened
           ? "Lost connection to the room. Create or join a new one to keep playing."
-          : "Could not connect to multiplayer server. Make sure the PartyKit server is running (cd party && npx partykit dev)."
+          : "Couldn't reach the multiplayer server. Check your connection and try again."
       );
     };
 
     // Every error is followed by a close event, which does the cleanup above
     ws.onerror = () => {
-      console.error("[Multiplayer] WebSocket error — is the PartyKit server running?");
+      console.error(`[Multiplayer] WebSocket error connecting to ${PARTYKIT_HOST} — in local dev, is \`cd party && npx partykit dev\` running?`);
     };
   }, [releaseConnection, resetRoomState]);
 

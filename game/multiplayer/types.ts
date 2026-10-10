@@ -1,3 +1,7 @@
+/**
+ * Shared multiplayer data shapes and the client <-> server message protocol.
+ * party/server.ts mirrors these (it's built separately and can't import them).
+ */
 import type { TrickType } from "../types";
 
 // ── Ghost snapshot — minimal state sent at ~15 Hz per player ──

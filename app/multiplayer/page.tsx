@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * /multiplayer route: switches between lobby, race and results based on the
+ * room phase reported by the PartyKit server (via useMultiplayerRoom).
+ */
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import OrientationGuard from "@/components/OrientationGuard";
@@ -8,6 +12,7 @@ import MultiplayerGameCanvas from "@/components/MultiplayerGameCanvas";
 import MultiplayerResults from "@/components/MultiplayerResults";
 import { useMultiplayerRoom } from "@/hooks/useMultiplayerRoom";
 
+/** Multiplayer entry point; owns the room connection for the whole lobby → race → results loop. */
 export default function MultiplayerPage() {
   const router = useRouter();
   const {

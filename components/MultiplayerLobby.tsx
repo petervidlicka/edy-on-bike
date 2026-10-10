@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * Multiplayer lobby: create/join a room by code, pick a skin (same unlocks as
+ * single-player), then wait for everyone to ready up.
+ */
 import { useState, useCallback } from "react";
 import { PlayerInfo } from "@/game/multiplayer/types";
 import { SkinId } from "@/game/types";
@@ -53,6 +57,10 @@ const inputStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
+/**
+ * Shows create/join until the server confirms a room, then the room's player
+ * list with READY/LEAVE.
+ */
 export default function MultiplayerLobby({
   roomCode,
   localPlayerId,

@@ -114,8 +114,13 @@ function ArrowSVG({ points }: { points: string }) {
   );
 }
 
+/** A landed trick to flash in the HUD (single-player and multiplayer share the popup). */
 export type TrickFeedbackData = { name: string; points: number; sketchy?: boolean };
 
+/**
+ * Music/SFX toggles, top left. Extracted so the multiplayer race screen can reuse
+ * them and append its own buttons (e.g. LEAVE) via children.
+ */
 export function AudioControls({
   musicMuted,
   sfxMuted,
@@ -159,6 +164,7 @@ export function AudioControls({
   );
 }
 
+/** "Backflip +50"-style feedback; renders nothing when there's no recent trick. */
 export function TrickFeedbackPopup({
   trickFeedback,
 }: {
@@ -180,6 +186,7 @@ export function TrickFeedbackPopup({
   );
 }
 
+/** Touch D-pad for tricks (bottom right), shared by single-player and multiplayer. */
 export function TrickDpad({
   onBackflip,
   onFrontflip,

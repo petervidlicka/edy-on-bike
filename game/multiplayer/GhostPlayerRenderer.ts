@@ -1,3 +1,7 @@
+/**
+ * Draws remote players ("ghosts") on the local canvas by feeding their
+ * interpolated snapshots through the normal player renderer at low opacity.
+ */
 import { PlayerState } from "../types";
 import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
 import { drawPlayer } from "../rendering/PlayerRenderer";

@@ -1,3 +1,9 @@
+/**
+ * PartyKit room server for multiplayer races (one instance per room code).
+ * Runs separately from the Next.js app — see MULTIPLAYER.md for dev/deploy.
+ * It relays validated ghost snapshots, decides when races start and finish,
+ * and ranks players; clients are untrusted (see validation.ts).
+ */
 import type * as Party from "partykit/server";
 import {
   MAX_MESSAGE_CHARS,
@@ -53,6 +59,7 @@ const STALE_CHECK_INTERVAL_MS = 2_000;
 
 // ── Server ─────────────────────────────────────────────────────────────
 
+/** Room lifecycle: lobby → countdown → racing → finished (→ lobby again on rematch). */
 export default class MultiplayerServer implements Party.Server {
   players: Map<string, PlayerInfo> = new Map();
   connections: Map<string, Party.Connection> = new Map();

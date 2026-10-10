@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * Race screen for multiplayer: runs a local Engine seeded like everyone else's,
+ * renders remote players as ghosts, and shows live standings, the countdown and
+ * a waiting state once the local rider has crashed.
+ */
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Engine } from "@/game/Engine";
 import { GameState, SkinId } from "@/game/types";
@@ -28,6 +33,10 @@ interface MultiplayerGameCanvasProps {
   onLeave: () => void;
 }
 
+/**
+ * One race. Mounts at countdown_start and is replaced by the results screen
+ * when the server reports race_finished.
+ */
 export default function MultiplayerGameCanvas({
   seed,
   raceStarted,

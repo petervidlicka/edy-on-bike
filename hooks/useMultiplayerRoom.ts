@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * React side of a multiplayer room: owns the WebSocket, turns server messages
+ * into lobby/race/results state, and creates a MultiplayerAdapter per race.
+ */
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { PlayerInfo, RankingEntry, RoomPhase, ServerMessage, ClientMessage } from "@/game/multiplayer/types";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
@@ -17,6 +21,12 @@ function generateRoomCode(): string {
   return code;
 }
 
+/**
+ * Connection and room state for the /multiplayer page. The socket closes on
+ * unmount so leaving the page mid-race counts as a crash for everyone else.
+ * @example
+ * const { phase, players, createRoom, joinRoom, setReady, playAgain, disconnect } = useMultiplayerRoom();
+ */
 export function useMultiplayerRoom() {
   const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
   const [roomCode, setRoomCode] = useState<string | null>(null);

@@ -1,5 +1,6 @@
 "use client";
 
+/** End-of-race rankings, with Play Again (same room) and Leave. */
 import { RankingEntry } from "@/game/multiplayer/types";
 
 interface MultiplayerResultsProps {
@@ -29,6 +30,7 @@ const glassBtn: React.CSSProperties = {
 
 const MEDAL_LABELS = ["\u{1F947}", "\u{1F948}", "\u{1F949}", "4th"];
 
+/** Rankings come from the server, so every player sees the same order and scores. */
 export default function MultiplayerResults({
   rankings,
   localPlayerId,

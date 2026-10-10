@@ -1,7 +1,12 @@
+/**
+ * Client-side multiplayer state for one race: buffers remote snapshots, tracks
+ * live scores and crash status, and throttles the local player's updates.
+ */
 import type { GhostSnapshot, PlayerInfo, ServerMessage, ClientMessage } from "./types";
 import { InterpolationBuffer } from "./interpolation";
 import { NETWORK_SYNC_INTERVAL_MS } from "../constants";
 
+/** A remote player ready to draw this frame. */
 export interface GhostPlayer {
   id: string;
   name: string;
@@ -13,6 +18,7 @@ export interface GhostPlayer {
   slot: number;
 }
 
+/** Notifications back to React (the room hook). */
 export type MultiplayerCallbacks = {
   onPlayersUpdate?: (players: PlayerInfo[]) => void;
 };

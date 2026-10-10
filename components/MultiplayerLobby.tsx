@@ -7,6 +7,8 @@ import SkinPicker from "@/components/SkinPicker";
 
 interface MultiplayerLobbyProps {
   roomCode: string | null;
+  /** Server-assigned id for this client — names aren't unique, so never match on them. */
+  localPlayerId: string;
   players: PlayerInfo[];
   phase: RoomPhase;
   error?: string | null;
@@ -53,6 +55,7 @@ const inputStyle: React.CSSProperties = {
 
 export default function MultiplayerLobby({
   roomCode,
+  localPlayerId,
   players,
   phase,
   error,
@@ -67,9 +70,7 @@ export default function MultiplayerLobby({
   const [joinCode, setJoinCode] = useState("");
   const [showJoinInput, setShowJoinInput] = useState(false);
 
-  const localPlayer = players.find(
-    (p) => p.name === name || players.length === 1
-  );
+  const localPlayer = players.find((p) => p.id === localPlayerId);
   const isReady = localPlayer?.ready ?? false;
 
   const canStart = !!name.trim() && !connecting;

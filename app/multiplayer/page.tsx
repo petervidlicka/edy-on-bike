@@ -49,6 +49,7 @@ export default function MultiplayerPage() {
         phase !== "finished" && (
           <MultiplayerLobby
             roomCode={roomCode}
+            localPlayerId={localPlayerId}
             players={players}
             phase={phase}
             error={error}

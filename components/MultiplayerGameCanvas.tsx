@@ -12,6 +12,9 @@ import { AudioControls, TrickFeedbackPopup, TrickDpad, btnStyle } from "./HUD";
 import type { TrickFeedbackData } from "./HUD";
 import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
 
+/** Scores stream in at ~15 Hz per player; a few standings refreshes per second is plenty. */
+const STANDINGS_REFRESH_MS = 250;
+
 interface MultiplayerGameCanvasProps {
   roomCode: string;
   seed: number;
@@ -43,12 +46,16 @@ export default function MultiplayerGameCanvas({
   const [trickFeedback, setTrickFeedback] = useState<TrickFeedbackData | null>(null);
   const trickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [countdown, setCountdown] = useState<3 | 2 | 1 | "GO" | null>(3);
-  const [playerStandings, setPlayerStandings] = useState<PlayerInfo[]>(players);
+  const [playerStandings, setPlayerStandings] = useState<PlayerInfo[]>(() => adapter.getPlayers());
 
-  // Keep standings in sync with players prop
+  // The adapter holds live scores (local sends + remote snapshots); room-level `players`
+  // only changes on join/leave/ready/crash, so it can't drive a live leaderboard.
   useEffect(() => {
-    setPlayerStandings([...players].sort((a, b) => b.score - a.score));
-  }, [players]);
+    const refresh = () => setPlayerStandings(adapter.getPlayers().sort((a, b) => b.score - a.score));
+    refresh();
+    const timer = setInterval(refresh, STANDINGS_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [adapter]);
 
   // Countdown logic
   useEffect(() => {

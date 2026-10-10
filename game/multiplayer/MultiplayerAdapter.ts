@@ -41,7 +41,8 @@ export class MultiplayerAdapter {
     this.callbacks = callbacks;
 
     for (const p of players) {
-      this.players.set(p.id, p);
+      // Own copies: we mutate scores/alive here, and these objects must not alias React state
+      this.players.set(p.id, { ...p });
       if (p.id !== localPlayerId) {
         this.buffers.set(p.id, new InterpolationBuffer());
       }
@@ -63,6 +64,8 @@ export class MultiplayerAdapter {
           this.buffers.set(msg.playerId, buf);
         }
         buf.push(msg.snapshot, performance.now());
+        const player = this.players.get(msg.playerId);
+        if (player?.alive && Number.isFinite(msg.snapshot.s)) player.score = msg.snapshot.s;
         break;
       }
       case "player_crashed": {
@@ -72,21 +75,21 @@ export class MultiplayerAdapter {
           player.score = msg.score;
         }
         this.callbacks.onRemotePlayerCrashed?.(msg.playerId, msg.score);
-        this.callbacks.onPlayersUpdate?.(Array.from(this.players.values()));
+        this.callbacks.onPlayersUpdate?.(this.getPlayers());
         break;
       }
       case "player_joined": {
-        this.players.set(msg.player.id, msg.player);
+        this.players.set(msg.player.id, { ...msg.player });
         if (msg.player.id !== this.localPlayerId) {
           this.buffers.set(msg.player.id, new InterpolationBuffer());
         }
-        this.callbacks.onPlayersUpdate?.(Array.from(this.players.values()));
+        this.callbacks.onPlayersUpdate?.(this.getPlayers());
         break;
       }
       case "player_left": {
         this.players.delete(msg.playerId);
         this.buffers.delete(msg.playerId);
-        this.callbacks.onPlayersUpdate?.(Array.from(this.players.values()));
+        this.callbacks.onPlayersUpdate?.(this.getPlayers());
         break;
       }
       case "race_finished": {
@@ -141,9 +144,12 @@ export class MultiplayerAdapter {
     return ghosts;
   }
 
-  /** Get all players info (for HUD standings). */
+  /**
+   * Snapshot of every player with live scores (for HUD standings).
+   * Returns copies so callers — notably React state — never alias the objects we mutate.
+   */
   getPlayers(): PlayerInfo[] {
-    return Array.from(this.players.values());
+    return Array.from(this.players.values(), (p) => ({ ...p }));
   }
 
   /** Get local player ID. */

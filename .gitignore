@@ -56,3 +56,8 @@ android/capacitor-cordova-android-plugins/build/
 *.diff
 *.patch
 pr_review*.md
+
+# multiplayer Worker (party/)
+party/node_modules
+party/.wrangler
+party/.dev.vars

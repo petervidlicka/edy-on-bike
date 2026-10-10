@@ -30,6 +30,9 @@ import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
 import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
+import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
+import type { GhostSnapshot } from "./multiplayer/types";
+import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
@@ -38,6 +41,17 @@ export type EngineCallbacks = {
   onSpeedUpdate?: (speed: number) => void;
   onTrickLanded?: (trickName: string, points: number, sketchy?: boolean) => void;
 };
+
+/** Optional Engine dependencies, used by multiplayer to make runs reproducible across clients. */
+export interface EngineOptions {
+  /**
+   * Drives obstacle spawning only (type + gap), so every client seeded with the same
+   * value gets the same course. Never use it for anything whose number of draws depends
+   * on viewport size or frame timing (backgrounds, particles) — that would desync clients.
+   */
+  rng?: { random(): number };
+  multiplayer?: MultiplayerAdapter;
+}
 
 export class Engine {
   private canvas: HTMLCanvasElement;
@@ -81,11 +95,15 @@ export class Engine {
   };
   private particles: Particle[] = [];
   private particleConfig: ParticleOverlayConfig | null = null;
+  private rng: { random(): number } = { random: Math.random };
+  private multiplayer: MultiplayerAdapter | null = null;
 
-  constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
+  constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks, options?: EngineOptions) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
     this.callbacks = callbacks;
+    if (options?.rng) this.rng = options.rng;
+    if (options?.multiplayer) this.multiplayer = options.multiplayer;
     this.loop = this.loop.bind(this);
     this.resize(window.innerWidth, window.innerHeight);
     this.rafId = requestAnimationFrame(this.loop);
@@ -108,7 +126,7 @@ export class Engine {
   start(): void {
     if (this.state !== GameState.IDLE) return;
     this.state = GameState.RUNNING;
-    this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs);
+    this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng));
     this.sound.startMusic();
     this.callbacks.onStateChange(this.state);
   }
@@ -199,6 +217,12 @@ export class Engine {
   }
 
   private update(dt: number, rawDt: number): void {
+    // Multiplayer: the server counted us out (e.g. tab hidden too long) — crash out now
+    if (this.multiplayer?.isLocalEliminated()) {
+      this.startCrash();
+      return;
+    }
+
     // Environment progression
     const envResult = this.envManager.update(dt, this.elapsedMs);
     if (envResult.musicCrossfade) {
@@ -292,12 +316,12 @@ export class Engine {
         this.debugIndex++;
       } else {
         this.obstacles.push(
-          spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment())
+          spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.rng.random.bind(this.rng))
         );
       }
       this.distanceSinceLastObstacle = 0;
       if (!this.debugSequence) {
-        this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs);
+        this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng));
       }
     }
 
@@ -334,6 +358,11 @@ export class Engine {
         }
       }
     }
+
+    // Multiplayer: send local state snapshot
+    if (this.multiplayer) {
+      this.multiplayer.sendLocalState(this.buildSnapshot());
+    }
   }
 
   private startCrash(): void {
@@ -345,6 +374,12 @@ export class Engine {
   }
 
   private gameOver(): void {
+    // In multiplayer: no ambulance — go straight to game over and notify server
+    if (this.multiplayer) {
+      this.multiplayer.sendCrashed(this.score);
+      this.finalGameOver();
+      return;
+    }
     if (!this.hasBeenResurrected && (this.iddqdActive || Math.random() < AMBULANCE_CHANCE)) {
       this.hasBeenResurrected = true;
       this.iddqdActive = false;
@@ -460,6 +495,14 @@ export class Engine {
       drawObstacle(ctx, obs, palette);
     }
 
+    // Draw ghost players (multiplayer)
+    if (this.multiplayer) {
+      const ghosts = this.multiplayer.getGhostPlayers();
+      for (const ghost of ghosts) {
+        drawGhostPlayer(ctx, ghost, this.groundY, this.canvasW);
+      }
+    }
+
     const ambulancePreRevive = this.state === GameState.AMBULANCE
       && this.ambulance
       && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
@@ -486,6 +529,26 @@ export class Engine {
       ctx.restore();
     }
   }
+
+  private buildSnapshot(): GhostSnapshot {
+    const p = this.player;
+    return {
+      t: performance.now(),
+      h: this.groundY - p.y,
+      og: p.isOnGround,
+      wr: p.wheelRotation,
+      bt: p.bikeTilt,
+      rl: p.riderLean,
+      rc: p.riderCrouch,
+      lt: p.legTuck,
+      ba: p.backflipAngle,
+      fd: p.flipDirection,
+      at: p.activeTrick,
+      tp: p.trickProgress,
+      s: this.score,
+    };
+  }
+
 
   getScore(): number {
     return this.score;

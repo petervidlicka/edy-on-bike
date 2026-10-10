@@ -2,12 +2,24 @@
 
 import { useState, useEffect, useCallback } from "react";
 import LeaderboardForm from "./LeaderboardForm";
-import { glassBtn } from "./sharedStyles";
+import { LEADERBOARD_SIZE } from "@/lib/leaderboardConfig";
 
 interface LeaderboardEntry {
   name: string;
   score: number;
   skin?: string;
+}
+
+// Rows come from the network; drop anything malformed rather than let one bad
+// entry throw during render and take down the whole game-over screen.
+function isLeaderboardEntry(value: unknown): value is LeaderboardEntry {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.name === "string" &&
+    typeof row.score === "number" &&
+    (row.skin === undefined || typeof row.skin === "string")
+  );
 }
 
 interface GameOverScreenProps {
@@ -25,13 +37,16 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
 
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
+
   const fetchLeaderboard = useCallback(async () => {
     try {
-      const data = await fetch("/api/leaderboard").then((r) => r.json());
-      setLeaderboard(data.scores ?? []);
-      setTotalPlayers(data.totalPlayers ?? 0);
+      const data: unknown = await fetch(`${apiBase}/api/leaderboard`).then((r) => r.json());
+      const { scores, totalPlayers } = (data ?? {}) as { scores?: unknown; totalPlayers?: unknown };
+      setLeaderboard(Array.isArray(scores) ? scores.filter(isLeaderboardEntry) : []);
+      setTotalPlayers(typeof totalPlayers === "number" ? totalPlayers : 0);
     } catch { }
-  }, []);
+  }, [apiBase]);
 
   const handleSaved = useCallback(async () => {
     await fetchLeaderboard();
@@ -156,7 +171,7 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
                   fontFamily: "var(--font-space-mono), monospace",
                 }}
               >
-                {leaderboard.slice(0, 7).map((entry, i) => (
+                {leaderboard.slice(0, LEADERBOARD_SIZE).map((entry, i) => (
                   <li key={i} style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
                     <span style={{ fontWeight: 600, flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
                     {entry.skin && (

@@ -45,7 +45,7 @@ export function drawCrashBike(
     ctx, g.frontWheelX, g.wheelY, g.wheelR, crash.bikeWheelRotation,
     c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby
   );
-  drawBikeFrame(ctx, skin, g, localX, localY);
+  drawBikeFrame(ctx, skin, g);
   drawHandlebars(ctx, skin, g);
 
   ctx.restore();

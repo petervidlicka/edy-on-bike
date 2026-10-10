@@ -210,8 +210,6 @@ export function drawBikeFrame(
   ctx: CanvasRenderingContext2D,
   skin: SkinDefinition,
   g: BikeGeom,
-  x: number,
-  y: number
 ) {
   const c = skin.colors;
   const { seatX, seatY, bbX, bbY, headX, headY, rearWheelX, frontWheelX, wheelY } = g;
@@ -400,7 +398,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
   drawWheel(ctx, g.frontWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby);
 
   // ── Frame ──
-  drawBikeFrame(ctx, skin, g, x, y);
+  drawBikeFrame(ctx, skin, g);
 
   // ── Handlebars ──
   const { gripX, gripY } = drawHandlebars(ctx, skin, g);

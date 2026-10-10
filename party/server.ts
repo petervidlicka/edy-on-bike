@@ -21,6 +21,14 @@ interface RankingEntry {
   rank: number;
 }
 
+/** Messages a client may send. Mirrors ClientMessage in game/multiplayer/types.ts. */
+type ClientMessage =
+  | { type: "join"; name: string; skinId: string }
+  | { type: "ready" }
+  | { type: "player_update"; snapshot: unknown }
+  | { type: "player_crashed"; score: number }
+  | { type: "leave" };
+
 // ── Server ─────────────────────────────────────────────────────────────
 
 export default class MultiplayerServer implements Party.Server {
@@ -45,9 +53,9 @@ export default class MultiplayerServer implements Party.Server {
   onMessage(message: string | ArrayBuffer | ArrayBufferView, sender: Party.Connection) {
     if (typeof message !== "string") return;
 
-    let data: any;
+    let data: ClientMessage;
     try {
-      data = JSON.parse(message);
+      data = JSON.parse(message) as ClientMessage;
     } catch {
       return;
     }

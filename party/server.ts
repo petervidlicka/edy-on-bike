@@ -68,7 +68,7 @@ export default class MultiplayerServer implements Party.Server {
     this.seed = Math.floor(Math.random() * 2147483647);
   }
 
-  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+  onConnect() {
     // Don't add as player yet — wait for "join" message.
     // Connection is already tracked by PartyKit internally;
     // we store it in our map only after a successful join.

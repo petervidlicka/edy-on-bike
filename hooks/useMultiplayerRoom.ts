@@ -141,7 +141,6 @@ export function useMultiplayerRoom() {
           break;
         case "race_start":
           setPhase("racing");
-          adapterRef.current?.markRaceStart();
           break;
         case "ghost_update":
         case "player_crashed":

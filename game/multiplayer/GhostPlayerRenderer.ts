@@ -1,4 +1,4 @@
-import { PlayerState, TrickType } from "../types";
+import { PlayerState } from "../types";
 import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
 import { drawPlayer } from "../rendering/PlayerRenderer";
 import { getSkinById } from "../skins";

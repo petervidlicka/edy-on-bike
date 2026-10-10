@@ -30,7 +30,7 @@ import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
 import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
-import type { MultiplayerAdapter, GhostPlayer } from "./multiplayer/MultiplayerAdapter";
+import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
 import type { GhostSnapshot } from "./multiplayer/types";
 import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
 
@@ -549,9 +549,6 @@ export class Engine {
     };
   }
 
-  getPlayer() { return this.player; }
-  getGroundY() { return this.groundY; }
-  getCanvasW() { return this.canvasW; }
 
   getScore(): number {
     return this.score;

@@ -33,40 +33,30 @@ export default function MultiplayerPage() {
     router.push("/");
   }, [disconnect, router]);
 
-  const handleRaceFinished = useCallback(() => {
-    // Phase will transition to "finished" via the adapter/hook
-  }, []);
-
   return (
     <OrientationGuard>
       {/* Lobby phase */}
-      {(phase === "lobby" || !roomCode) &&
-        phase !== "countdown" &&
-        phase !== "racing" &&
-        phase !== "finished" && (
-          <MultiplayerLobby
-            roomCode={roomCode}
-            localPlayerId={localPlayerId}
-            players={players}
-            phase={phase}
-            error={error}
-            connecting={connectionState !== "disconnected" && !roomCode}
-            onCreateRoom={createRoom}
-            onJoinRoom={joinRoom}
-            onReady={setReady}
-            onLeave={handleLeave}
-          />
-        )}
+      {phase === "lobby" && (
+        <MultiplayerLobby
+          roomCode={roomCode}
+          localPlayerId={localPlayerId}
+          players={players}
+          error={error}
+          connecting={connectionState !== "disconnected" && !roomCode}
+          onCreateRoom={createRoom}
+          onJoinRoom={joinRoom}
+          onReady={setReady}
+          onLeave={handleLeave}
+        />
+      )}
 
       {/* Racing phase (includes countdown) */}
       {(phase === "countdown" || phase === "racing") && adapter && (
         <MultiplayerGameCanvas
-          roomCode={roomCode!}
           seed={seed}
           players={players}
           localPlayerId={localPlayerId}
           adapter={adapter}
-          onRaceFinished={handleRaceFinished}
           onLeave={handleLeave}
         />
       )}

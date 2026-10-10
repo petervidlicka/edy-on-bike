@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { PlayerInfo, RoomPhase } from "@/game/multiplayer/types";
+import { PlayerInfo } from "@/game/multiplayer/types";
 import { SkinId } from "@/game/types";
 import SkinPicker from "@/components/SkinPicker";
 import { useSavedSkinState } from "@/hooks/useSavedSkinState";
@@ -11,7 +11,6 @@ interface MultiplayerLobbyProps {
   /** Server-assigned id for this client — names aren't unique, so never match on them. */
   localPlayerId: string;
   players: PlayerInfo[];
-  phase: RoomPhase;
   error?: string | null;
   /** Waiting for the server to accept a create/join — buttons stay disabled until it answers. */
   connecting?: boolean;
@@ -58,7 +57,6 @@ export default function MultiplayerLobby({
   roomCode,
   localPlayerId,
   players,
-  phase,
   error,
   connecting = false,
   onCreateRoom,

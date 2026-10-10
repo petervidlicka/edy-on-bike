@@ -1,7 +1,6 @@
-import type { GhostSnapshot, PlayerInfo, RankingEntry, ServerMessage, ClientMessage } from "./types";
+import type { GhostSnapshot, PlayerInfo, ServerMessage, ClientMessage } from "./types";
 import { InterpolationBuffer } from "./interpolation";
-
-const SYNC_INTERVAL_MS = 67; // ~15 Hz
+import { NETWORK_SYNC_INTERVAL_MS } from "../constants";
 
 export interface GhostPlayer {
   id: string;
@@ -13,8 +12,6 @@ export interface GhostPlayer {
 }
 
 export type MultiplayerCallbacks = {
-  onRemotePlayerCrashed?: (playerId: string, score: number) => void;
-  onRaceFinished?: (rankings: RankingEntry[]) => void;
   onPlayersUpdate?: (players: PlayerInfo[]) => void;
 };
 
@@ -30,7 +27,6 @@ export class MultiplayerAdapter {
   private localPlayerId: string;
   private lastSendTime = 0;
   private callbacks: MultiplayerCallbacks;
-  private startTimeMs = 0;
 
   constructor(
     ws: WebSocket,
@@ -49,11 +45,6 @@ export class MultiplayerAdapter {
         this.buffers.set(p.id, new InterpolationBuffer());
       }
     }
-  }
-
-  /** Call once when the race actually starts (after countdown). */
-  markRaceStart(): void {
-    this.startTimeMs = performance.now();
   }
 
   /** Handle incoming server messages. Called by the hook's onmessage handler. */
@@ -76,7 +67,6 @@ export class MultiplayerAdapter {
           player.alive = false;
           player.score = msg.score;
         }
-        this.callbacks.onRemotePlayerCrashed?.(msg.playerId, msg.score);
         this.callbacks.onPlayersUpdate?.(this.getPlayers());
         break;
       }
@@ -94,17 +84,13 @@ export class MultiplayerAdapter {
         this.callbacks.onPlayersUpdate?.(this.getPlayers());
         break;
       }
-      case "race_finished": {
-        this.callbacks.onRaceFinished?.(msg.rankings);
-        break;
-      }
     }
   }
 
   /** Send local player state — throttled to ~15 Hz internally. */
   sendLocalState(snapshot: GhostSnapshot): void {
     const now = performance.now();
-    if (now - this.lastSendTime < SYNC_INTERVAL_MS) return;
+    if (now - this.lastSendTime < NETWORK_SYNC_INTERVAL_MS) return;
     this.lastSendTime = now;
 
     this.send({ type: "player_update", snapshot });
@@ -153,11 +139,6 @@ export class MultiplayerAdapter {
    */
   getPlayers(): PlayerInfo[] {
     return Array.from(this.players.values(), (p) => ({ ...p }));
-  }
-
-  /** Get local player ID. */
-  getLocalPlayerId(): string {
-    return this.localPlayerId;
   }
 
   /**

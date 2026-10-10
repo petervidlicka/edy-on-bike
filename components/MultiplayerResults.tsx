@@ -27,7 +27,6 @@ const glassBtn: React.CSSProperties = {
   fontFamily: "var(--font-nunito), Arial, sans-serif",
 };
 
-const MEDAL_COLORS = ["#fbbf24", "#c0c0c0", "#cd7f32", "#94a3b8"];
 const MEDAL_LABELS = ["\u{1F947}", "\u{1F948}", "\u{1F949}", "4th"];
 
 export default function MultiplayerResults({
@@ -75,7 +74,6 @@ export default function MultiplayerResults({
       >
         {rankings.map((entry, idx) => {
           const isLocal = entry.playerId === localPlayerId;
-          const medalColor = MEDAL_COLORS[idx] ?? "#94a3b8";
           return (
             <div
               key={entry.playerId}

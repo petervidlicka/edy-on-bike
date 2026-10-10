@@ -16,23 +16,19 @@ import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
 const STANDINGS_REFRESH_MS = 250;
 
 interface MultiplayerGameCanvasProps {
-  roomCode: string;
   seed: number;
   players: PlayerInfo[];
   localPlayerId: string;
   adapter: MultiplayerAdapter;
-  onRaceFinished: () => void;
   /** Exit the race at any time — the server counts the player as crashed. */
   onLeave: () => void;
 }
 
 export default function MultiplayerGameCanvas({
-  roomCode,
   seed,
   players,
   localPlayerId,
   adapter,
-  onRaceFinished,
   onLeave,
 }: MultiplayerGameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

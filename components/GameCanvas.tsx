@@ -11,6 +11,7 @@ import HUD from "./HUD";
 import GameOverScreen from "./GameOverScreen";
 
 import { useCheatCode } from "@/hooks/useCheatCode";
+import { useDebugObstaclesFlag } from "@/hooks/useDebugObstaclesFlag";
 import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
 import { useSavedSkinState, recordBestScore, unlockAllSkins } from "@/hooks/useSavedSkinState";
 
@@ -33,10 +34,8 @@ export default function GameCanvas() {
   const [trickFeedback, setTrickFeedback] = useState<{ name: string; points: number; sketchy?: boolean } | null>(null);
   const trickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newlyUnlockedSkins, setNewlyUnlockedSkins] = useState<string[]>([]);
-  const [debugObstacles, setDebugObstacles] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("obstacles") === "debug";
-  });
+  // ?obstacles=debug flag — off during prerender/hydration, then read from the URL
+  const [debugObstacles, toggleDebugObstacles] = useDebugObstaclesFlag();
 
   // Saved skin state — defaults during prerender/hydration, then the stored value
   const [skinState, chooseSkin] = useSavedSkinState();
@@ -74,11 +73,6 @@ export default function GameCanvas() {
     });
     engineRef.current = engine;
 
-    // Debug obstacle sequence — auto-enable from URL param
-    if (new URLSearchParams(window.location.search).get("obstacles") === "debug") {
-      engine.setDebugObstacles(DEBUG_OBSTACLE_SEQUENCE, 700);
-    }
-
     const handleResize = () => {
       engine.resize(window.innerWidth, window.innerHeight);
     };
@@ -96,6 +90,11 @@ export default function GameCanvas() {
   useEffect(() => {
     engineRef.current?.setSkin(getSkinById(selectedSkinId));
   }, [selectedSkinId]);
+
+  // Sync debug obstacle sequence to engine the same way (URL flag is read after hydration)
+  useEffect(() => {
+    engineRef.current?.setDebugObstacles(debugObstacles ? DEBUG_OBSTACLE_SEQUENCE : null, 700);
+  }, [debugObstacles]);
 
   const handleRestart = useCallback(() => {
     engineRef.current?.restart();
@@ -164,19 +163,6 @@ export default function GameCanvas() {
     engineRef.current?.activateIddqd();
   }, []);
   useCheatCode("IDDQD", handleIddqd);
-
-  const toggleDebugObstacles = useCallback(() => {
-    setDebugObstacles((prev) => {
-      const next = !prev;
-      engineRef.current?.setDebugObstacles(
-        next ? DEBUG_OBSTACLE_SEQUENCE : null,
-        700,
-      );
-      const url = next ? "?obstacles=debug" : window.location.pathname;
-      window.history.replaceState(null, "", url);
-      return next;
-    });
-  }, []);
 
   // Pause when tab is hidden or device is in portrait (mobile)
   usePauseOnHidden(engineRef);

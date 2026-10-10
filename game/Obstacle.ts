@@ -28,9 +28,9 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.DUBAI_BILLBOARD]:    { width: 309, height: 92 },
 };
 
-function weightedRandom(types: WeightedType[]): ObstacleType {
+function weightedRandom(types: WeightedType[], rng: () => number = Math.random): ObstacleType {
   const total = types.reduce((sum, t) => sum + t.weight, 0);
-  let rand = Math.random() * total;
+  let rand = rng() * total;
   for (const t of types) {
     rand -= t.weight;
     if (rand <= 0) return t.type;
@@ -64,21 +64,22 @@ export function spawnObstacle(
   canvasWidth: number,
   groundY: number,
   elapsedMs: number,
-  envDef: EnvironmentDefinition
+  envDef: EnvironmentDefinition,
+  rng: () => number = Math.random
 ): ObstacleInstance {
-  const type = weightedRandom(envDef.obstaclePool.getWeightedTypes(elapsedMs));
+  const type = weightedRandom(envDef.obstaclePool.getWeightedTypes(elapsedMs), rng);
   return createObstacle(type, canvasWidth, groundY);
 }
 
 // Returns the pixel distance to wait before spawning the next obstacle.
 // Gap shrinks slightly as speed increases to raise difficulty, but stays
 // comfortable in later stages thanks to a rising floor and a minimum speedFactor.
-export function nextSpawnGap(speed: number, elapsedMs: number): number {
+export function nextSpawnGap(speed: number, elapsedMs: number, rng: () => number = Math.random): number {
   const maxGap = MIN_OBSTACLE_GAP * 3.5;
   // Floor rises with time: 300 at start → 400 after 60s
   const timeFactor = Math.min(1, elapsedMs / 60_000);
   const minGap = MIN_OBSTACLE_GAP + (MIN_OBSTACLE_GAP_LATE - MIN_OBSTACLE_GAP) * timeFactor;
   // Speed factor bottoms at 0.3 instead of 0 to prevent complete gap collapse
   const speedFactor = Math.max(0.3, 1 - (speed - 5) / 20);
-  return minGap + Math.random() * (maxGap - minGap) * speedFactor;
+  return minGap + rng() * (maxGap - minGap) * speedFactor;
 }

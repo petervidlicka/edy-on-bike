@@ -9,6 +9,8 @@ export interface GhostPlayer {
   snapshot: GhostSnapshot;
   /** ms since this player's newest snapshot — lets the renderer fade out ghosts that stopped updating. */
   staleMs: number;
+  /** Stable per-player index (join order among remote players), used to pick a distinct tint. */
+  slot: number;
 }
 
 export type MultiplayerCallbacks = {
@@ -114,20 +116,24 @@ export class MultiplayerAdapter {
   getGhostPlayers(): GhostPlayer[] {
     const now = performance.now();
     const ghosts: GhostPlayer[] = [];
+    let slot = 0;
 
-    for (const [id, buf] of this.buffers) {
-      if (id === this.localPlayerId) continue;
-      const snapshot = buf.get(now);
-      if (!snapshot) continue;
-      const player = this.players.get(id);
-      if (!player) continue;
+    // Walk players (join order), not buffers, so a ghost keeps its slot/colour even
+    // while another player has no snapshots yet
+    for (const player of this.players.values()) {
+      if (player.id === this.localPlayerId) continue;
+      const playerSlot = slot++;
+      const buf = this.buffers.get(player.id);
+      const snapshot = buf?.get(now);
+      if (!buf || !snapshot) continue;
 
       ghosts.push({
-        id,
+        id: player.id,
         name: player.name,
         skinId: player.skinId,
         snapshot,
         staleMs: buf.msSinceLatest(now),
+        slot: playerSlot,
       });
     }
     return ghosts;

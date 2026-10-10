@@ -23,8 +23,7 @@ export function drawGhostPlayer(
   ctx: CanvasRenderingContext2D,
   ghost: GhostPlayer,
   groundY: number,
-  canvasW: number,
-  ghostIndex?: number
+  canvasW: number
 ): void {
   const snap = ghost.snapshot;
   const fade = 1 - Math.min(1, Math.max(0, (ghost.staleMs - GHOST_FADE_START_MS) / GHOST_FADE_DURATION_MS));
@@ -63,7 +62,7 @@ export function drawGhostPlayer(
   };
 
   const skin = getSkinById(ghost.skinId as "default");
-  const tintColor = GHOST_TINTS[(ghostIndex ?? 0) % GHOST_TINTS.length];
+  const tintColor = GHOST_TINTS[ghost.slot % GHOST_TINTS.length];
 
   ctx.save();
   ctx.globalAlpha = 0.35 * fade;

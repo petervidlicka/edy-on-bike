@@ -1,4 +1,12 @@
 import type * as Party from "partykit/server";
+import {
+  MAX_MESSAGE_CHARS,
+  MIN_UPDATE_INTERVAL_MS,
+  ScoreGuard,
+  sanitizeName,
+  sanitizeSkinId,
+  sanitizeSnapshot,
+} from "./validation";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -21,12 +29,15 @@ interface RankingEntry {
   rank: number;
 }
 
-/** Messages a client may send. Mirrors ClientMessage in game/multiplayer/types.ts. */
+/**
+ * Messages a client may send. Mirrors ClientMessage in game/multiplayer/types.ts,
+ * but payload fields are `unknown`: they come off the wire and are validated here.
+ */
 type ClientMessage =
-  | { type: "join"; name: string; skinId: string; intent: "create" | "join" }
+  | { type: "join"; name: unknown; skinId: unknown; intent: unknown }
   | { type: "ready" }
   | { type: "player_update"; snapshot: unknown }
-  | { type: "player_crashed"; score: number }
+  | { type: "player_crashed"; score: unknown }
   | { type: "leave" };
 
 /**
@@ -49,6 +60,8 @@ export default class MultiplayerServer implements Party.Server {
   staleCheckTimer: ReturnType<typeof setInterval> | null = null;
   /** Server-only: last time (Date.now) each racer sent a snapshot. */
   lastUpdateAt: Map<string, number> = new Map();
+  /** Server-only: plausibility guard for each racer's client-reported score. */
+  scoreGuards: Map<string, ScoreGuard> = new Map();
 
   constructor(readonly room: Party.Room) {
     this.seed = Math.floor(Math.random() * 2147483647);
@@ -62,11 +75,13 @@ export default class MultiplayerServer implements Party.Server {
   }
 
   onMessage(message: string | ArrayBuffer | ArrayBufferView, sender: Party.Connection) {
-    if (typeof message !== "string") return;
+    if (typeof message !== "string" || message.length > MAX_MESSAGE_CHARS) return;
 
     let data: ClientMessage;
     try {
-      data = JSON.parse(message) as ClientMessage;
+      const parsed: unknown = JSON.parse(message);
+      if (typeof parsed !== "object" || parsed === null) return;
+      data = parsed as ClientMessage;
     } catch {
       return;
     }
@@ -123,8 +138,14 @@ export default class MultiplayerServer implements Party.Server {
 
   // ── Message handlers ─────────────────────────────────────────────────
 
-  private handleJoin(data: { type: "join"; name: string; skinId: string; intent: "create" | "join" }, sender: Party.Connection) {
+  private handleJoin(data: { type: "join"; name: unknown; skinId: unknown; intent: unknown }, sender: Party.Connection) {
     if (this.players.has(sender.id)) return; // duplicate join from the same socket
+
+    const name = sanitizeName(data.name);
+    if (!name) {
+      this.rejectJoin(sender, "Pick a name between 1 and 16 characters.");
+      return;
+    }
 
     // PartyKit spins up a room for any code, so a typo would otherwise drop the
     // player into a fresh empty room that looks exactly like a real lobby.
@@ -145,8 +166,8 @@ export default class MultiplayerServer implements Party.Server {
 
     const playerInfo: PlayerInfo = {
       id: sender.id,
-      name: data.name,
-      skinId: data.skinId,
+      name,
+      skinId: sanitizeSkinId(data.skinId),
       ready: false,
       alive: true,
       score: 0,
@@ -191,30 +212,37 @@ export default class MultiplayerServer implements Party.Server {
     // Ignore racers already counted out (e.g. timed out, then their tab came back)
     if (!player || !player.alive || this.phase !== "racing") return;
 
-    this.lastUpdateAt.set(sender.id, Date.now());
-    // Keep the latest score so a racer who times out or disconnects is ranked fairly
-    const score = (data.snapshot as { s?: unknown } | null)?.s;
-    if (typeof score === "number" && Number.isFinite(score)) player.score = score;
+    const now = Date.now();
+    const lastAt = this.lastUpdateAt.get(sender.id) ?? now;
+    if (now - lastAt < MIN_UPDATE_INTERVAL_MS) return; // flooding — drop, don't relay
 
-    // Relay ghost snapshot to all other players
+    const snapshot = sanitizeSnapshot(data.snapshot);
+    if (!snapshot) return;
+
+    // Keep a plausible latest score so a racer who times out or disconnects is ranked fairly
+    player.score = this.scoreGuards.get(sender.id)?.accept(snapshot.s, now) ?? player.score;
+    snapshot.s = player.score;
+    this.lastUpdateAt.set(sender.id, now);
+
+    // Relay the cleaned snapshot to all other players
     this.broadcast(
-      { type: "ghost_update", playerId: sender.id, snapshot: data.snapshot },
+      { type: "ghost_update", playerId: sender.id, snapshot },
       sender.id,
     );
   }
 
-  private handlePlayerCrashed(data: { type: "player_crashed"; score: number }, sender: Party.Connection) {
+  private handlePlayerCrashed(data: { type: "player_crashed"; score: unknown }, sender: Party.Connection) {
     const player = this.players.get(sender.id);
     // Already out (timed out / disconnected) — keep the score we recorded then
-    if (!player || !player.alive) return;
+    if (!player || !player.alive || this.phase !== "racing") return;
 
     player.alive = false;
-    player.score = data.score;
+    player.score = this.scoreGuards.get(sender.id)?.accept(data.score, Date.now()) ?? player.score;
 
     this.broadcast({
       type: "player_crashed",
       playerId: sender.id,
-      score: data.score,
+      score: player.score,
     });
 
     this.checkFinishCondition();
@@ -262,7 +290,10 @@ export default class MultiplayerServer implements Party.Server {
   private startStaleCheck() {
     // Clients start their engine shortly after race_start; count from here
     const raceStart = Date.now();
-    for (const id of this.players.keys()) this.lastUpdateAt.set(id, raceStart);
+    for (const id of this.players.keys()) {
+      this.lastUpdateAt.set(id, raceStart);
+      this.scoreGuards.set(id, new ScoreGuard(raceStart));
+    }
 
     this.staleCheckTimer = setInterval(() => {
       const now = Date.now();
@@ -282,6 +313,7 @@ export default class MultiplayerServer implements Party.Server {
       this.staleCheckTimer = null;
     }
     this.lastUpdateAt.clear();
+    this.scoreGuards.clear();
   }
 
   private checkFinishCondition() {

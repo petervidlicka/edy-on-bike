@@ -74,7 +74,8 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   );
 }
 
-const btnStyle: React.CSSProperties = {
+/** Shared glass style for small HUD buttons, so screens composing HUD pieces match. */
+export const btnStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.22)",
   backdropFilter: "blur(24px) saturate(200%)",
   WebkitBackdropFilter: "blur(24px) saturate(200%)",
@@ -120,11 +121,14 @@ export function AudioControls({
   sfxMuted,
   onToggleMusic,
   onToggleSfx,
+  children,
 }: {
   musicMuted: boolean;
   sfxMuted: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  /** Extra buttons appended to the same top-left row (e.g. multiplayer's Leave). */
+  children?: React.ReactNode;
 }) {
   return (
     <div
@@ -150,6 +154,7 @@ export function AudioControls({
       >
         <SpeakerIcon muted={sfxMuted} />
       </button>
+      {children}
     </div>
   );
 }

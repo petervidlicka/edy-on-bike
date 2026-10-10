@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { PlayerInfo, RankingEntry, RoomPhase, ServerMessage, ClientMessage } from "@/game/multiplayer/types";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
 
@@ -31,6 +31,40 @@ export function useMultiplayerRoom() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const adapterRef = useRef<MultiplayerAdapter | null>(null);
+  /** Set once results arrive, so the server's later idle close doesn't read as a dropped race. */
+  const raceFinishedRef = useRef(false);
+
+  /** Closes the socket and adapter. wsRef is cleared first so onclose knows it was intentional. */
+  const releaseConnection = useCallback((sendLeave: boolean) => {
+    const ws = wsRef.current;
+    wsRef.current = null;
+    if (ws) {
+      if (sendLeave && ws.readyState === WebSocket.OPEN) {
+        const msg: ClientMessage = { type: "leave" };
+        ws.send(JSON.stringify(msg));
+      }
+      ws.close();
+    }
+    adapterRef.current?.destroy();
+    adapterRef.current = null;
+  }, []);
+
+  const resetRoomState = useCallback(() => {
+    raceFinishedRef.current = false;
+    setAdapter(null);
+    setConnectionState("disconnected");
+    setRoomCode(null);
+    setPlayers([]);
+    setPhase("lobby");
+    setSeed(0);
+    setLocalPlayerId("");
+    setRankings([]);
+    setCountdownEndMs(null);
+  }, []);
+
+  // Leaving the page (back button, route change) must close the socket — otherwise the
+  // server keeps this player "alive" and the race can never finish for everyone else.
+  useEffect(() => () => releaseConnection(false), [releaseConnection]);
 
   const connect = useCallback((code: string, name: string, skinId: string) => {
     if (wsRef.current) return;
@@ -43,7 +77,9 @@ export function useMultiplayerRoom() {
     const ws = new WebSocket(`${protocol}://${PARTYKIT_HOST}/party/${code}`);
     wsRef.current = ws;
 
+    let opened = false;
     ws.onopen = () => {
+      opened = true;
       setConnectionState("connected");
       const joinMsg: ClientMessage = { type: "join", name, skinId };
       ws.send(JSON.stringify(joinMsg));
@@ -99,6 +135,7 @@ export function useMultiplayerRoom() {
           adapterRef.current?.handleServerMessage(msg);
           break;
         case "race_finished":
+          raceFinishedRef.current = true;
           setRankings(msg.rankings);
           setPhase("finished");
           adapterRef.current?.handleServerMessage(msg);
@@ -110,18 +147,28 @@ export function useMultiplayerRoom() {
     };
 
     ws.onclose = () => {
-      setConnectionState("disconnected");
-      wsRef.current = null;
+      // disconnect()/unmount clear wsRef before closing; anything else is a dropped connection
+      if (wsRef.current !== ws) return;
+      if (raceFinishedRef.current) {
+        // Server idles out finished rooms; keep the results on screen
+        wsRef.current = null;
+        setConnectionState("disconnected");
+        return;
+      }
+      releaseConnection(false);
+      resetRoomState();
+      setError(
+        opened
+          ? "Lost connection to the room. Create or join a new one to keep playing."
+          : "Could not connect to multiplayer server. Make sure the PartyKit server is running (cd party && npx partykit dev)."
+      );
     };
 
+    // Every error is followed by a close event, which does the cleanup above
     ws.onerror = () => {
       console.error("[Multiplayer] WebSocket error — is the PartyKit server running?");
-      setError("Could not connect to multiplayer server. Make sure the PartyKit server is running (cd party && npx partykit dev).");
-      wsRef.current = null;
-      setConnectionState("disconnected");
-      setRoomCode(null);
     };
-  }, []);
+  }, [releaseConnection, resetRoomState]);
 
   const createRoom = useCallback(
     (name: string, skinId: string) => {
@@ -147,28 +194,10 @@ export function useMultiplayerRoom() {
   }, []);
 
   const disconnect = useCallback(() => {
-    const ws = wsRef.current;
-    if (ws) {
-      if (ws.readyState === WebSocket.OPEN) {
-        const msg: ClientMessage = { type: "leave" };
-        ws.send(JSON.stringify(msg));
-      }
-      ws.close();
-      wsRef.current = null;
-    }
-    adapterRef.current?.destroy();
-    adapterRef.current = null;
-    setAdapter(null);
-    setConnectionState("disconnected");
-    setRoomCode(null);
-    setPlayers([]);
-    setPhase("lobby");
-    setSeed(0);
-    setLocalPlayerId("");
-    setRankings([]);
-    setCountdownEndMs(null);
+    releaseConnection(true);
+    resetRoomState();
     setError(null);
-  }, []);
+  }, [releaseConnection, resetRoomState]);
 
   return {
     connectionState,

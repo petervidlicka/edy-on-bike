@@ -8,7 +8,7 @@ import { getSkinById } from "@/game/skins";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
 import { SeededRNG } from "@/game/multiplayer/SeededRNG";
 import { PlayerInfo } from "@/game/multiplayer/types";
-import { AudioControls, TrickFeedbackPopup, TrickDpad } from "./HUD";
+import { AudioControls, TrickFeedbackPopup, TrickDpad, btnStyle } from "./HUD";
 import type { TrickFeedbackData } from "./HUD";
 import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
 
@@ -19,6 +19,8 @@ interface MultiplayerGameCanvasProps {
   localPlayerId: string;
   adapter: MultiplayerAdapter;
   onRaceFinished: () => void;
+  /** Exit the race at any time — the server counts the player as crashed. */
+  onLeave: () => void;
 }
 
 export default function MultiplayerGameCanvas({
@@ -28,10 +30,13 @@ export default function MultiplayerGameCanvas({
   localPlayerId,
   adapter,
   onRaceFinished,
+  onLeave,
 }: MultiplayerGameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
   const [score, setScore] = useState(0);
+  /** Local rider is out but others may still be racing — show a waiting state with a way out. */
+  const [crashed, setCrashed] = useState(false);
   const [speed, setSpeed] = useState(INITIAL_SPEED);
   const [musicMuted, setMusicMuted] = useState(false);
   const [sfxMuted, setSfxMuted] = useState(false);
@@ -76,6 +81,7 @@ export default function MultiplayerGameCanvas({
       onSpeedUpdate: setSpeed,
       onGameOver: (finalScore) => {
         setScore(finalScore);
+        setCrashed(true);
         // Engine already calls adapter.sendCrashed() in its gameOver() method
       },
       onStateChange: (state) => {
@@ -187,6 +193,82 @@ export default function MultiplayerGameCanvas({
         }}
       />
 
+      <AudioControls
+        musicMuted={musicMuted}
+        sfxMuted={sfxMuted}
+        onToggleMusic={() => setMusicMuted((m) => !m)}
+        onToggleSfx={() => setSfxMuted((m) => !m)}
+      >
+        <button
+          onClick={onLeave}
+          title="Leave race"
+          style={{
+            ...btnStyle,
+            lineHeight: 1,
+            fontSize: "0.75rem",
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            fontFamily: "var(--font-nunito), Arial, sans-serif",
+          }}
+        >
+          LEAVE
+        </button>
+      </AudioControls>
+
+      {/* Waiting overlay — local rider crashed, race still running for others */}
+      {crashed && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 90,
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "0.6rem",
+              padding: "1rem 1.5rem",
+              borderRadius: "18px",
+              background: "rgba(0,0,0,0.35)",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              color: "#fff",
+              fontFamily: "var(--font-nunito), Arial, sans-serif",
+              textAlign: "center",
+              pointerEvents: "auto",
+            }}
+          >
+            <span style={{ fontSize: "1.4rem", fontWeight: 800, fontFamily: "var(--font-fredoka), sans-serif" }}>
+              You crashed! {score}
+            </span>
+            <span style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.85 }}>
+              Waiting for the others to finish…
+            </span>
+            <button
+              onClick={onLeave}
+              style={{
+                ...btnStyle,
+                lineHeight: 1,
+                padding: "0.5rem 1.5rem",
+                fontSize: "0.85rem",
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                fontFamily: "var(--font-nunito), Arial, sans-serif",
+              }}
+            >
+              LEAVE
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Countdown overlay */}
       {countdown !== null && (
         <div
@@ -215,7 +297,7 @@ export default function MultiplayerGameCanvas({
         </div>
       )}
 
-      {/* Multiplayer HUD — player standings + speed + audio + tricks */}
+      {/* Multiplayer HUD — player standings + speed + tricks */}
       {countdown === null && (
         <>
           <div
@@ -269,13 +351,6 @@ export default function MultiplayerGameCanvas({
             </div>
             <TrickFeedbackPopup trickFeedback={trickFeedback} />
           </div>
-
-          <AudioControls
-            musicMuted={musicMuted}
-            sfxMuted={sfxMuted}
-            onToggleMusic={() => setMusicMuted((m) => !m)}
-            onToggleSfx={() => setSfxMuted((m) => !m)}
-          />
 
           <TrickDpad
             onBackflip={() => engineRef.current?.backflip()}

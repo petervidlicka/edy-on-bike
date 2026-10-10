@@ -217,6 +217,12 @@ export class Engine {
   }
 
   private update(dt: number, rawDt: number): void {
+    // Multiplayer: the server counted us out (e.g. tab hidden too long) — crash out now
+    if (this.multiplayer?.isLocalEliminated()) {
+      this.startCrash();
+      return;
+    }
+
     // Environment progression
     const envResult = this.envManager.update(dt, this.elapsedMs);
     if (envResult.musicCrossfade) {

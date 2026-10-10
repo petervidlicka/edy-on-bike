@@ -151,6 +151,14 @@ export class MultiplayerAdapter {
     return this.localPlayerId;
   }
 
+  /**
+   * True once the server has counted the local player out (e.g. their tab was
+   * hidden past the stale timeout), so the Engine can end a run the race no longer counts.
+   */
+  isLocalEliminated(): boolean {
+    return this.players.get(this.localPlayerId)?.alive === false;
+  }
+
   private send(msg: ClientMessage): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));

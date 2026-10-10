@@ -68,6 +68,7 @@ export default function MultiplayerPage() {
           localPlayerId={localPlayerId}
           adapter={adapter}
           onRaceFinished={handleRaceFinished}
+          onLeave={handleLeave}
         />
       )}
 

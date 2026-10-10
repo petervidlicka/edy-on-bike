@@ -29,6 +29,14 @@ type ClientMessage =
   | { type: "player_crashed"; score: number }
   | { type: "leave" };
 
+/**
+ * A racer who sends no updates for this long is treated as crashed. Covers hidden
+ * tabs (rAF stops), frozen browsers and sockets that die without a close event —
+ * otherwise the race could never finish for everyone else.
+ */
+const STALE_PLAYER_MS = 10_000;
+const STALE_CHECK_INTERVAL_MS = 2_000;
+
 // ── Server ─────────────────────────────────────────────────────────────
 
 export default class MultiplayerServer implements Party.Server {
@@ -38,6 +46,9 @@ export default class MultiplayerServer implements Party.Server {
   seed: number;
   inactivityTimer: ReturnType<typeof setTimeout> | null = null;
   countdownTimer: ReturnType<typeof setTimeout> | null = null;
+  staleCheckTimer: ReturnType<typeof setInterval> | null = null;
+  /** Server-only: last time (Date.now) each racer sent a snapshot. */
+  lastUpdateAt: Map<string, number> = new Map();
 
   constructor(readonly room: Party.Room) {
     this.seed = Math.floor(Math.random() * 2147483647);
@@ -167,6 +178,15 @@ export default class MultiplayerServer implements Party.Server {
   }
 
   private handlePlayerUpdate(data: { type: "player_update"; snapshot: unknown }, sender: Party.Connection) {
+    const player = this.players.get(sender.id);
+    // Ignore racers already counted out (e.g. timed out, then their tab came back)
+    if (!player || !player.alive || this.phase !== "racing") return;
+
+    this.lastUpdateAt.set(sender.id, Date.now());
+    // Keep the latest score so a racer who times out or disconnects is ranked fairly
+    const score = (data.snapshot as { s?: unknown } | null)?.s;
+    if (typeof score === "number" && Number.isFinite(score)) player.score = score;
+
     // Relay ghost snapshot to all other players
     this.broadcast(
       { type: "ghost_update", playerId: sender.id, snapshot: data.snapshot },
@@ -176,7 +196,8 @@ export default class MultiplayerServer implements Party.Server {
 
   private handlePlayerCrashed(data: { type: "player_crashed"; score: number }, sender: Party.Connection) {
     const player = this.players.get(sender.id);
-    if (!player) return;
+    // Already out (timed out / disconnected) — keep the score we recorded then
+    if (!player || !player.alive) return;
 
     player.alive = false;
     player.score = data.score;
@@ -224,7 +245,34 @@ export default class MultiplayerServer implements Party.Server {
     this.countdownTimer = setTimeout(() => {
       this.phase = "racing";
       this.broadcast({ type: "race_start" });
+      this.startStaleCheck();
     }, 3000);
+  }
+
+  /** Periodically counts out racers who stopped sending updates. */
+  private startStaleCheck() {
+    // Clients start their engine shortly after race_start; count from here
+    const raceStart = Date.now();
+    for (const id of this.players.keys()) this.lastUpdateAt.set(id, raceStart);
+
+    this.staleCheckTimer = setInterval(() => {
+      const now = Date.now();
+      for (const player of this.players.values()) {
+        if (!player.alive) continue;
+        if (now - (this.lastUpdateAt.get(player.id) ?? raceStart) < STALE_PLAYER_MS) continue;
+        player.alive = false;
+        this.broadcast({ type: "player_crashed", playerId: player.id, score: player.score });
+      }
+      this.checkFinishCondition();
+    }, STALE_CHECK_INTERVAL_MS);
+  }
+
+  private stopStaleCheck() {
+    if (this.staleCheckTimer) {
+      clearInterval(this.staleCheckTimer);
+      this.staleCheckTimer = null;
+    }
+    this.lastUpdateAt.clear();
   }
 
   private checkFinishCondition() {
@@ -238,6 +286,7 @@ export default class MultiplayerServer implements Party.Server {
 
   private finishRace() {
     this.phase = "finished";
+    this.stopStaleCheck();
 
     const sorted = Array.from(this.players.values()).sort(
       (a, b) => b.score - a.score,
@@ -299,6 +348,7 @@ export default class MultiplayerServer implements Party.Server {
       clearTimeout(this.countdownTimer);
       this.countdownTimer = null;
     }
+    this.stopStaleCheck();
   }
 }
 

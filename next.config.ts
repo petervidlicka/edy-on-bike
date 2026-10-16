@@ -13,8 +13,10 @@ const nextConfig: NextConfig = {
   experimental: {
     // Next 16.4 enables Turbopack's persistent build cache by default. On
     // Vercel it read the restored cache from a Next 16.1 build and failed to
-    // resolve next/font/google files. Builds here take seconds, so the cache
-    // isn't worth the breakage.
+    // resolve next/font/google files. Every branch falls back to that stale
+    // production cache until a 16.4 build replaces it, so it stays off for now.
+    // TODO: re-enable once production has deployed (and cached) on Next 16.4+,
+    // or after one "Redeploy without build cache" of main.
     turbopackFileSystemCacheForBuild: false,
   },
 };

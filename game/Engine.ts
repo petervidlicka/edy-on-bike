@@ -488,6 +488,8 @@ export class Engine {
   private skipCrash(): void {
     if (this.state !== GameState.CRASHING || this.isPaused() || this.ambulancePending) return;
     if (this.crashState.elapsed < CRASH_SKIP_AFTER_S) return;
+    // The boings and rustles are timed to the animation being skipped
+    this.sound.stopCrashSounds();
     this.gameOver();
   }
 
@@ -824,6 +826,8 @@ export class Engine {
       if (this.state === GameState.RUNNING) {
         this.sound.pauseMusic();
         this.sound.stopGrind();
+      } else if (this.state === GameState.CRASHING) {
+        this.sound.stopCrashSounds();
       } else if (this.state === GameState.AMBULANCE) {
         this.sound.stopSiren();
       }

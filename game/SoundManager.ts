@@ -4,14 +4,16 @@ export class SoundManager {
   private musicMuted = false;
   private sfxMuted = false;
   private musicPlaying = false;
-  /** True while the game is paused — unmuting must not restart music then. */
+  /** True while the game is paused — unmute and biome changes must not start music then. */
   private musicPaused = false;
-  // Siren nodes for ambulance: two detuned tones switched by one square-wave LFO
+  // Siren nodes for ambulance: two detuned tones whose pitch is stepped by one
+  // ConstantSourceNode, rescheduled ahead of time by sirenScheduler.
   private sirenOsc1: OscillatorNode | null = null;
   private sirenOsc2: OscillatorNode | null = null;
-  private sirenLfo: OscillatorNode | null = null;
+  private sirenStep: ConstantSourceNode | null = null;
   private sirenGain1: GainNode | null = null;
   private sirenGain2: GainNode | null = null;
+  private sirenScheduler: ReturnType<typeof setInterval> | null = null;
 
   // Dual-slot music system for crossfading between biome tracks
   private musicAudioA: HTMLAudioElement | null = null;
@@ -68,15 +70,22 @@ export class SoundManager {
     this.musicMuted = muted;
     if (this.musicAudioA) this.musicAudioA.muted = muted;
     if (this.musicAudioB) this.musicAudioB.muted = muted;
-    // A run that started muted never created/played its audio, and a biome
-    // change while muted only swapped currentTrack — so make sure the right
-    // track is actually playing once sound comes back.
     if (!muted && this.musicPlaying && !this.musicPaused && !this.crossfadeTimer) {
-      const audio = this.ensureMusicAudio(this.activeSlot, this.currentTrack);
-      audio.muted = false;
-      audio.volume = this.MUSIC_VOLUME;
-      if (audio.paused) audio.play().catch(() => {});
+      this.playCurrentTrack();
     }
+  }
+
+  /**
+   * Make sure the active slot is playing `currentTrack`. A run that started
+   * muted never created its audio, and a biome change while muted or paused
+   * only swapped `currentTrack` — so unmute and resume both go through here
+   * rather than just un-pausing whatever element the slot holds.
+   */
+  private playCurrentTrack(): void {
+    const audio = this.ensureMusicAudio(this.activeSlot, this.currentTrack);
+    audio.muted = false;
+    audio.volume = this.MUSIC_VOLUME;
+    if (audio.paused) audio.play().catch(() => {});
   }
 
   setSfxMuted(muted: boolean): void {
@@ -200,10 +209,7 @@ export class SoundManager {
   resumeMusic(): void {
     this.musicPaused = false;
     if (this.musicPlaying && !this.musicMuted) {
-      const active = this.getActiveAudio();
-      if (active && active.paused) {
-        active.play().catch(() => {});
-      }
+      this.playCurrentTrack();
     }
   }
 
@@ -212,8 +218,8 @@ export class SoundManager {
    * Ramps the active slot volume down while ramping the new slot up.
    */
   crossfadeTo(track: string, durationMs = 3000): void {
-    if (!this.musicPlaying || this.musicMuted) {
-      // Not playing — just switch track for next startMusic()
+    if (!this.musicPlaying || this.musicMuted || this.musicPaused) {
+      // Not audible — just switch track; startMusic/unmute/resume will play it
       this.currentTrack = track;
       return;
     }
@@ -280,39 +286,53 @@ export class SoundManager {
     const ctx = this.getCtx();
     const now = ctx.currentTime;
 
-    // Two-tone wee-woo siren — alternating 600/800 Hz every 0.3s. A square-wave
-    // LFO (±1 → ±100 Hz) drives both oscillators' frequency, so the siren keeps
-    // alternating for as long as it runs instead of a fixed schedule.
-    const lfo = ctx.createOscillator();
-    lfo.type = "square";
-    lfo.frequency.value = 1 / 0.6;
-    const lfoDepth = ctx.createGain();
-    lfoDepth.gain.value = 100;
-    lfo.connect(lfoDepth);
+    // Two-tone wee-woo siren — alternating 600/800 Hz every 0.3s. A
+    // ConstantSourceNode adds 0 or +200 Hz to both oscillators' frequency.
+    // Stepping it with setValueAtTime gives clean jumps (a square-wave LFO is
+    // band-limited and overshoots/rings at each edge, which sounds chirpy).
+    const step = ctx.createConstantSource();
+    step.offset.value = 0;
 
+    // Levels are set via .value (not automation) so stopSiren can read them
+    // back reliably as the start of its fade.
     const gain1 = ctx.createGain();
-    gain1.gain.setValueAtTime(0.18, now);
+    gain1.gain.value = 0.18;
     gain1.connect(ctx.destination);
     const osc1 = ctx.createOscillator();
     osc1.type = "sine";
-    osc1.frequency.value = 700;
-    lfoDepth.connect(osc1.frequency);
+    osc1.frequency.value = 600;
+    step.connect(osc1.frequency);
     osc1.connect(gain1);
 
     // Slight detuned second oscillator for richness
     const gain2 = ctx.createGain();
-    gain2.gain.setValueAtTime(0.08, now);
+    gain2.gain.value = 0.08;
     gain2.connect(ctx.destination);
     const osc2 = ctx.createOscillator();
     osc2.type = "sine";
-    osc2.frequency.value = 703;
-    lfoDepth.connect(osc2.frequency);
+    osc2.frequency.value = 603;
+    step.connect(osc2.frequency);
     osc2.connect(gain2);
 
-    lfo.start(now);
+    // Keep the tone switches scheduled ~1s ahead so timer jitter never shows
+    const SWITCH_S = 0.3;
+    const LOOKAHEAD_S = 1;
+    let nextSwitch = now;
+    let high = false;
+    const scheduleSwitches = () => {
+      while (nextSwitch < ctx.currentTime + LOOKAHEAD_S) {
+        step.offset.setValueAtTime(high ? 200 : 0, nextSwitch);
+        high = !high;
+        nextSwitch += SWITCH_S;
+      }
+    };
+    scheduleSwitches();
+    this.sirenScheduler = setInterval(scheduleSwitches, (LOOKAHEAD_S * 1000) / 2);
+
+    step.start(now);
     osc1.start(now);
     osc2.start(now);
-    this.sirenLfo = lfo;
+    this.sirenStep = step;
     this.sirenOsc1 = osc1;
     this.sirenOsc2 = osc2;
     this.sirenGain1 = gain1;
@@ -320,6 +340,10 @@ export class SoundManager {
   }
 
   stopSiren(): void {
+    if (this.sirenScheduler) {
+      clearInterval(this.sirenScheduler);
+      this.sirenScheduler = null;
+    }
     const ctx = this.ctx;
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -327,15 +351,16 @@ export class SoundManager {
     // Fade both voices before stopping so the siren doesn't end with a click
     for (const gain of [this.sirenGain1, this.sirenGain2]) {
       if (!gain) continue;
+      gain.gain.cancelScheduledValues(now);
       gain.gain.setValueAtTime(gain.gain.value, now);
       gain.gain.linearRampToValueAtTime(0, now + 0.15);
     }
-    for (const osc of [this.sirenOsc1, this.sirenOsc2, this.sirenLfo]) {
-      osc?.stop(now + 0.2);
+    for (const node of [this.sirenOsc1, this.sirenOsc2, this.sirenStep]) {
+      node?.stop(now + 0.2);
     }
     this.sirenOsc1 = null;
     this.sirenOsc2 = null;
-    this.sirenLfo = null;
+    this.sirenStep = null;
     this.sirenGain1 = null;
     this.sirenGain2 = null;
   }

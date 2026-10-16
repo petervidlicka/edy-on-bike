@@ -50,7 +50,9 @@ function warnOnce(error: unknown): void {
  */
 export function canVibrate(): boolean {
   if (typeof window === "undefined") return false;
-  return Capacitor.isNativePlatform() || typeof navigator.vibrate === "function";
+  // Desktop Chrome exposes navigator.vibrate too, but has nothing to vibrate; require a touch device
+  return Capacitor.isNativePlatform()
+    || (typeof navigator.vibrate === "function" && window.matchMedia("(pointer: coarse)").matches);
 }
 
 /**

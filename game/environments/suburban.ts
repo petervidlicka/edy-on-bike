@@ -1,4 +1,5 @@
 import { ObstacleType, type BackgroundElement } from "../types";
+import { pickPedestrian } from "./pedestrians";
 import { SUBURBAN_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
@@ -21,10 +22,11 @@ export const SUBURBAN_PALETTE: EnvironmentPalette = {
 
   // Background buildings
   buildings: [
-    { wall: "#c4aa90", roof: "#6a5548" },
-    { wall: "#b8988a", roof: "#7a5a4a" },
-    { wall: "#a8a098", roof: "#5a5a50" },
-    { wall: "#c0b098", roof: "#6a6058" },
+    { wall: "#e2d3b5", roof: "#5a4a40" }, // cream, brown tiles
+    { wall: "#9db4c8", roof: "#4f5560" }, // soft blue, slate
+    { wall: "#c47a5e", roof: "#4a3e38" }, // brick red, dark tiles
+    { wall: "#b5c49a", roof: "#5a5048" }, // sage, brown tiles
+    { wall: "#ece6dc", roof: "#6e4a3a" }, // white, terracotta
   ],
   windowGlass: "#b0c0cc",
   doorKnob: "#c8c0b8",
@@ -38,7 +40,6 @@ export const SUBURBAN_PALETTE: EnvironmentPalette = {
   creature: "#9a7a5a",
   creatureLeg: "#7a6048",
   creatureTail: "#c0a880",
-  person: "#5a5a6a",
 
   // Player
   player: {
@@ -69,6 +70,11 @@ export const SUBURBAN_PALETTE: EnvironmentPalette = {
     carWheel: "#2e2e2c",
     carHeadlight: "#e8d06a",
     carTaillight: "#c44040",
+    suv: "#4f6b74",
+    suvDark: "#3b525a",
+    van: "#e8e4dc",
+    vanDark: "#b9b3a8",
+    vanAccent: "#c47a42",
     bikeRider: "#5a4878",
     bikeFrame: "#7a6898",
     busStopFrame: "#3a7a6a",
@@ -108,9 +114,18 @@ function generateSuburbanElements(
 
     if (roll > 0.35) {
       // House (65% chance)
-      const variant = Math.floor(Math.random() * 3); // 0 = cottage, 1 = village, 2 = tall
-      const w = variant === 2 ? 40 + Math.random() * 15 : 50 + Math.random() * 30;
-      const h = variant === 2 ? 55 + Math.random() * 20 : 40 + Math.random() * 20;
+      // 0 = wide bungalow, 1 = two-storey, 2 = narrow townhouse, 3 = small church (rare)
+      const variant = Math.random() < 0.07 ? 3 : Math.floor(Math.random() * 3);
+      const w =
+        variant === 0 ? 72 + Math.random() * 18
+        : variant === 1 ? 50 + Math.random() * 12
+        : variant === 2 ? 30 + Math.random() * 8
+        : 62 + Math.random() * 10;
+      const h =
+        variant === 0 ? 30 + Math.random() * 8
+        : variant === 1 ? 50 + Math.random() * 10
+        : variant === 2 ? 58 + Math.random() * 12
+        : 34 + Math.random() * 6;
       const scheme =
         palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
       elements.push({
@@ -146,13 +161,12 @@ function generateSuburbanElements(
           });
           lastType = "deer";
         } else {
+          const person = pickPedestrian();
           elements.push({
             type: "walking_person",
             x: x - gap * 0.5,
-            y: groundY - 32 - vergeOffset,
-            width: 14,
-            height: 32,
-            color: palette.person,
+            y: groundY - person.height - vergeOffset,
+            ...person,
           });
           lastType = "walking_person";
         }
@@ -211,7 +225,10 @@ function suburbanWeightedTypes(elapsedMs: number): WeightedType[] {
   }
   // Stage 4 (40s): cars + other riders
   if (elapsedMs >= 40_000) {
-    types.push({ type: ObstacleType.CAR, weight: 1.0 });
+    // Traffic: split the old single car weight across three vehicle sizes.
+    types.push({ type: ObstacleType.CAR, weight: 0.4 });
+    types.push({ type: ObstacleType.SUV, weight: 0.35 });
+    types.push({ type: ObstacleType.DELIVERY_VAN, weight: 0.25 });
     types.push({ type: ObstacleType.PERSON_ON_BIKE, weight: 1.0 });
   }
   return types;

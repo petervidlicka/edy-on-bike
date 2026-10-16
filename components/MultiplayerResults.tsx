@@ -1,7 +1,7 @@
 "use client";
 
 /** End-of-race rankings, with Play Again (same room) and Leave. */
-import { RankingEntry } from "@/game/multiplayer/types";
+import type { RankingEntry, MAX_PLAYERS } from "@/game/multiplayer/protocol";
 
 interface MultiplayerResultsProps {
   rankings: RankingEntry[];
@@ -28,7 +28,8 @@ const glassBtn: React.CSSProperties = {
   fontFamily: "var(--font-nunito), Arial, sans-serif",
 };
 
-const MEDAL_LABELS = ["\u{1F947}", "\u{1F948}", "\u{1F949}", "4th"];
+/** One label per finishing place; sized to the room limit so a bigger room fails to compile until it's extended. */
+const MEDAL_LABELS = ["\u{1F947}", "\u{1F948}", "\u{1F949}", "4th"] as const satisfies { length: typeof MAX_PLAYERS };
 
 /** Rankings come from the server, so every player sees the same order and scores. */
 export default function MultiplayerResults({

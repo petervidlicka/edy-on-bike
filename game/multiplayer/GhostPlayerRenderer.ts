@@ -7,9 +7,13 @@ import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
 import { drawPlayer } from "../rendering/PlayerRenderer";
 import { getSkinById } from "../skins";
 import type { GhostPlayer } from "./MultiplayerAdapter";
+import type { MAX_PLAYERS } from "./protocol";
 
-/** Ghost tint colors — one per remote player slot. */
-const GHOST_TINTS = ["#4488ff", "#44cc66", "#aa66ff", "#ff8844"];
+/**
+ * Ghost tint colors — one per remote player slot. Sized to the room limit, so
+ * raising MAX_PLAYERS fails to compile until a colour is added here.
+ */
+const GHOST_TINTS = ["#4488ff", "#44cc66", "#aa66ff", "#ff8844"] as const satisfies { length: typeof MAX_PLAYERS };
 
 /**
  * A ghost that stops updating (crashed, tab hidden, network stall) fades out
@@ -80,7 +84,7 @@ export function drawGhostPlayer(
     rampSurfaceAngle: 0,
   };
 
-  const skin = getSkinById(ghost.skinId as "default");
+  const skin = getSkinById(ghost.skinId);
   const tintColor = GHOST_TINTS[ghost.slot % GHOST_TINTS.length];
 
   ctx.save();

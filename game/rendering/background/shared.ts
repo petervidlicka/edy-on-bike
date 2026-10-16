@@ -1,6 +1,7 @@
 import { BackgroundLayer } from "../../types";
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import { getTotalLayerWidth } from "../../Background";
+import { decodePedestrianVariant, SKIN_TONES, HAIR_COLORS } from "../../environments/pedestrians";
 
 // --- Sky ---
 
@@ -98,42 +99,127 @@ export function drawBackground(
   drawGround(ctx, canvasW, canvasH, groundY, layers[2].offset, palette);
 }
 
-// --- Walking person (simple side-view figure, shared across biomes) ---
+// --- Pedestrians (shared across biomes) ---
 
+/**
+ * Side-view walking figure facing right, mid-stride. `color` is the top, `bottomColor`
+ * the trousers or skirt; `variant` selects man / woman / child and the skin tone.
+ */
 export function drawWalkingPerson(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  color: string, palette: EnvironmentPalette
+  color: string, _palette: EnvironmentPalette,
+  bottomColor = "#3d405b", variant = 0
 ) {
-  // Head
-  ctx.fillStyle = palette.player.skin;
+  const { kind, skinIndex } = decodePedestrianVariant(variant);
+  const skin = SKIN_TONES[skinIndex];
+  const hair = HAIR_COLORS[skinIndex];
+  const isWoman = kind === "woman";
+  const isChild = kind === "child";
+
+  const cx = x + w * 0.5;
+  const headR = h * (isChild ? 0.11 : 0.08);
+  const headY = y + headR + h * 0.01;
+  const shoulderY = headY + headR + h * 0.04;
+  const hipY = y + h * (isChild ? 0.56 : 0.53);
+  const footY = y + h * 0.97;
+  const torsoW = w * (isChild ? 0.42 : 0.4);
+  const limb = Math.max(1.4, w * 0.15);
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Back arm and back leg (slightly darker, behind the body).
+  ctx.globalAlpha = 0.8;
+  ctx.strokeStyle = skin;
+  ctx.lineWidth = limb * 0.75;
   ctx.beginPath();
-  ctx.arc(x + w * 0.5, y + h * 0.1, h * 0.07, 0, Math.PI * 2);
+  ctx.moveTo(cx, shoulderY + 1);
+  ctx.lineTo(cx - w * 0.28, hipY - h * 0.02);
+  ctx.stroke();
+  ctx.strokeStyle = isWoman ? skin : bottomColor;
+  ctx.lineWidth = isWoman ? limb * 0.7 : limb;
+  ctx.beginPath();
+  ctx.moveTo(cx, hipY);
+  ctx.lineTo(cx - w * 0.08, (hipY + footY) / 2 + 1);
+  ctx.lineTo(cx - w * 0.26, footY - 1);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Front leg.
+  ctx.strokeStyle = isWoman ? skin : bottomColor;
+  ctx.lineWidth = isWoman ? limb * 0.7 : limb;
+  ctx.beginPath();
+  ctx.moveTo(cx, hipY);
+  ctx.lineTo(cx + w * 0.16, (hipY + footY) / 2);
+  ctx.lineTo(cx + w * 0.22, footY - 1);
+  ctx.stroke();
+
+  // Shoes.
+  ctx.fillStyle = "#2a2a2a";
+  for (const fx of [-0.26, 0.22]) {
+    ctx.beginPath();
+    ctx.ellipse(cx + w * fx + 1, footY - 0.6, limb * 0.75, limb * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Torso (top).
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx - torsoW / 2, shoulderY + 1);
+  ctx.quadraticCurveTo(cx, shoulderY - 1, cx + torsoW / 2, shoulderY + 1);
+  ctx.lineTo(cx + torsoW * 0.45, hipY);
+  ctx.lineTo(cx - torsoW * 0.45, hipY);
+  ctx.closePath();
   ctx.fill();
 
-  // Body
+  // Skirt for the woman.
+  if (isWoman) {
+    ctx.fillStyle = bottomColor;
+    ctx.beginPath();
+    ctx.moveTo(cx - torsoW * 0.45, hipY - 1);
+    ctx.lineTo(cx + torsoW * 0.45, hipY - 1);
+    ctx.lineTo(cx + w * 0.38, hipY + h * 0.2);
+    ctx.lineTo(cx - w * 0.38, hipY + h * 0.2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Front arm: sleeve then forearm.
   ctx.strokeStyle = color;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = limb;
   ctx.beginPath();
-  ctx.moveTo(x + w * 0.5, y + h * 0.17);
-  ctx.lineTo(x + w * 0.5, y + h * 0.52);
+  ctx.moveTo(cx, shoulderY + 1);
+  ctx.lineTo(cx + w * 0.12, shoulderY + h * 0.1);
+  ctx.stroke();
+  ctx.strokeStyle = skin;
+  ctx.lineWidth = limb * 0.75;
+  ctx.beginPath();
+  ctx.moveTo(cx + w * 0.12, shoulderY + h * 0.1);
+  ctx.lineTo(cx + w * 0.26, hipY - h * 0.03);
   ctx.stroke();
 
-  // Legs (walking pose)
-  ctx.lineWidth = 2;
+  // Head, hair.
+  ctx.fillStyle = skin;
   ctx.beginPath();
-  ctx.moveTo(x + w * 0.5, y + h * 0.52);
-  ctx.lineTo(x + w * 0.25, y + h * 0.92);
-  ctx.moveTo(x + w * 0.5, y + h * 0.52);
-  ctx.lineTo(x + w * 0.75, y + h * 0.92);
-  ctx.stroke();
+  ctx.arc(cx + w * 0.04, headY, headR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = hair;
+  ctx.beginPath();
+  ctx.arc(cx + w * 0.02, headY - headR * 0.15, headR * 1.02, Math.PI * 0.95, Math.PI * 2.05);
+  ctx.fill();
+  if (isWoman) {
+    // Longer hair falling behind to the shoulders.
+    ctx.beginPath();
+    ctx.moveTo(cx - headR * 0.9, headY - headR * 0.2);
+    ctx.quadraticCurveTo(cx - headR * 1.4, headY + headR * 1.4, cx - headR * 0.2, shoulderY + h * 0.06);
+    ctx.lineTo(cx + headR * 0.1, headY);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.fillRect(cx - headR * 0.9, headY - headR * 0.3, headR * 0.6, headR * 0.9);
+  }
 
-  // Arms (one forward, one back)
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.5, y + h * 0.28);
-  ctx.lineTo(x + w * 0.15, y + h * 0.48);
-  ctx.moveTo(x + w * 0.5, y + h * 0.28);
-  ctx.lineTo(x + w * 0.85, y + h * 0.44);
-  ctx.stroke();
+  ctx.restore();
 }

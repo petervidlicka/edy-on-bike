@@ -1,9 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useCallback, useState } from "react";
-import { Engine } from "@/game/Engine";
 import { GameState, ObstacleType } from "@/game/types";
-import { INITIAL_SPEED } from "@/game/constants";
 import { getSkinById, SKINS } from "@/game/skins";
 import { loadSkinState } from "@/game/storage";
 import StartScreen from "./StartScreen";
@@ -13,6 +11,8 @@ import GameOverScreen from "./GameOverScreen";
 import { useCheatCode } from "@/hooks/useCheatCode";
 import { useDebugObstaclesFlag } from "@/hooks/useDebugObstaclesFlag";
 import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
+import { useGameEngine } from "@/hooks/useGameEngine";
+import { useEngineInput } from "@/hooks/useEngineInput";
 import { useSavedSkinState, recordBestScore, unlockAllSkins } from "@/hooks/useSavedSkinState";
 
 const DEBUG_OBSTACLE_SEQUENCE = [
@@ -25,14 +25,7 @@ const DEBUG_OBSTACLE_SEQUENCE = [
 
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<Engine | null>(null);
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
-  const [score, setScore] = useState(0);
-  const [speed, setSpeed] = useState(INITIAL_SPEED);
-  const [musicMuted, setMusicMuted] = useState(false);
-  const [sfxMuted, setSfxMuted] = useState(false);
-  const [trickFeedback, setTrickFeedback] = useState<{ name: string; points: number; sketchy?: boolean } | null>(null);
-  const trickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newlyUnlockedSkins, setNewlyUnlockedSkins] = useState<string[]>([]);
   // ?obstacles=debug flag — off during prerender/hydration, then read from the URL
   const [debugObstacles, toggleDebugObstacles] = useDebugObstaclesFlag();
@@ -41,15 +34,9 @@ export default function GameCanvas() {
   const [skinState, chooseSkin] = useSavedSkinState();
   const { bestScore, cheatUnlocked, selectedSkinId } = skinState;
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const engine = new Engine(canvas, {
-      onScoreUpdate: setScore,
-      onSpeedUpdate: setSpeed,
+  const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
+    useGameEngine(canvasRef, {
       onGameOver: (finalScore) => {
-        setScore(finalScore);
         setGameState(GameState.GAME_OVER);
         // Determine newly unlocked skins before updating best score
         const previousBest = loadSkinState().bestScore;
@@ -59,101 +46,24 @@ export default function GameCanvas() {
         setNewlyUnlockedSkins(unlocked.map(s => s.name));
         recordBestScore(finalScore);
       },
-      onStateChange: (state) => {
-        setGameState(state);
-        if (state === GameState.RUNNING) {
-          setSpeed(INITIAL_SPEED);
-        }
-      },
-      onTrickLanded: (trickName, points, sketchy) => {
-        if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
-        setTrickFeedback({ name: trickName, points, sketchy });
-        trickTimeoutRef.current = setTimeout(() => setTrickFeedback(null), 2000);
-      },
+      onStateChange: setGameState,
     });
-    engineRef.current = engine;
-
-    const handleResize = () => {
-      engine.resize(window.innerWidth, window.innerHeight);
-    };
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      engine.destroy();
-      engineRef.current = null;
-      window.removeEventListener("resize", handleResize);
-      if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
-    };
-  }, []);
 
   // Sync skin to engine on mount, after hydration swaps in the saved skin, and on selection
   useEffect(() => {
     engineRef.current?.setSkin(getSkinById(selectedSkinId));
-  }, [selectedSkinId]);
+  }, [engineRef, selectedSkinId]);
 
   // Sync debug obstacle sequence to engine the same way (URL flag is read after hydration)
   useEffect(() => {
     engineRef.current?.setDebugObstacles(debugObstacles ? DEBUG_OBSTACLE_SEQUENCE : null, 700);
-  }, [debugObstacles]);
+  }, [engineRef, debugObstacles]);
 
   const handleRestart = useCallback(() => {
     engineRef.current?.restart();
-  }, []);
+  }, [engineRef]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.code === "Space") {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-
-      e.preventDefault();
-      const engine = engineRef.current;
-      if (!engine) return;
-      const state = engine.getState();
-      if (state === GameState.IDLE || state === GameState.RUNNING) {
-        engine.jump();
-      }
-    }
-    if (e.code === "ArrowDown" || e.code === "ArrowUp" || e.code === "ArrowLeft" || e.code === "ArrowRight") {
-      e.preventDefault();
-      if (e.repeat) return; // prevent key-repeat from queueing extra tricks
-      if (e.code === "ArrowDown") engineRef.current?.backflip();
-      else if (e.code === "ArrowUp") engineRef.current?.frontflip();
-      else if (e.code === "ArrowLeft") engineRef.current?.superman();
-      else if (e.code === "ArrowRight") engineRef.current?.noHander();
-    }
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
-
-  const handleTouch = useCallback((e: TouchEvent) => {
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === "INPUT" || tag === "BUTTON") return;
-    e.preventDefault();
-    const engine = engineRef.current;
-    if (!engine) return;
-    const state = engine.getState();
-    if (state === GameState.IDLE || state === GameState.RUNNING) {
-      engine.jump();
-    }
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.addEventListener("touchstart", handleTouch, { passive: false });
-    return () => canvas.removeEventListener("touchstart", handleTouch);
-  }, [handleTouch]);
-
-  useEffect(() => {
-    engineRef.current?.setMusicMuted(musicMuted);
-  }, [musicMuted]);
-
-  useEffect(() => {
-    engineRef.current?.setSfxMuted(sfxMuted);
-  }, [sfxMuted]);
+  useEngineInput(engineRef, canvasRef, { allowIdleStart: true });
 
   // IDKFA cheat code — unlock all skins
   useCheatCode("IDKFA", unlockAllSkins);
@@ -161,7 +71,7 @@ export default function GameCanvas() {
   // IDDQD cheat code — guaranteed ambulance resurrection
   const handleIddqd = useCallback(() => {
     engineRef.current?.activateIddqd();
-  }, []);
+  }, [engineRef]);
   useCheatCode("IDDQD", handleIddqd);
 
   // Pause when tab is hidden or device is in portrait (mobile)
@@ -198,8 +108,8 @@ export default function GameCanvas() {
           trickFeedback={trickFeedback}
           musicMuted={musicMuted}
           sfxMuted={sfxMuted}
-          onToggleMusic={() => setMusicMuted((m) => !m)}
-          onToggleSfx={() => setSfxMuted((m) => !m)}
+          onToggleMusic={toggleMusic}
+          onToggleSfx={toggleSfx}
           onJump={() => engineRef.current?.jump()}
           onBackflip={() => engineRef.current?.backflip()}
           onFrontflip={() => engineRef.current?.frontflip()}

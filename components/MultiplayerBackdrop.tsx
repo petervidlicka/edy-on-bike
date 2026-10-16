@@ -6,9 +6,9 @@
  * for the sky, like the single-player start screen) is unreadable.
  */
 import { useEffect, useRef } from "react";
-import { Engine } from "@/game/Engine";
 import { getSkinById } from "@/game/skins";
 import type { SkinId } from "@/game/types";
+import { useGameEngine } from "@/hooks/useGameEngine";
 
 interface MultiplayerBackdropProps {
   /** Rider shown on the road — the player's current pick. */
@@ -21,31 +21,11 @@ interface MultiplayerBackdropProps {
  */
 export default function MultiplayerBackdrop({ skinId }: MultiplayerBackdropProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<Engine | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const engine = new Engine(canvas, {
-      onScoreUpdate: () => {},
-      onGameOver: () => {},
-      onStateChange: () => {},
-    });
-    engineRef.current = engine;
-
-    const handleResize = () => engine.resize(window.innerWidth, window.innerHeight);
-    window.addEventListener("resize", handleResize);
-    return () => {
-      engine.destroy();
-      engineRef.current = null;
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
+  const { engineRef } = useGameEngine(canvasRef);
 
   useEffect(() => {
     engineRef.current?.setSkin(getSkinById(skinId));
-  }, [skinId]);
+  }, [engineRef, skinId]);
 
   return (
     <canvas

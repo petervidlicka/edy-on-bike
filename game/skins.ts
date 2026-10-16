@@ -39,7 +39,7 @@ export const SKINS: SkinDefinition[] = [
     unlockScore: 400,
     colors: {
       wheel: "#3a3a3a",
-      frame: "#d4722a",
+      frame: "#2f7a3e",
       helmet: "#f5f0e8",
       skin: "#c8a882",
       shirt: "#6a8a5a",

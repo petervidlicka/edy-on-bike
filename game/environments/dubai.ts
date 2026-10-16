@@ -1,4 +1,5 @@
 import { ObstacleType, type BackgroundElement } from "../types";
+import { pickPedestrian } from "./pedestrians";
 import { DUBAI_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
@@ -38,7 +39,6 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
   creature: "#c8a870",
   creatureLeg: "#a08858",
   creatureTail: "#b89868",
-  person: "#e8e0d8",
 
   // Player
   player: {
@@ -105,9 +105,15 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
     chocolate: "#5a3a20",
     chocolateDark: "#3a2210",
     chocolateWrapper: "#d4a844",
-    lamboGreen: "#2d8a35",
-    lamboGreenDark: "#1e6a25",
+    lamboGreen: "#86c232", // Verde Mantis
+    lamboGreenDark: "#5e8f1f",
     lamboWindow: "#2a3a4a",
+    ferrariRed: "#d11f1f", // Rosso Corsa
+    ferrariRedDark: "#9a1414",
+    convertible: "#1f5fbf",
+    convertibleDark: "#164586",
+    porsche: "#2fa8c9", // Miami Blue
+    porscheDark: "#1f7d97",
     billboardFrame: "#a0a0a0",
     billboardPost: "#5a5a5a",
   },
@@ -160,17 +166,17 @@ function generateDubaiElements(
           w = 30 + Math.random() * 10;
           h = 390 + Math.random() * 130;
           break;
-        case 6: // Museum of the Future — wide oval, half the height of generic
-          w = 60 + Math.random() * 20;
-          h = 48 + Math.random() * 16;
+        case 6: // Museum of the Future — steel torus on a mound, a bit wider than tall
+          w = 66 + Math.random() * 16;
+          h = 56 + Math.random() * 14;
           break;
         case 7: // Burj Al Arab — sail shape, very tall
           w = 50 + Math.random() * 15;
           h = 225 + Math.random() * 50;
           break;
-        case 8: // Dubai Frame — two pillars with bridge, very tall
-          w = 45 + Math.random() * 10;
+        case 8: // Dubai Frame — two towers with a sky bridge, ~0.6 wide : 1 tall like the real one
           h = 200 + Math.random() * 50;
+          w = h * 0.6;
           break;
         default:
           w = 35 + Math.random() * 25;
@@ -236,13 +242,12 @@ function generateDubaiElements(
           });
           lastType = "bg_camel";
         } else {
+          const person = pickPedestrian();
           elements.push({
             type: "walking_person",
             x: x - gap * 0.5,
-            y: groundY - 32 - vergeOffset,
-            width: 14,
-            height: 32,
-            color: palette.person,
+            y: groundY - person.height - vergeOffset,
+            ...person,
           });
           lastType = "walking_person";
         }
@@ -286,12 +291,16 @@ function dubaiWeightedTypes(biomeMs: number): WeightedType[] {
     { type: ObstacleType.LAND_CRUISER, weight: 0.3 },
     { type: ObstacleType.PINK_G_CLASS, weight: 0.2 },
   ];
-  // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + lambo + billboard
+  // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + supercars + billboard
   if (biomeMs >= 15_000) {
     types.push({ type: ObstacleType.STRAIGHT_RAMP, weight: 0.4 });
     types.push({ type: ObstacleType.CURVED_RAMP, weight: 0.4 });
     types.push({ type: ObstacleType.DUBAI_CHOCOLATE, weight: 0.7 });
     types.push({ type: ObstacleType.LAMBORGHINI_HURACAN, weight: 0.5 });
+    types.push({ type: ObstacleType.FERRARI_458, weight: 0.4 });
+    types.push({ type: ObstacleType.CONVERTIBLE, weight: 0.4 });
+    types.push({ type: ObstacleType.ROLLS_ROYCE_PHANTOM, weight: 0.3 });
+    types.push({ type: ObstacleType.PORSCHE_911, weight: 0.4 });
     types.push({ type: ObstacleType.DUBAI_BILLBOARD, weight: 0.4 });
     for (const t of types) {
       if (t.type === ObstacleType.LAND_CRUISER) t.weight = 0.7;
@@ -304,6 +313,10 @@ function dubaiWeightedTypes(biomeMs: number): WeightedType[] {
       if (t.type === ObstacleType.LAND_CRUISER) t.weight = 1.0;
       if (t.type === ObstacleType.PINK_G_CLASS) t.weight = 0.7;
       if (t.type === ObstacleType.LAMBORGHINI_HURACAN) t.weight = 0.8;
+      if (t.type === ObstacleType.FERRARI_458) t.weight = 0.6;
+      if (t.type === ObstacleType.CONVERTIBLE) t.weight = 0.6;
+      if (t.type === ObstacleType.ROLLS_ROYCE_PHANTOM) t.weight = 0.5;
+      if (t.type === ObstacleType.PORSCHE_911) t.weight = 0.6;
       if (t.type === ObstacleType.DUBAI_CHOCOLATE) t.weight = 1.0;
     }
   }

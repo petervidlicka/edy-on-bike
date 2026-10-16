@@ -47,6 +47,7 @@ import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
+import { voiceCueFor } from "./voiceLines";
 import { createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
 import {
   beginCrash, createCrashPopText, createCrashState, crashPopFor, drawCrash, pickVariant, stepCrash, tickCrashAnim,
@@ -184,6 +185,8 @@ export class Engine {
     this.state = GameState.RUNNING;
     this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng));
     this.sound.startMusic();
+    // First user gesture: the one place the voice clips may be fetched and decoded
+    this.sound.voice.preload();
     this.callbacks.onStateChange(this.state);
     this.emit({ type: "runStart" });
   }
@@ -693,6 +696,8 @@ export class Engine {
    * who listens.
    */
   private emit(event: GameEvent): void {
+    const cue = voiceCueFor(event);
+    if (cue) this.sound.voice.say(cue.event, { variant: cue.variant });
     if (event.type === "trickLanded") {
       this.callbacks.onTrickLanded?.(event.label, event.points, event.sketchy, event.multiplier);
     }
@@ -791,6 +796,16 @@ export class Engine {
   getState(): GameState {
     return this.state;
   }
+  /**
+   * Edy's voice line for a moment only React can detect (the engine knows neither the saved
+   * best score nor the unlock thresholds). Plays through the same rules as engine events, except
+   * that it waits for a line still playing (usually the crash line at game over) instead of being dropped.
+   * @param moment - "newBest" at game over with a personal best, "skinUnlocked" when a bike unlocks mid-run.
+   */
+  announce(moment: "newBest" | "skinUnlocked"): void {
+    this.sound.voice.say(moment, { wait: true });
+  }
+
   /** Plays the in-run "bike unlocked" chime (respects the SFX mute). */
   playUnlockChime(): void {
     this.sound.playUnlock();
@@ -823,6 +838,7 @@ export class Engine {
     this.pauseReasons.add(reason);
     if (!wasPaused) {
       cancelAnimationFrame(this.rafId);
+      this.sound.voice.stop();
       if (this.state === GameState.RUNNING) {
         this.sound.pauseMusic();
         this.sound.stopGrind();

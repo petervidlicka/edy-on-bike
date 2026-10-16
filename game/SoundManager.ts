@@ -6,6 +6,7 @@ import {
   GRIND_SOUND_Q,
 } from "./constants";
 import type { CrashVariantId } from "./crashes/types";
+import { VoiceManager } from "./VoiceManager";
 
 export class SoundManager {
   // AudioContext is created lazily on first play to satisfy browser autoplay policy
@@ -42,6 +43,16 @@ export class SoundManager {
   private currentTrack = "/music.mp3";
   /** Target volume when music is playing (not muted). */
   private readonly MUSIC_VOLUME = 0.45;
+  /** Multiplier on the music volume (1 = normal); dips while a voice line plays. */
+  private musicDuck = 1;
+  private duckTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** Edy's voice lines. Shares this manager's AudioContext, SFX mute and music ducking. */
+  readonly voice = new VoiceManager({
+    getContext: () => this.getCtx(),
+    isMuted: () => this.sfxMuted,
+    duckMusic: (level, rampMs) => this.duckMusic(level, rampMs),
+  });
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
@@ -57,6 +68,42 @@ export class SoundManager {
     return this.activeSlot === "A" ? this.musicAudioA : this.musicAudioB;
   }
 
+  /** Music volume right now: the base volume scaled by the current duck. */
+  private musicLevel(): number {
+    return this.MUSIC_VOLUME * this.musicDuck;
+  }
+
+  /**
+   * Eases the music volume to `level` times normal, used to make room for voice lines. A
+   * crossfade drives the volumes itself and reads the duck on every tick, so while one runs
+   * only the duck factor changes here.
+   * @param level - 1 for normal volume, below 1 to duck.
+   * @param rampMs - Time to reach it; 0 jumps there.
+   */
+  private duckMusic(level: number, rampMs: number): void {
+    if (this.duckTimer) {
+      clearInterval(this.duckTimer);
+      this.duckTimer = null;
+    }
+    const from = this.musicDuck;
+    const startedAt = performance.now();
+    const step = () => {
+      const t = rampMs <= 0 ? 1 : Math.min((performance.now() - startedAt) / rampMs, 1);
+      this.musicDuck = from + (level - from) * t;
+      const active = this.getActiveAudio();
+      if (active && !this.crossfadeTimer) active.volume = this.musicLevel();
+      if (t >= 1 && this.duckTimer) {
+        clearInterval(this.duckTimer);
+        this.duckTimer = null;
+      }
+    };
+    if (rampMs <= 0) {
+      step();
+      return;
+    }
+    this.duckTimer = setInterval(step, 30);
+  }
+
   private ensureMusicAudio(slot: "A" | "B", track: string): HTMLAudioElement {
     if (slot === "A") {
       if (!this.musicAudioA || this.musicAudioA.src !== new URL(track, location.href).href) {
@@ -66,7 +113,7 @@ export class SoundManager {
         }
         this.musicAudioA = new Audio(track);
         this.musicAudioA.loop = true;
-        this.musicAudioA.volume = this.MUSIC_VOLUME;
+        this.musicAudioA.volume = this.musicLevel();
       }
       return this.musicAudioA;
     } else {
@@ -77,7 +124,7 @@ export class SoundManager {
         }
         this.musicAudioB = new Audio(track);
         this.musicAudioB.loop = true;
-        this.musicAudioB.volume = this.MUSIC_VOLUME;
+        this.musicAudioB.volume = this.musicLevel();
       }
       return this.musicAudioB;
     }
@@ -101,7 +148,7 @@ export class SoundManager {
   private playCurrentTrack(): void {
     const audio = this.ensureMusicAudio(this.activeSlot, this.currentTrack);
     audio.muted = false;
-    audio.volume = this.MUSIC_VOLUME;
+    audio.volume = this.musicLevel();
     if (audio.paused) audio.play().catch(() => {});
   }
 
@@ -111,6 +158,7 @@ export class SoundManager {
     if (muted) {
       this.stopGrind();
       this.stopCrashSounds();
+      this.voice.stop();
     }
   }
 
@@ -353,7 +401,7 @@ export class SoundManager {
     if (this.musicMuted) return;
     const audio = this.ensureMusicAudio(this.activeSlot, this.currentTrack);
     audio.currentTime = 0;
-    audio.volume = this.MUSIC_VOLUME;
+    audio.volume = this.musicLevel();
     audio.play().catch(() => {});
   }
 
@@ -423,9 +471,9 @@ export class SoundManager {
       const t = Math.min(step / steps, 1);
 
       if (oldAudio) {
-        oldAudio.volume = this.MUSIC_VOLUME * (1 - t);
+        oldAudio.volume = this.musicLevel() * (1 - t);
       }
-      newAudio.volume = this.MUSIC_VOLUME * t;
+      newAudio.volume = this.musicLevel() * t;
 
       if (t >= 1) this.completeCrossfade();
     }, stepMs);
@@ -705,6 +753,9 @@ export class SoundManager {
   }
 
   destroy(): void {
+    this.voice.destroy();
+    if (this.duckTimer) clearInterval(this.duckTimer);
+    this.duckTimer = null;
     this.stopSiren();
     this.stopGrind();
     this.stopCrashSounds();
@@ -723,6 +774,7 @@ export class SoundManager {
 
   /** Full reset: stop music and revert to the default suburban track. Call on game restart. */
   reset(): void {
+    this.voice.stop();
     this.stopGrind();
     this.stopCrashSounds();
     this.stopMusic();
@@ -739,7 +791,7 @@ export class SoundManager {
       this.crossfadeFrom = null;
     }
     const active = this.getActiveAudio();
-    if (active) active.volume = this.MUSIC_VOLUME;
+    if (active) active.volume = this.musicLevel();
   }
 
   private cancelCrossfade(): void {

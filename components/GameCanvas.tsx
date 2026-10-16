@@ -48,13 +48,16 @@ export default function GameCanvas() {
 
   const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
     useGameEngine(canvasRef, {
-      onGameOver: (finalScore) => {
+      onGameOver: (finalScore, engine) => {
         setGameState(GameState.GAME_OVER);
         // Remember the best from before this run so the unlock bar can animate from it
         const savedBest = loadSkinState().bestScore;
         setPreviousBest(savedBest);
         // Same rule as the game-over header's "New personal best!" line
-        if (finalScore > 0 && finalScore >= savedBest) haptic("success");
+        if (finalScore > 0 && finalScore >= savedBest) {
+          haptic("success");
+          engine.announce("newBest");
+        }
         recordBestScore(finalScore);
       },
       onStateChange: setGameState,

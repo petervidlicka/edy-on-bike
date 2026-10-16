@@ -10,6 +10,7 @@
     "build:mobile": "CAPACITOR_BUILD=1 NEXT_PUBLIC_API_URL=https://edyonbike.com next build && npx cap sync",
     "cap:ios": "npx cap open ios",
     "cap:android": "npx cap open android",
+    "voice:manifest": "node scripts/voice-manifest.mjs",
     "cap:assets": "npx @capacitor/assets generate --iconBackgroundColor '#18181b' --splashBackgroundColor '#18181b'"
   },
   "dependencies": {

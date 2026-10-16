@@ -85,7 +85,8 @@ export function haptic(kind: HapticKind): void {
   try {
     if (Capacitor.isNativePlatform()) {
       playNative(kind).catch(warnOnce);
-    } else if (typeof navigator.vibrate === "function") {
+    } else if (typeof navigator.vibrate === "function" && navigator.userActivation?.hasBeenActive !== false) {
+      // Chrome refuses (and logs an error) until the page has had a real tap
       navigator.vibrate(WEB_PATTERN[kind]);
     }
   } catch (error) {

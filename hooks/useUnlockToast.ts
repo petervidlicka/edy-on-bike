@@ -2,7 +2,7 @@
  * In-run "bike unlocked" toast. The target tier is fixed at run start from the saved
  * best; nothing is persisted mid-run (`recordBestScore` at game over stays the source of truth).
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Engine } from "@/game/Engine";
 import { GameState } from "@/game/types";
 import { getNextUnlock } from "@/game/skins";
@@ -38,6 +38,11 @@ export function useUnlockToast(
     savedRef.current = { bestScore, cheatUnlocked };
   });
 
+  const resetTarget = useCallback(() => {
+    const next = getNextUnlock(savedRef.current.bestScore, savedRef.current.cheatUnlocked);
+    targetScoreRef.current = next ? next.skin.unlockScore : null;
+  }, []);
+
   // Compute the first target once per run start. RUNNING is also re-entered after an
   // ambulance revive; recomputing there would re-announce bikes already passed this run.
   const prevStateRef = useRef(gameState);
@@ -45,9 +50,20 @@ export function useUnlockToast(
     const prev = prevStateRef.current;
     prevStateRef.current = gameState;
     if (gameState !== GameState.RUNNING || prev === GameState.AMBULANCE) return;
-    const next = getNextUnlock(savedRef.current.bestScore, savedRef.current.cheatUnlocked);
-    targetScoreRef.current = next ? next.skin.unlockScore : null;
-  }, [gameState]);
+    resetTarget();
+  }, [gameState, resetTarget]);
+
+  // A restart from the pause menu goes RUNNING -> IDLE -> RUNNING in one batch, so the state
+  // effect above never sees it; the score dropping back is what marks the new run there.
+  const lastScoreRef = useRef(score);
+  useEffect(() => {
+    const dropped = score < lastScoreRef.current;
+    lastScoreRef.current = score;
+    if (!dropped) return;
+    resetTarget();
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    setMessage(null);
+  }, [score, resetTarget]);
 
   useEffect(() => {
     if (gameState !== GameState.RUNNING) return;

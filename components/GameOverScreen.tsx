@@ -28,6 +28,9 @@ interface GameOverScreenProps {
 
 type View = "summary" | "form" | "leaderboard";
 
+/** Longest the screen waits for the leaderboard before settling on the one-tap replay layout. */
+const LEADERBOARD_FETCH_GRACE_MS = 1500;
+
 /**
  * @param props - Run result, saved best, skin info and the restart / home actions.
  * @example
@@ -35,13 +38,20 @@ type View = "summary" | "form" | "leaderboard";
  */
 export default function GameOverScreen({ score, bestScore, skinName, newlyUnlockedSkins, onRestart, onHome }: GameOverScreenProps) {
   const board = useGameOverLeaderboard();
-  const locked = useInputLockout(GAME_OVER_LOCKOUT_MS);
+  const lockoutActive = useInputLockout(GAME_OVER_LOCKOUT_MS);
+  // Give a slow leaderboard fetch a little longer, so the layout doesn't flip under the player's finger
+  const fetchGraceActive = useInputLockout(LEADERBOARD_FETCH_GRACE_MS);
+  const locked = lockoutActive || (board.status === "loading" && fetchGraceActive);
   /** An explicit choice by the player; until then the view follows whether the score qualifies. */
   const [chosenView, setChosenView] = useState<View | null>(null);
   const [saved, setSaved] = useState<{ name: string; score: number } | null>(null);
 
   const qualifies = board.status === "ready" && scoreQualifies(score, board.entries);
   const view: View = chosenView ?? (qualifies ? "form" : "summary");
+
+  // Freeze the layout once input unlocks; a fetch landing later must not swap the screen
+  // (adjusting state during render, React's pattern for state derived from a transition)
+  if (!locked && chosenView === null) setChosenView(qualifies ? "form" : "summary");
 
   const handleSaved = useCallback(
     async (name: string) => {

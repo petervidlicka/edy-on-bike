@@ -27,6 +27,47 @@ export const RAMP_GRAVITY_MULTIPLIER = 0.5;
 export const DOUBLE_CHAIN_BONUS = 100;
 export const TRIPLE_CHAIN_BONUS = 200;
 export const COMBO_MULTIPLIER = 2;
+/** A landing worth at least this many points counts as a "big" trick in game events. */
+export const BIG_TRICK_POINTS = 150;
+
+// Combo chain (trick landings linked across jumps). Tune these by playing.
+/** Time on the ground the player has to land the next trick before the chain ends. */
+export const COMBO_WINDOW_MS = 2500;
+/** Multiplier gained per extra link: 1 link = x1, 2 links = x1.5, 3 = x2, ... */
+export const COMBO_STEP = 0.5;
+/** The multiplier never grows past this. */
+export const COMBO_MAX_MULTIPLIER = 4;
+/** A chain only gets a summary / "combo ended" event from this many links on. */
+export const COMBO_MIN_LINKS_FOR_SUMMARY = 2;
+/** Screen flash when a link raises the multiplier to at least this. */
+export const COMBO_FLASH_MULTIPLIER = 3;
+/** Confetti burst when a link raises the multiplier to at least this (the cap by default). */
+export const COMBO_CONFETTI_MULTIPLIER = COMBO_MAX_MULTIPLIER;
+/** Meter pop animation: starts at this scale and settles to 1 over COMBO_PULSE_MS. */
+export const COMBO_PULSE_SCALE = 1.3;
+export const COMBO_PULSE_MS = 200;
+/** Peak opacity and fade time of the white screen flash. */
+export const COMBO_FLASH_ALPHA = 0.28;
+export const COMBO_FLASH_MS = 220;
+export const COMBO_CONFETTI_COUNT = 48;
+/** Combo step sound: pitch rises this many semitones per link, for at most COMBO_PITCH_MAX_STEPS links. */
+export const COMBO_PITCH_SEMITONES_PER_LINK = 1.5;
+export const COMBO_PITCH_MAX_STEPS = 7;
+
+/**
+ * Largest bonus one landing can pay before any chain multiplier: three pose cycles
+ * plus three flips landed together (MAX_FLIP_COUNT caps both in Player.ts), the
+ * triple chain bonus, and the pose+flip combo multiplier. Mirrors the scoring in
+ * TrickSystem.evaluateComboLanding; the multiplayer server derives its score limits
+ * from this, so keep them in step if trick scoring changes.
+ */
+export const MAX_TRICK_LANDING_BONUS =
+  (MAX_FLIP_COUNT * Math.max(SUPERMAN_BONUS, NO_HANDER_BONUS) +
+    MAX_FLIP_COUNT * BACKFLIP_BONUS +
+    Math.max(DOUBLE_CHAIN_BONUS, TRIPLE_CHAIN_BONUS)) *
+  COMBO_MULTIPLIER;
+/** Largest points a single landing can pay once a full-multiplier chain is running. */
+export const MAX_CHAIN_LANDING_BONUS = MAX_TRICK_LANDING_BONUS * COMBO_MAX_MULTIPLIER;
 
 // Crash animation
 export const CRASH_DURATION = 1.2; // seconds

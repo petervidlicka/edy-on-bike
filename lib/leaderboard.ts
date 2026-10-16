@@ -26,17 +26,33 @@ const SKIN_HASH_KEY = "edy-on-bike:leaderboard:skins";
 // --- Upstash Redis store ---
 
 /**
- * Reads Upstash credentials, accepting both the Vercel KV / Marketplace names
- * (`KV_REST_API_*`) and the plain Upstash names (`UPSTASH_REDIS_REST_*`).
- * The store and the API rate limiter both use this, so they can never
- * disagree about whether Redis is available.
+ * Env var name pairs for the Upstash REST URL and token, in priority order.
+ * `storage_KV_*` comes first: the current Vercel Marketplace connection uses
+ * that prefix, while the unprefixed `KV_*` vars are left over from a deleted
+ * database. Then the plain Upstash names (`UPSTASH_REDIS_REST_*`).
+ */
+const REDIS_ENV_CANDIDATES = [
+  ["storage_KV_REST_API_URL", "storage_KV_REST_API_TOKEN"],
+  ["KV_REST_API_URL", "KV_REST_API_TOKEN"],
+  ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
+] as const;
+
+/**
+ * Reads Upstash credentials from the first complete env var pair in
+ * {@link REDIS_ENV_CANDIDATES}. URL and token are taken from the same pair so
+ * a new URL is never combined with a stale token. The store and the API rate
+ * limiter both use this, so they can never disagree about whether Redis is
+ * available.
  *
  * @returns The REST URL and token, or `null` when Redis is not configured.
  */
 export function getRedisConfig(): RedisConfig | null {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  return url && token ? { url, token } : null;
+  for (const [urlVar, tokenVar] of REDIS_ENV_CANDIDATES) {
+    const url = process.env[urlVar];
+    const token = process.env[tokenVar];
+    if (url && token) return { url, token };
+  }
+  return null;
 }
 
 // undefined = not created yet; null = Redis not configured

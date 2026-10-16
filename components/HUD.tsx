@@ -1,6 +1,7 @@
 import { INITIAL_SPEED } from "@/game/constants";
 import { formatMultiplier } from "@/game/ComboChain";
 import type { TrickFeedbackData } from "@/hooks/useGameEngine";
+import { useCanVibrate } from "@/hooks/useHapticFeedback";
 
 /** Guards against browsers firing both onTouchStart and onClick. */
 let lastTouchTime = 0;
@@ -16,6 +17,9 @@ interface HUDProps {
   sfxMuted: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  /** Vibration setting; the toggle only shows on devices that can vibrate. */
+  vibrationOn: boolean;
+  onToggleVibration: () => void;
   /** Pauses the run; shows a pause button next to the audio toggles. */
   onPause?: () => void;
   onJump: () => void;
@@ -78,6 +82,25 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   );
 }
 
+function VibrationIcon({ off }: { off: boolean }) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="8" y="4" width="8" height="16" rx="1.5" />
+      <path d="M4 8v8M20 8v8" />
+      {off && <line x1="3" y1="3" x2="21" y2="21" strokeWidth="2.5" />}
+    </svg>
+  );
+}
+
 function PauseIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -128,7 +151,7 @@ function ArrowSVG({ points }: { points: string }) {
 }
 
 /**
- * Music/SFX toggles, top left. Extracted so the multiplayer race screen can reuse
+ * Music/SFX/vibration toggles, top left (vibration only where the device can vibrate). Extracted so the multiplayer race screen can reuse
  * them and append its own buttons (e.g. LEAVE) via children.
  */
 export function AudioControls({
@@ -136,15 +159,20 @@ export function AudioControls({
   sfxMuted,
   onToggleMusic,
   onToggleSfx,
+  vibrationOn,
+  onToggleVibration,
   children,
 }: {
   musicMuted: boolean;
   sfxMuted: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  vibrationOn: boolean;
+  onToggleVibration: () => void;
   /** Extra buttons appended to the same top-left row (e.g. multiplayer's Leave). */
   children?: React.ReactNode;
 }) {
+  const canVibrate = useCanVibrate();
   return (
     <div
       style={{
@@ -169,6 +197,15 @@ export function AudioControls({
       >
         <SpeakerIcon muted={sfxMuted} />
       </button>
+      {canVibrate && (
+        <button
+          onClick={onToggleVibration}
+          title={vibrationOn ? "Vibration off" : "Vibration on"}
+          style={btnStyle}
+        >
+          <VibrationIcon off={!vibrationOn} />
+        </button>
+      )}
       {children}
     </div>
   );
@@ -273,6 +310,8 @@ export default function HUD({
   sfxMuted,
   onToggleMusic,
   onToggleSfx,
+  vibrationOn,
+  onToggleVibration,
   onPause,
   onJump,
   onBackflip,
@@ -327,6 +366,8 @@ export default function HUD({
         sfxMuted={sfxMuted}
         onToggleMusic={onToggleMusic}
         onToggleSfx={onToggleSfx}
+        vibrationOn={vibrationOn}
+        onToggleVibration={onToggleVibration}
       >
         {onPause && (
           <button onClick={onPause} title="Pause (Esc or P)" style={btnStyle}>

@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { Engine } from "@/game/Engine";
+import { useCanVibrate } from "@/hooks/useHapticFeedback";
 import { glassBtn } from "./sharedStyles";
 
 /** Time each countdown number stays on screen (3 numbers = 1.5 s total). */
@@ -19,6 +20,8 @@ interface PauseMenuProps {
   sfxMuted: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  vibrationOn: boolean;
+  onToggleVibration: () => void;
 }
 
 /**
@@ -27,9 +30,18 @@ interface PauseMenuProps {
  * without also jumping, Esc/P resume or cancel the countdown).
  * @param props - Engine ref plus audio state and toggles to mirror the HUD.
  * @example
- * {userPaused && <PauseMenu engineRef={engineRef} musicMuted={m} sfxMuted={s} onToggleMusic={tm} onToggleSfx={ts} />}
+ * {userPaused && <PauseMenu engineRef={engineRef} musicMuted={m} sfxMuted={s} onToggleMusic={tm} onToggleSfx={ts} vibrationOn={v} onToggleVibration={tv} />}
  */
-export function PauseMenu({ engineRef, musicMuted, sfxMuted, onToggleMusic, onToggleSfx }: PauseMenuProps) {
+export function PauseMenu({
+  engineRef,
+  musicMuted,
+  sfxMuted,
+  onToggleMusic,
+  onToggleSfx,
+  vibrationOn,
+  onToggleVibration,
+}: PauseMenuProps) {
+  const canVibrate = useCanVibrate();
   const [countdown, setCountdown] = useState<number | null>(null);
 
   // Tick 3 → 2 → 1, then hand control back to the engine.
@@ -150,6 +162,11 @@ export function PauseMenu({ engineRef, musicMuted, sfxMuted, onToggleMusic, onTo
             <button onClick={onToggleSfx} style={{ ...glassBtn, padding: "0.4rem 1rem", fontSize: "0.8rem" }}>
               Sound: {sfxMuted ? "Off" : "On"}
             </button>
+            {canVibrate && (
+              <button onClick={onToggleVibration} style={{ ...glassBtn, padding: "0.4rem 1rem", fontSize: "0.8rem" }}>
+                Vibration: {vibrationOn ? "On" : "Off"}
+              </button>
+            )}
           </div>
         </>
       )}

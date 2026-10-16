@@ -11,6 +11,7 @@ import { getSkinById } from "@/game/skins";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
 import { SeededRNG } from "@/game/multiplayer/SeededRNG";
 import { PlayerInfo } from "@/game/multiplayer/protocol";
+import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 import { AudioControls, TrickFeedbackPopup, TrickDpad, btnStyle } from "./HUD";
 import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
 import { useGameEngine } from "@/hooks/useGameEngine";
@@ -47,10 +48,12 @@ export default function MultiplayerGameCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** Local rider is out but others may still be racing — show a waiting state with a way out. */
   const [crashed, setCrashed] = useState(false);
+  const { onGameEvent, vibrationOn, toggleVibration } = useHapticFeedback();
   const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
     useGameEngine(canvasRef, {
       // Engine already calls adapter.sendCrashed() in its gameOver() method
       onGameOver: () => setCrashed(true),
+      onGameEvent,
       createEngineOptions: () => ({ rng: new SeededRNG(seed), multiplayer: adapter }),
       onEngineCreated: (engine) => {
         const localPlayer = players.find((p) => p.id === localPlayerId);
@@ -114,6 +117,8 @@ export default function MultiplayerGameCanvas({
         sfxMuted={sfxMuted}
         onToggleMusic={toggleMusic}
         onToggleSfx={toggleSfx}
+        vibrationOn={vibrationOn}
+        onToggleVibration={toggleVibration}
       >
         <button
           onClick={onLeave}

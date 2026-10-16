@@ -32,8 +32,43 @@ export interface ClassicCrashData {
   kind: "classic";
 }
 
+/** Head-first plant into the road after a bad trick landing. */
+export interface FaceplantCrashData {
+  kind: "faceplant";
+  /** Hip position when the crash started (where the dive launches from). */
+  startX: number;
+  startY: number;
+  /** Where the head ends up buried, and the surface it is buried in. */
+  plantX: number;
+  surfaceY: number;
+  /** -1 falls back flat on the face (under-rotated), +1 somersaults over onto the back (over-rotated). */
+  tipDir: 1 | -1;
+}
+
+/** Snagged by the back of the shirt in a tree crown, dangling and swinging. */
+export interface TreeHangData {
+  kind: "treeHang";
+  startX: number;
+  startY: number;
+  /** The branch the rider hooks on, centre of the crown. */
+  hookX: number;
+  hookY: number;
+  /** Bounding box and type of the tree that was hit; used to repaint foliage over the rider. */
+  tree: Pick<ObstacleInstance, "type" | "x" | "y" | "width" | "height">;
+}
+
+/** Bounces off a car roof like a trampoline and ends up spread-eagle on it. */
+export interface CarBonkData {
+  kind: "carBonk";
+  startX: number;
+  startY: number;
+  /** Roof contact: x the rider lands on and the y of the roof line. */
+  roofX: number;
+  roofY: number;
+}
+
 /** Variant-specific state, discriminated on `kind`. */
-export type CrashVariantData = ClassicCrashData;
+export type CrashVariantData = ClassicCrashData | FaceplantCrashData | TreeHangData | CarBonkData;
 
 /** Identifier of a variant; also what the `crash` game event reports. */
 export type CrashVariantId = CrashVariantData["kind"];

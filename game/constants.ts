@@ -93,6 +93,8 @@ export const CRASH_DURATION = 1.2; // seconds
 export const CRASH_GRAVITY = 0.45;
 export const CRASH_BOUNCE_DAMPING = 0.35;
 export const CRASH_SHAKE_INITIAL = 8; // pixels
+/** Share of crashes that play the classic tumble even when a more specific variant fits. */
+export const CRASH_CLASSIC_CHANCE = 0.25;
 
 // Ambulance
 export const AMBULANCE_CHANCE = 0.25;

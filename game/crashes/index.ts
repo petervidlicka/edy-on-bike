@@ -5,9 +5,12 @@
  */
 import { CRASH_DURATION } from "../constants";
 import { crashFadeAlpha, drawCrashBike } from "../rendering/CrashRenderer";
+import { carBonkCrash } from "./carBonk";
 import { classicCrash } from "./classic";
+import { faceplantCrash } from "./faceplant";
 import { drawCrashStars } from "./garnish";
 import { resetCrashClock, stepShake } from "./physics";
+import { treeHangCrash } from "./treeHang";
 import type {
   CrashDrawEnv,
   CrashInitContext,
@@ -34,6 +37,9 @@ export type {
 export function crashPopFor(id: CrashVariantId): CrashPopText {
   switch (id) {
     case "classic": return classicCrash.pop;
+    case "faceplant": return faceplantCrash.pop;
+    case "treeHang": return treeHangCrash.pop;
+    case "carBonk": return carBonkCrash.pop;
   }
 }
 
@@ -60,6 +66,9 @@ export function createCrashState(): CrashState {
 export function beginCrash(cs: CrashState, id: CrashVariantId, ctx: CrashInitContext): void {
   switch (id) {
     case "classic": start(cs, classicCrash, ctx); break;
+    case "faceplant": start(cs, faceplantCrash, ctx); break;
+    case "treeHang": start(cs, treeHangCrash, ctx); break;
+    case "carBonk": start(cs, carBonkCrash, ctx); break;
   }
 }
 
@@ -85,6 +94,9 @@ export function stepCrash(cs: CrashState, dt: number, rawDt: number, groundY: nu
   const step = { dt, groundY };
   switch (cs.data.kind) {
     case "classic": classicCrash.update(cs, cs.data, step); break;
+    case "faceplant": faceplantCrash.update(cs, cs.data, step); break;
+    case "treeHang": treeHangCrash.update(cs, cs.data, step); break;
+    case "carBonk": carBonkCrash.update(cs, cs.data, step); break;
   }
   return false;
 }
@@ -116,6 +128,18 @@ export function drawCrash(ctx: CanvasRenderingContext2D, cs: CrashState, env: Cr
     case "classic":
       classicCrash.drawRider(ctx, cs, cs.data, env);
       head = classicCrash.headAnchor(cs, cs.data);
+      break;
+    case "faceplant":
+      faceplantCrash.drawRider(ctx, cs, cs.data, env);
+      head = faceplantCrash.headAnchor(cs, cs.data);
+      break;
+    case "treeHang":
+      treeHangCrash.drawRider(ctx, cs, cs.data, env);
+      head = treeHangCrash.headAnchor(cs, cs.data);
+      break;
+    case "carBonk":
+      carBonkCrash.drawRider(ctx, cs, cs.data, env);
+      head = carBonkCrash.headAnchor(cs, cs.data);
       break;
   }
   drawCrashStars(ctx, head, cs.anim - cs.starsFrom);

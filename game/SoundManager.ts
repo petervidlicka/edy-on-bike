@@ -5,6 +5,7 @@ import {
   GRIND_SOUND_GAIN,
   GRIND_SOUND_Q,
 } from "./constants";
+import type { CrashVariantId } from "./crashes/types";
 
 export class SoundManager {
   // AudioContext is created lazily on first play to satisfy browser autoplay policy
@@ -131,8 +132,153 @@ export class SoundManager {
     osc.stop(now + 0.09);
   }
 
-  playCrash(): void {
+  /**
+   * The crash sound for a variant: the classic thud for the plain tumble, a wet splat for
+   * the faceplant, a wooden bonk plus rustling leaves for the tree, and springy boings
+   * timed to the bounces on the car roof. All respect the SFX mute.
+   * @param variant - The crash animation that is about to play.
+   */
+  playCrash(variant: CrashVariantId = "classic"): void {
     if (this.sfxMuted) return;
+    switch (variant) {
+      case "faceplant": this.playSplat(); break;
+      case "treeHang": this.playBonk(); break;
+      case "carBonk": this.playBoing(); break;
+      case "classic": this.playClassicCrash(); break;
+    }
+  }
+
+  /** A buffer of white noise, `seconds` long. */
+  private noiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
+    const size = Math.ceil(ctx.sampleRate * seconds);
+    const buffer = ctx.createBuffer(1, size, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < size; i++) data[i] = Math.random() * 2 - 1;
+    return buffer;
+  }
+
+  /** One sine blip that falls (or rises) in pitch while it fades, the building block of the thumps. */
+  private sweep(ctx: AudioContext, type: OscillatorType, from: number, to: number, at: number, length: number, level: number): void {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(from, at);
+    osc.frequency.exponentialRampToValueAtTime(to, at + length);
+    gain.gain.setValueAtTime(level, at);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + length);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(at);
+    osc.stop(at + length);
+  }
+
+  /** Faceplant: a dull wet smack of band-passed noise, a body thump and a short squelch. */
+  private playSplat(): void {
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer(ctx, 0.25);
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 900;
+    band.Q.value = 0.8;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.7, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    noise.connect(band);
+    band.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start(now);
+
+    this.sweep(ctx, "sine", 170, 45, now, 0.22, 0.65);
+    // Squelch: a low saw sliding down through a muffling filter
+    const squelch = ctx.createOscillator();
+    const squelchFilter = ctx.createBiquadFilter();
+    const squelchGain = ctx.createGain();
+    squelch.type = "sawtooth";
+    squelch.frequency.setValueAtTime(260, now + 0.04);
+    squelch.frequency.exponentialRampToValueAtTime(95, now + 0.26);
+    squelchFilter.type = "lowpass";
+    squelchFilter.frequency.value = 700;
+    squelchGain.gain.setValueAtTime(0.22, now + 0.04);
+    squelchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+    squelch.connect(squelchFilter);
+    squelchFilter.connect(squelchGain);
+    squelchGain.connect(ctx.destination);
+    squelch.start(now + 0.04);
+    squelch.stop(now + 0.26);
+  }
+
+  /** Tree hang: a hollow wooden bonk, then a short rustle of leaves shaken loose. */
+  private playBonk(): void {
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+
+    this.sweep(ctx, "sine", 300, 140, now, 0.18, 0.65);
+    this.sweep(ctx, "triangle", 640, 330, now, 0.1, 0.25);
+
+    // Leaves: bright noise whose level flutters in quick random steps and dies away
+    const leaves = ctx.createBufferSource();
+    leaves.buffer = this.noiseBuffer(ctx, 0.8);
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 4800;
+    band.Q.value = 0.7;
+    const gain = ctx.createGain();
+    const rustleStart = now + 0.1;
+    gain.gain.setValueAtTime(0.001, now);
+    for (let i = 0; i < 16; i++) {
+      const fade = 1 - i / 16;
+      gain.gain.setValueAtTime((0.03 + Math.random() * 0.09) * fade + 0.002, rustleStart + i * 0.04);
+    }
+    gain.gain.setValueAtTime(0.001, rustleStart + 0.68);
+    leaves.connect(band);
+    band.connect(gain);
+    gain.connect(ctx.destination);
+    leaves.start(now);
+  }
+
+  /** Car bonk: a dull knock on the car, then rising springy boings as the rider lands and rebounds. */
+  private playBoing(): void {
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+
+    this.sweep(ctx, "sine", 130, 55, now, 0.14, 0.6);
+    // Landings on the roof come at 0.42, 1.04 and 1.42 s (see carBonk.ts); each rebound is a rising sweep
+    const boings = [
+      { at: 0.4, from: 190, to: 640, rise: 0.34, level: 0.42 },
+      { at: 1.02, from: 230, to: 560, rise: 0.22, level: 0.3 },
+      { at: 1.4, from: 280, to: 480, rise: 0.12, level: 0.2 },
+    ];
+    for (const b of boings) {
+      const t = now + b.at;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      // Wobble the pitch with a fast vibrato so it twangs like a spring
+      const vibrato = ctx.createOscillator();
+      const vibratoDepth = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(b.from, t);
+      osc.frequency.exponentialRampToValueAtTime(b.to, t + b.rise);
+      vibrato.frequency.value = 26;
+      vibratoDepth.gain.setValueAtTime(b.from * 0.1, t);
+      vibratoDepth.gain.linearRampToValueAtTime(b.to * 0.04, t + b.rise);
+      vibrato.connect(vibratoDepth);
+      vibratoDepth.connect(osc.frequency);
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(b.level, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + b.rise + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      vibrato.start(t);
+      osc.stop(t + b.rise + 0.2);
+      vibrato.stop(t + b.rise + 0.2);
+    }
+  }
+
+  private playClassicCrash(): void {
     const ctx = this.getCtx();
     const now = ctx.currentTime;
 

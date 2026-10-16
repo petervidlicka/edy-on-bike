@@ -20,12 +20,15 @@ import { useGameEngine } from "@/hooks/useGameEngine";
 import { useEngineInput } from "@/hooks/useEngineInput";
 import { useSavedSkinState, recordBestScore, unlockAllSkins } from "@/hooks/useSavedSkinState";
 
+/**
+ * ?obstacles=debug course: ramps and rideables for grinds, then one of each crash-variant
+ * trigger (trees, a hatchback, a van, a low sports car). Jump a trick and land it badly for the faceplant.
+ */
 const DEBUG_OBSTACLE_SEQUENCE = [
-  ObstacleType.STRAIGHT_RAMP, ObstacleType.STRAIGHT_RAMP,
-  ObstacleType.CURVED_RAMP, ObstacleType.CURVED_RAMP,
-  ObstacleType.SHIPPING_CONTAINER, ObstacleType.SHIPPING_CONTAINER,
-  ObstacleType.CONTAINER_WITH_RAMP, ObstacleType.CONTAINER_WITH_RAMP,
-  ObstacleType.BUS_STOP, ObstacleType.BUS_STOP,
+  ObstacleType.STRAIGHT_RAMP, ObstacleType.CURVED_RAMP,
+  ObstacleType.SHIPPING_CONTAINER, ObstacleType.CONTAINER_WITH_RAMP, ObstacleType.BUS_STOP,
+  ObstacleType.SMALL_TREE, ObstacleType.TALL_TREE, ObstacleType.GIANT_TREE,
+  ObstacleType.CAR, ObstacleType.DELIVERY_VAN, ObstacleType.PORSCHE_911,
 ];
 
 export default function GameCanvas() {

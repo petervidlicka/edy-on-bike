@@ -461,7 +461,7 @@ export class Engine {
     this.confetti = [];
     this.state = GameState.CRASHING;
     this.sound.stopMusic();
-    this.sound.playCrash();
+    this.sound.playCrash(variant);
     beginCrash(this.crashState, variant, { player: this.player, speed: this.speed, groundY: this.groundY, cause });
     this.floatingTexts.push(
       createCrashPopText(crashPopFor(variant), { x: this.player.x + this.player.width / 2 + 18, y: this.player.y - 36 }, this.canvasW),

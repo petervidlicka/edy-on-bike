@@ -34,43 +34,35 @@ export function useGameOverLeaderboard(): GameOverLeaderboard {
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
-  const reload = useCallback(async () => {
-    try {
-      const data = await fetchLeaderboard();
-      if (!mountedRef.current) return;
-      setEntries(data.scores);
-      setTotalPlayers(data.totalPlayers);
-      setError(null);
-      setStatus("ready");
-    } catch (err) {
-      console.error("[leaderboard] Loading scores failed", err);
-      if (!mountedRef.current) return;
-      setError(err instanceof LeaderboardError ? err.message : "Couldn't load the leaderboard. Please try again later.");
-      setStatus("error");
-    }
+  // Shared by the first load and later reloads; both ignore results that land after unmount
+  const applyBoard = useCallback((data: Awaited<ReturnType<typeof fetchLeaderboard>>) => {
+    if (!mountedRef.current) return;
+    setEntries(data.scores);
+    setTotalPlayers(data.totalPlayers);
+    setError(null);
+    setStatus("ready");
   }, []);
+
+  const applyFailure = useCallback((err: unknown) => {
+    console.error("[leaderboard] Loading scores failed", err);
+    if (!mountedRef.current) return;
+    setError(err instanceof LeaderboardError ? err.message : "Couldn't load the leaderboard. Please try again later.");
+    setStatus("error");
+  }, []);
+
+  const reload = useCallback(
+    () => fetchLeaderboard().then(applyBoard, applyFailure),
+    [applyBoard, applyFailure],
+  );
 
   useEffect(() => {
     mountedRef.current = true;
     // Promise chain (not a direct reload() call) so state is only set from a callback
-    fetchLeaderboard().then(
-      (data) => {
-        if (!mountedRef.current) return;
-        setEntries(data.scores);
-        setTotalPlayers(data.totalPlayers);
-        setStatus("ready");
-      },
-      (err: unknown) => {
-        console.error("[leaderboard] Loading scores failed", err);
-        if (!mountedRef.current) return;
-        setError(err instanceof LeaderboardError ? err.message : "Couldn't load the leaderboard. Please try again later.");
-        setStatus("error");
-      },
-    );
+    fetchLeaderboard().then(applyBoard, applyFailure);
     return () => {
       mountedRef.current = false;
     };
-  }, []);
+  }, [applyBoard, applyFailure]);
 
   return { status, entries, totalPlayers, error, reload };
 }

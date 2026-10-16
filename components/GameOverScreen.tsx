@@ -87,7 +87,8 @@ export default function GameOverScreen({ score, bestScore, skinName, previousBes
       {view === "summary" && (
         <GameOverSummary
           locked={locked}
-          leaderboardFailed={board.status === "error"}
+          // A board that arrives after the layout froze can still turn out to qualify
+          offerSave={board.status === "error" || qualifies}
           onRestart={onRestart}
           onShowLeaderboard={() => setChosenView("leaderboard")}
           onSaveScore={() => setChosenView("form")}

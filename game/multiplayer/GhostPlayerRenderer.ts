@@ -19,6 +19,21 @@ const GHOST_FADE_START_MS = 300;
 const GHOST_FADE_DURATION_MS = 700;
 
 /**
+ * Canvas `ctx.font` can't resolve CSS variables, and next/font hashes the
+ * Nunito family name, so read the resolved family off <body> once and cache
+ * the two label fonts.
+ */
+let labelFonts: { name: string; score: string } | null = null;
+
+function getLabelFonts(): { name: string; score: string } {
+  if (!labelFonts) {
+    const family = getComputedStyle(document.body).fontFamily || "Arial, sans-serif";
+    labelFonts = { name: `bold 11px ${family}`, score: `10px ${family}` };
+  }
+  return labelFonts;
+}
+
+/**
  * Draws a ghost (remote) player semi-transparently.
  * Constructs a mock PlayerState from the interpolated snapshot
  * and reuses the existing drawPlayer() renderer.
@@ -76,14 +91,15 @@ export function drawGhostPlayer(
   // Name label above ghost
   ctx.globalAlpha = 0.7 * fade;
   ctx.fillStyle = tintColor;
-  ctx.font = "bold 11px var(--font-nunito), Arial, sans-serif";
+  const fonts = getLabelFonts();
+  ctx.font = fonts.name;
   ctx.textAlign = "center";
   const labelX = playerX + PLAYER_WIDTH / 2;
   const labelY = y - 12;
   ctx.fillText(ghost.name, labelX, labelY);
 
   // Score below name
-  ctx.font = "10px var(--font-nunito), Arial, sans-serif";
+  ctx.font = fonts.score;
   ctx.fillStyle = "#ffffff";
   ctx.globalAlpha = 0.5 * fade;
   ctx.fillText(String(snap.s), labelX, labelY + 12);

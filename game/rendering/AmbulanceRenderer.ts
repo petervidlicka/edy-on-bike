@@ -1,145 +1,100 @@
 import { AmbulanceState } from "../types";
+import { drawVehicle, roundedPath, type Pt, type VehicleColors } from "./vehicle";
 
+/** The ambulance looks the same in every biome, so it carries its own glass, tyre and lamp colours. */
+const AMBULANCE_COLORS: VehicleColors = {
+  carWindow: "#8abcd4",
+  carWheel: "#2e2e2c",
+  carTaillight: "#c44040",
+  carHeadlight: "#e8d06a",
+};
+
+/**
+ * European-style ambulance on a high-roof Mercedes Sprinter–type van: white body,
+ * green/yellow Battenburg chequer band, blue Star of Life and blue roof beacons
+ * that alternate while the siren runs.
+ */
 export function drawAmbulance(ctx: CanvasRenderingContext2D, amb: AmbulanceState) {
   const { x, y, width: w, height: h } = amb;
 
+  const outline: Pt[] = [[0.005, 0.86], [0.0, 0.14], [0.02, 0.09], [0.69, 0.09], [0.72, 0.17], [0.8, 0.18], [0.9, 0.46], [0.985, 0.54], [1.0, 0.68], [0.995, 0.86]];
+  drawVehicle(ctx, x, y, w, h, AMBULANCE_COLORS, {
+    body: "#f6f5f1",
+    bodyDark: "#c9c6bd",
+    cladding: "#8d8f92",
+    outline,
+    windows: [[0.725, 0.45], [0.725, 0.22], [0.79, 0.22], [0.865, 0.45]],
+    pillars: [],
+    wheels: [0.16, 0.81],
+    wheelR: 8.5,
+    claddingFrom: 0.8,
+    tailLight: [0.0, 0.62, 0.02, 0.12],
+    headLight: [0.955, 0.56, 0.04, 0.07],
+  });
+
   ctx.save();
 
-  // Shadow under ambulance
-  ctx.fillStyle = "rgba(0,0,0,0.15)";
+  // Battenburg chequer band, clipped to the body.
+  roundedPath(ctx, outline.map(([fx, fy]) => ({ x: x + w * fx, y: y + h * fy })), 3);
+  ctx.clip();
+  const bandTop = y + h * 0.5;
+  const cell = h * 0.075;
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; x + i * cell * 1.6 < x + w * 0.9; i++) {
+      ctx.fillStyle = (i + row) % 2 === 0 ? "#f2cf1d" : "#1f8a4c";
+      ctx.fillRect(x + i * cell * 1.6, bandTop + row * cell, cell * 1.6, cell);
+    }
+  }
+  // Rear door seam and sliding-door seam.
+  ctx.strokeStyle = "#c9c6bd";
+  ctx.lineWidth = 0.8;
   ctx.beginPath();
-  ctx.ellipse(x + w * 0.5, y + h + 2, w * 0.45, 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Main body — white van
-  ctx.fillStyle = "#f0f0f0";
-  ctx.beginPath();
-  ctx.moveTo(x + 4, y + 8);
-  ctx.lineTo(x + w - 20, y + 8);
-  ctx.quadraticCurveTo(x + w - 16, y + 8, x + w - 16, y + 12);
-  ctx.lineTo(x + w - 16, y + h - 12);
-  ctx.lineTo(x + 4, y + h - 12);
-  ctx.quadraticCurveTo(x, y + h - 12, x, y + h - 16);
-  ctx.lineTo(x, y + 12);
-  ctx.quadraticCurveTo(x, y + 8, x + 4, y + 8);
-  ctx.fill();
-
-  // Cabin (front section) — slightly darker
-  ctx.fillStyle = "#e4e4e4";
-  ctx.fillRect(x + w - 35, y + 10, 19, h - 22);
-
-  // Windshield
-  ctx.fillStyle = "#8abcd4";
-  ctx.beginPath();
-  ctx.moveTo(x + w - 16, y + 12);
-  ctx.lineTo(x + w - 8, y + 16);
-  ctx.lineTo(x + w - 8, y + h - 22);
-  ctx.lineTo(x + w - 16, y + h - 18);
-  ctx.closePath();
-  ctx.fill();
-  // Windshield reflection
-  ctx.fillStyle = "rgba(255,255,255,0.3)";
-  ctx.fillRect(x + w - 15, y + 14, 4, 8);
-
-  // Red stripe along the side
-  ctx.fillStyle = "#c44040";
-  ctx.fillRect(x + 6, y + h * 0.45, w - 42, 6);
-
-  // Red cross
-  const crossX = x + w * 0.3;
-  const crossY = y + h * 0.28;
-  ctx.fillStyle = "#c44040";
-  ctx.fillRect(crossX - 6, crossY - 2, 12, 4);
-  ctx.fillRect(crossX - 2, crossY - 6, 4, 12);
-
-  // "AMBULANCE" text
-  ctx.fillStyle = "#c44040";
-  ctx.font = "bold 7px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("AMBULANCE", x + w * 0.35, y + h * 0.65);
-
-  // Roof light bar
-  ctx.fillStyle = "#d0d0d0";
-  ctx.fillRect(x + w * 0.3, y + 4, 30, 5);
-
-  // Flashing sirens on roof — red/blue alternate
-  const flash = amb.sirenFlash;
-  const isRedPhase = Math.floor(flash / 150) % 2 === 0;
-  // Left siren
-  ctx.fillStyle = isRedPhase ? "#ff2020" : "#2040ff";
-  ctx.beginPath();
-  ctx.arc(x + w * 0.33, y + 6, 4, 0, Math.PI * 2);
-  ctx.fill();
-  // Right siren (opposite color)
-  ctx.fillStyle = isRedPhase ? "#2040ff" : "#ff2020";
-  ctx.beginPath();
-  ctx.arc(x + w * 0.33 + 22, y + 6, 4, 0, Math.PI * 2);
-  ctx.fill();
-  // Siren glow
-  ctx.save();
-  ctx.globalAlpha = 0.25;
-  ctx.fillStyle = isRedPhase ? "#ff2020" : "#2040ff";
-  ctx.beginPath();
-  ctx.arc(x + w * 0.33, y + 6, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = isRedPhase ? "#2040ff" : "#ff2020";
-  ctx.beginPath();
-  ctx.arc(x + w * 0.33 + 22, y + 6, 8, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(x + w * 0.5, y + h * 0.14);
+  ctx.lineTo(x + w * 0.5, y + h * 0.8);
+  ctx.stroke();
   ctx.restore();
 
-  // Wheels
-  const wheelR = 7;
-  const wheelY = y + h - 10;
-  ctx.fillStyle = "#2e2e2e";
-  ctx.beginPath();
-  ctx.arc(x + 22, wheelY, wheelR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x + w - 28, wheelY, wheelR, 0, Math.PI * 2);
-  ctx.fill();
-  // Hubcaps
-  ctx.fillStyle = "#8a8a8a";
-  ctx.beginPath();
-  ctx.arc(x + 22, wheelY, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x + w - 28, wheelY, 3.5, 0, Math.PI * 2);
-  ctx.fill();
+  // Rear box window.
+  ctx.fillStyle = "#8ab4cc";
+  ctx.fillRect(x + w * 0.53, y + h * 0.2, w * 0.12, h * 0.18);
 
-  // Headlights
-  ctx.fillStyle = "#e8d06a";
+  // Star of Life on the box side.
+  const scx = x + w * 0.27;
+  const scy = y + h * 0.3;
+  const arm = h * 0.11;
+  ctx.fillStyle = "#1f5fb0";
+  for (let i = 0; i < 3; i++) {
+    ctx.save();
+    ctx.translate(scx, scy);
+    ctx.rotate((i * Math.PI) / 3);
+    ctx.fillRect(-arm * 0.32, -arm, arm * 0.64, arm * 2);
+    ctx.restore();
+  }
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 0.9;
   ctx.beginPath();
-  ctx.arc(x + w - 8, y + h - 20, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-  // Taillights
-  ctx.fillStyle = "#c44040";
-  ctx.beginPath();
-  ctx.arc(x + 3, y + h - 20, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Front bumper
-  ctx.fillStyle = "#8a8a8a";
-  ctx.fillRect(x + w - 10, y + h - 14, 6, 3);
-  // Rear bumper
-  ctx.fillRect(x - 2, y + h - 14, 6, 3);
-
-  // Body outline
-  ctx.strokeStyle = "#aaa";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + 4, y + 8);
-  ctx.lineTo(x + w - 20, y + 8);
-  ctx.quadraticCurveTo(x + w - 16, y + 8, x + w - 16, y + 12);
-  ctx.lineTo(x + w - 16, y + h - 12);
-  ctx.lineTo(x + 4, y + h - 12);
-  ctx.quadraticCurveTo(x, y + h - 12, x, y + h - 16);
-  ctx.lineTo(x, y + 12);
-  ctx.quadraticCurveTo(x, y + 8, x + 4, y + 8);
+  ctx.moveTo(scx, scy - arm * 0.75);
+  ctx.lineTo(scx, scy + arm * 0.75);
   ctx.stroke();
 
-  ctx.restore();
+  // Blue beacons: front light bar over the cab and a rear corner lamp, alternating.
+  const phase = Math.floor(amb.sirenFlash / 150) % 2 === 0;
+  const beacon = (bx: number, bw: number, on: boolean) => {
+    ctx.fillStyle = on ? "#3d7bff" : "#1d3f8f";
+    ctx.fillRect(bx, y + h * 0.03, bw, h * 0.065);
+    if (on) {
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = "#5c90ff";
+      ctx.beginPath();
+      ctx.ellipse(bx + bw / 2, y + h * 0.06, bw * 0.9, h * 0.12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+  beacon(x + w * 0.6, w * 0.045, phase);
+  beacon(x + w * 0.65, w * 0.045, !phase);
+  beacon(x + w * 0.015, w * 0.035, !phase);
 }
 
 export function drawReviveFlash(ctx: CanvasRenderingContext2D, opacity: number, w: number, h: number) {

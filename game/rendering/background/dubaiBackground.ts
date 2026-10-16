@@ -62,152 +62,247 @@ function drawBurjKhalifa(
   }
 }
 
-// Museum of the Future: torus/oval shape
+// Museum of the Future: a stainless-steel torus with an off-centre void, its skin
+// pierced by flowing Arabic-calligraphy windows, sitting on a green landscaped mound.
 function drawMuseumOfFuture(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  wallColor: string, roofColor: string, palette: EnvironmentPalette
+  _wallColor: string, _roofColor: string, palette: EnvironmentPalette
 ) {
-  const cx = x + w / 2;
-  const cy = y + h * 0.5;
+  const cx = x + w * 0.5;
+  const cy = y + h * 0.44;
+  const rx = w * 0.46;
+  const ry = h * 0.41;
+  const tilt = -0.12;
+  const hx = cx + w * 0.04;
+  const hy = cy - h * 0.03;
+  const hrx = w * 0.25;
+  const hry = h * 0.19;
 
-  // Outer ring
-  ctx.fillStyle = wallColor;
+  // Landscaped mound and glass podium under the ring.
+  ctx.fillStyle = "#7fa35a";
   ctx.beginPath();
-  ctx.ellipse(cx, cy, w * 0.48, h * 0.45, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, y + h * 0.97, w * 0.5, h * 0.12, 0, Math.PI, 0);
   ctx.fill();
+  ctx.fillStyle = palette.windowGlass;
+  ctx.fillRect(cx - w * 0.18, y + h * 0.84, w * 0.36, h * 0.08);
 
-  // Inner void (sky color to simulate hole)
-  ctx.fillStyle = palette.sky;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, w * 0.28, h * 0.22, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Surface decoration lines (Arabic calligraphy suggestion)
-  ctx.strokeStyle = roofColor;
-  ctx.lineWidth = 0.6;
-  for (let i = 0; i < 5; i++) {
-    const angle = -0.4 + i * 0.2;
+  // The ring itself: outer ellipse minus the void, so sky shows through.
+  const ring = () => {
     ctx.beginPath();
-    ctx.ellipse(cx, cy, w * (0.35 + i * 0.02), h * (0.32 + i * 0.02), angle, 0.3, 2.8);
-    ctx.stroke();
-  }
+    ctx.ellipse(cx, cy, rx, ry, tilt, 0, Math.PI * 2);
+    ctx.ellipse(hx, hy, hrx, hry, tilt - 0.08, 0, Math.PI * 2);
+  };
+  ctx.fillStyle = "#cdd3d8";
+  ring();
+  ctx.fill("evenodd");
 
-  // Outline
-  ctx.strokeStyle = roofColor;
+  ctx.save();
+  ring();
+  ctx.clip("evenodd");
+  // Brushed-steel shading: darker underside, bright band across the top.
+  const shade = ctx.createLinearGradient(0, cy - ry * 0.2, 0, cy + ry);
+  shade.addColorStop(0, "rgba(70,80,92,0)");
+  shade.addColorStop(1, "rgba(70,80,92,0.4)");
+  ctx.fillStyle = shade;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = "rgba(255,255,255,0.45)";
+  ctx.beginPath();
+  ctx.ellipse(cx - w * 0.06, cy - ry * 0.72, rx * 0.7, ry * 0.12, tilt, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Calligraphy windows: short flowing strokes that follow the ring.
+  ctx.strokeStyle = "#3b5161";
+  ctx.lineCap = "round";
+  for (let i = 0; i < 46; i++) {
+    const t = (i / 46) * Math.PI * 2;
+    const band = 0.35 + 0.5 * ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+    const len = 0.18 + 0.22 * ((Math.sin(i * 78.233) * 9631.17) % 1 + 1) % 1;
+    const r1x = hrx + (rx - hrx) * band;
+    const r1y = hry + (ry - hry) * band;
+    ctx.lineWidth = 0.5 + (i % 3) * 0.25;
+    ctx.beginPath();
+    ctx.ellipse(cx + (hx - cx) * (1 - band), cy + (hy - cy) * (1 - band), r1x, r1y, tilt, t, t + len);
+    ctx.stroke();
+    if (i % 4 === 0) {
+      // Little dots and flicks like diacritics.
+      const px = cx + Math.cos(t + len / 2) * r1x * 0.97;
+      const py = cy + Math.sin(t + len / 2) * r1y * 0.92;
+      ctx.fillStyle = "#3b5161";
+      ctx.fillRect(px, py, 0.9, 0.9);
+    }
+  }
+  ctx.restore();
+
+  // Crisp rims on the outer edge and the void.
+  ctx.strokeStyle = "#a9b2ba";
   ctx.lineWidth = 0.8;
   ctx.beginPath();
-  ctx.ellipse(cx, cy, w * 0.48, h * 0.45, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy, rx, ry, tilt, 0, Math.PI * 2);
   ctx.stroke();
-
-  // Base/pedestal
-  ctx.fillStyle = roofColor;
-  ctx.fillRect(cx - w * 0.3, y + h * 0.88, w * 0.6, h * 0.12);
+  ctx.strokeStyle = "#8f99a3";
+  ctx.beginPath();
+  ctx.ellipse(hx, hy, hrx, hry, tilt - 0.08, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
-// Burj Al Arab: sail shape
+// Burj Al Arab: a straight spine at the back (left) with its mast rising above the
+// top, a billowing sail curving out to the front, the white fabric atrium, the big
+// exoskeleton cross-braces and the cantilevered helipad near the crown.
 function drawBurjAlArab(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  wallColor: string, roofColor: string, palette: EnvironmentPalette
+  _wallColor: string, _roofColor: string, palette: EnvironmentPalette
 ) {
-  const cx = x + w / 2;
+  const spineX = x + w * 0.22;
+  const topY = y + h * 0.07;
+  const baseY = y + h * 0.95;
+  const frontX = x + w * 0.96;
+  const white = "#f3f2ee";
+  const steel = "#b8c0c8";
 
-  // Sail shape — two curves meeting at top (widened right side for distinctive profile)
-  ctx.fillStyle = wallColor;
-  ctx.beginPath();
-  ctx.moveTo(cx - w * 0.3, y + h);
-  ctx.quadraticCurveTo(cx - w * 0.35, y + h * 0.3, cx, y + h * 0.02);
-  ctx.quadraticCurveTo(cx + w * 0.48, y + h * 0.15, cx + w * 0.45, y + h);
-  ctx.closePath();
+  const sail = () => {
+    ctx.beginPath();
+    ctx.moveTo(spineX, baseY);
+    ctx.lineTo(spineX, topY);
+    ctx.bezierCurveTo(x + w * 0.62, y + h * 0.1, frontX + w * 0.02, y + h * 0.5, frontX, baseY);
+    ctx.closePath();
+  };
+
+  // Sail body.
+  ctx.fillStyle = white;
+  sail();
   ctx.fill();
 
-  // Sail outline for visibility
-  ctx.strokeStyle = roofColor;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx - w * 0.3, y + h);
-  ctx.quadraticCurveTo(cx - w * 0.35, y + h * 0.3, cx, y + h * 0.02);
-  ctx.quadraticCurveTo(cx + w * 0.48, y + h * 0.15, cx + w * 0.45, y + h);
-  ctx.stroke();
-
-  // Cross-bracing structure lines
-  ctx.strokeStyle = roofColor;
+  ctx.save();
+  sail();
+  ctx.clip();
+  // Glass room wing along the spine.
+  ctx.fillStyle = palette.windowGlass;
+  ctx.globalAlpha = 0.75;
+  ctx.fillRect(spineX, topY, w * 0.2, baseY - topY);
+  ctx.globalAlpha = 1;
+  // Floor lines across the wing.
+  ctx.strokeStyle = "rgba(255,255,255,0.7)";
   ctx.lineWidth = 0.5;
-  for (let i = 1; i < 8; i++) {
-    const t = i / 8;
-    const ly = y + h * t;
-    const leftX = cx - w * 0.3 * (1 - t * 0.6);
-    const rightX = cx + w * 0.45 * (1 - t * 0.5);
+  for (let fy = topY + 4; fy < baseY; fy += 4) {
     ctx.beginPath();
-    ctx.moveTo(leftX, ly);
-    ctx.lineTo(rightX, ly);
+    ctx.moveTo(spineX, fy);
+    ctx.lineTo(spineX + w * 0.2, fy);
+    ctx.stroke();
+  }
+  // Soft shading on the fabric toward the front edge.
+  ctx.fillStyle = "rgba(160,175,190,0.18)";
+  ctx.fillRect(x + w * 0.62, topY, w * 0.4, baseY - topY);
+  ctx.restore();
+
+  // Exoskeleton: two big X braces down the sail.
+  ctx.strokeStyle = steel;
+  ctx.lineWidth = 1.1;
+  const braces: Array<[number, number]> = [[0.3, 0.6], [0.6, 0.92]];
+  for (const [t0, t1] of braces) {
+    const ya = y + h * t0;
+    const yb = y + h * t1;
+    ctx.beginPath();
+    ctx.moveTo(spineX + w * 0.2, ya);
+    ctx.lineTo(x + w * 0.9, yb);
+    ctx.moveTo(x + w * 0.82, ya + h * 0.04);
+    ctx.lineTo(spineX + w * 0.2, yb);
     ctx.stroke();
   }
 
-  // Helipad on top
-  ctx.fillStyle = roofColor;
+  // Sail outline.
+  ctx.strokeStyle = "#c9ced3";
+  ctx.lineWidth = 0.8;
+  sail();
+  ctx.stroke();
+
+  // Mast rising above the crown along the spine.
+  ctx.strokeStyle = steel;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.ellipse(cx, y + h * 0.06, w * 0.1, h * 0.02, 0, 0, Math.PI * 2);
+  ctx.moveTo(spineX, baseY);
+  ctx.lineTo(spineX, y);
+  ctx.stroke();
+
+  // Helipad: a thin disc cantilevered off the back near the top.
+  ctx.fillStyle = steel;
+  ctx.fillRect(spineX - w * 0.14, y + h * 0.165, w * 0.14, 1);
+  ctx.fillStyle = "#e7e9ec";
+  ctx.beginPath();
+  ctx.ellipse(spineX - w * 0.16, y + h * 0.16, w * 0.15, 1.6, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Base island
-  ctx.fillStyle = roofColor;
-  ctx.fillRect(cx - w * 0.35, y + h * 0.95, w * 0.7, h * 0.05);
-
-  // Window reflections
-  ctx.fillStyle = palette.windowGlass;
-  ctx.globalAlpha = 0.3;
+  // Island base.
+  ctx.fillStyle = "#d9c79a";
   ctx.beginPath();
-  ctx.moveTo(cx - w * 0.1, y + h * 0.3);
-  ctx.quadraticCurveTo(cx + w * 0.1, y + h * 0.4, cx + w * 0.15, y + h * 0.8);
-  ctx.lineTo(cx + w * 0.05, y + h * 0.8);
-  ctx.quadraticCurveTo(cx, y + h * 0.45, cx - w * 0.1, y + h * 0.3);
+  ctx.ellipse(x + w * 0.55, baseY + h * 0.03, w * 0.5, h * 0.03, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.globalAlpha = 1;
 }
 
-// Dubai Frame: two pillars connected at top
+// Dubai Frame: two gold-clad towers joined by a glass sky bridge on top and a podium
+// at the base, framing open sky in between. Its real proportions are ~0.6 wide : 1 tall.
 function drawDubaiFrame(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  wallColor: string, roofColor: string, palette: EnvironmentPalette
+  _wallColor: string, _roofColor: string, palette: EnvironmentPalette
 ) {
-  const pillarW = w * 0.2;
+  const gold = "#d6a93a";
+  const goldDark = "#a67c20";
+  const goldLight = "#f2d27a";
+  const pillarW = w * 0.17;
+  const bridgeH = h * 0.1;
+  const podiumH = h * 0.06;
 
-  // Left pillar
-  ctx.fillStyle = wallColor;
-  ctx.fillRect(x, y + h * 0.08, pillarW, h * 0.92);
+  const goldPanel = (px: number, py: number, pw: number, ph: number) => {
+    ctx.fillStyle = gold;
+    ctx.fillRect(px, py, pw, ph);
+    // Perforated lattice pattern.
+    ctx.fillStyle = goldDark;
+    const step = 3.2;
+    for (let yy = py + 2; yy < py + ph - 1; yy += step) {
+      for (let xx = px + 1.5 + ((yy - py) / step % 2 ? step / 2 : 0); xx < px + pw - 1; xx += step) {
+        ctx.fillRect(xx, yy, 0.9, 0.9);
+      }
+    }
+    // Sheen down one edge.
+    ctx.fillStyle = goldLight;
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(px + pw * 0.12, py, pw * 0.14, ph);
+    ctx.globalAlpha = 1;
+  };
 
-  // Right pillar
-  ctx.fillRect(x + w - pillarW, y + h * 0.08, pillarW, h * 0.92);
+  // Towers.
+  goldPanel(x, y, pillarW, h);
+  goldPanel(x + w - pillarW, y, pillarW, h);
 
-  // Top bridge
-  ctx.fillStyle = roofColor;
-  ctx.fillRect(x, y, w, h * 0.1);
-
-  // Glass bridge windows
+  // Glass sky bridge with gold frame.
   ctx.fillStyle = palette.windowGlass;
-  ctx.globalAlpha = 0.3;
-  ctx.fillRect(x + pillarW + 2, y + h * 0.02, w - pillarW * 2 - 4, h * 0.06);
-  ctx.globalAlpha = 1;
-
-  // Pillar windows
-  ctx.strokeStyle = palette.windowGlass;
-  ctx.lineWidth = 0.4;
-  for (let i = 0; i < 10; i++) {
-    const wy = y + h * 0.12 + i * h * 0.085;
+  ctx.fillRect(x + pillarW, y + h * 0.015, w - pillarW * 2, bridgeH);
+  ctx.strokeStyle = goldDark;
+  ctx.lineWidth = 0.6;
+  for (let i = 1; i < 6; i++) {
+    const bx = x + pillarW + ((w - pillarW * 2) * i) / 6;
     ctx.beginPath();
-    ctx.moveTo(x + 2, wy);
-    ctx.lineTo(x + pillarW - 2, wy);
-    ctx.moveTo(x + w - pillarW + 2, wy);
-    ctx.lineTo(x + w - 2, wy);
+    ctx.moveTo(bx, y + h * 0.015);
+    ctx.lineTo(bx, y + h * 0.015 + bridgeH);
     ctx.stroke();
   }
+  ctx.fillStyle = gold;
+  ctx.fillRect(x + pillarW, y + h * 0.015, w - pillarW * 2, 1.4);
+  ctx.fillRect(x + pillarW, y + h * 0.015 + bridgeH - 1.4, w - pillarW * 2, 1.4);
 
-  // Gold accent on bridge
-  ctx.fillStyle = roofColor;
-  ctx.fillRect(x, y + h * 0.08, w, 2);
+  // Podium.
+  ctx.fillStyle = palette.windowGlass;
+  ctx.fillRect(x + pillarW, y + h - podiumH, w - pillarW * 2, podiumH);
+  ctx.fillStyle = gold;
+  ctx.fillRect(x + pillarW, y + h - podiumH, w - pillarW * 2, 1.4);
+
+  // Tower edge lines.
+  ctx.strokeStyle = goldDark;
+  ctx.lineWidth = 0.6;
+  ctx.strokeRect(x, y, pillarW, h);
+  ctx.strokeRect(x + w - pillarW, y, pillarW, h);
 }
 
 // ── Generic skyscraper variants (0-4) ──
@@ -584,7 +679,7 @@ export const DUBAI_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
   bg_camel: (ctx, x, y, w, h, color, palette) => {
     drawBackgroundCamel(ctx, x, y, w, h, color, palette);
   },
-  walking_person: (ctx, x, y, w, h, color, palette) => {
-    drawWalkingPerson(ctx, x, y, w, h, color, palette);
+  walking_person: (ctx, x, y, w, h, color, palette, bottomColor, variant) => {
+    drawWalkingPerson(ctx, x, y, w, h, color, palette, bottomColor, variant);
   },
 };

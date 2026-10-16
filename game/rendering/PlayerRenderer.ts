@@ -115,13 +115,13 @@ export interface BikeGeom {
 export function getBikeGeometry(bikeStyle: BikeStyle, x: number, y: number): BikeGeom {
   switch (bikeStyle) {
     case "racing":
-      // Road bike: shorter wheelbase, taller frame
+      // Road bike: long, low race geometry — stretched wheelbase, lower saddle and bars
       return {
-        wheelR: 12, rearWheelX: x + 16, frontWheelX: x + 48, wheelY: y + 46,
-        pivotX: x + 29, pivotY: y + 43,
-        seatX: x + 24, seatY: y + 30,
-        bbX: x + 29, bbY: y + 44,
-        headX: x + 43, headY: y + 24,
+        wheelR: 12, rearWheelX: x + 11, frontWheelX: x + 52, wheelY: y + 46,
+        pivotX: x + 28, pivotY: y + 43,
+        seatX: x + 23, seatY: y + 33,
+        bbX: x + 28, bbY: y + 44,
+        headX: x + 45, headY: y + 28,
       };
     case "mtb":
       // Mountain bike: bigger wheels, wider wheelbase, taller frame
@@ -151,10 +151,11 @@ export function drawWheel(
   rotation: number,
   color: string,
   glow: boolean,
-  spokeCount: number = 6,
-  spokeWidth: number = 1.2,
+  spokeCount: number = 12,
+  spokeWidth: number = 0.5,
   spokeColor?: string,
-  knobby: boolean = false
+  knobby: boolean = false,
+  tyreWidth: number = 2.3
 ) {
   // Glow halo for neon skin
   if (glow) {
@@ -169,42 +170,57 @@ export function drawWheel(
     ctx.fill();
     ctx.restore();
   }
-  // Tire
+  ctx.save();
+  ctx.lineCap = "round";
+  // Tyre
   ctx.strokeStyle = color;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = tyreWidth;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.stroke();
-  // Knobby tire treads (MTB)
+  // Knobby tyre treads (MTB)
   if (knobby) {
-    ctx.lineWidth = 1.5;
-    const knobCount = 16;
+    ctx.lineWidth = 1;
+    const knobCount = 24;
     for (let i = 0; i < knobCount; i++) {
       const angle = rotation + (i * Math.PI * 2) / knobCount;
-      const innerR = r - 1;
-      const outerR = r + 2.5;
       ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(angle) * innerR, cy + Math.sin(angle) * innerR);
-      ctx.lineTo(cx + Math.cos(angle) * outerR, cy + Math.sin(angle) * outerR);
+      ctx.moveTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
+      ctx.lineTo(cx + Math.cos(angle) * (r + tyreWidth * 0.5 + 0.5), cy + Math.sin(angle) * (r + tyreWidth * 0.5 + 0.5));
       ctx.stroke();
     }
   }
-  // Center dot
-  ctx.fillStyle = color;
+  // Rim: a light metal ring just inside the tyre
+  const rimR = r - tyreWidth / 2 - 0.5;
+  ctx.strokeStyle = glow ? color : "#b9bec3";
+  ctx.lineWidth = 0.9;
   ctx.beginPath();
-  ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-  ctx.fill();
-  // Spokes
-  ctx.strokeStyle = spokeColor ?? color;
+  ctx.arc(cx, cy, rimR, 0, Math.PI * 2);
+  ctx.stroke();
+  // Spokes: many thin wires, or a few bold mag-wheel arms when spokeWidth is large
+  ctx.strokeStyle = spokeColor ?? "rgba(150,155,160,0.85)";
   ctx.lineWidth = spokeWidth;
   for (let i = 0; i < spokeCount; i++) {
     const angle = rotation + (i * Math.PI * 2) / spokeCount;
     ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(angle) * 2, cy + Math.sin(angle) * 2);
-    ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
+    ctx.moveTo(cx + Math.cos(angle) * 1.6, cy + Math.sin(angle) * 1.6);
+    ctx.lineTo(cx + Math.cos(angle) * rimR, cy + Math.sin(angle) * rimR);
     ctx.stroke();
   }
+  // Hub
+  ctx.fillStyle = "#9a9fa5";
+  ctx.beginPath();
+  ctx.arc(cx, cy, 1.9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 0.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
+
+/** Fox Factory–style orange for suspension fork lowers. */
+const MTB_FORK_ORANGE = "#f47b20";
 
 export function drawBikeFrame(
   ctx: CanvasRenderingContext2D,
@@ -213,74 +229,125 @@ export function drawBikeFrame(
 ) {
   const c = skin.colors;
   const { seatX, seatY, bbX, bbY, headX, headY, rearWheelX, frontWheelX, wheelY } = g;
+  const tube = skin.bikeStyle === "fatTire" || skin.bikeStyle === "mtb" ? 2.2 : skin.bikeStyle === "racing" ? 1.6 : 1.9;
 
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Chain and rear cog, behind the frame
+  ctx.strokeStyle = "rgba(45,45,45,0.85)";
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(bbX, bbY - 3.6);
+  ctx.lineTo(rearWheelX, wheelY - 2);
+  ctx.moveTo(bbX, bbY + 3.6);
+  ctx.lineTo(rearWheelX, wheelY + 2);
+  ctx.stroke();
+  ctx.fillStyle = "#5a5e63";
+  ctx.beginPath();
+  ctx.arc(rearWheelX, wheelY, 2.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Rear triangle: slimmer chain stays + seat stays
   ctx.strokeStyle = c.frame;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = tube * 0.7;
+  ctx.beginPath();
+  ctx.moveTo(bbX, bbY); ctx.lineTo(rearWheelX, wheelY);
+  ctx.moveTo(seatX, seatY + 1); ctx.lineTo(rearWheelX, wheelY);
+  ctx.stroke();
 
   // Main triangle: top tube + down tube + seat tube
-  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(headX, headY + 3); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(headX, headY + 5); ctx.lineTo(bbX, bbY); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(bbX, bbY); ctx.stroke();
-
-  // Rear triangle: chain stays + seat stays
-  ctx.beginPath(); ctx.moveTo(bbX, bbY); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(seatX, seatY + 1); ctx.lineTo(rearWheelX, wheelY); ctx.stroke();
+  ctx.lineWidth = tube;
+  ctx.beginPath();
+  ctx.moveTo(seatX, seatY); ctx.lineTo(headX, headY + 2);
+  ctx.moveTo(headX, headY + 5); ctx.lineTo(bbX, bbY);
+  ctx.moveTo(seatX, seatY); ctx.lineTo(bbX, bbY);
+  ctx.stroke();
+  // Head tube
+  ctx.lineWidth = tube + 0.9;
+  ctx.beginPath();
+  ctx.moveTo(headX - 0.4, headY); ctx.lineTo(headX + 0.6, headY + 5.5);
+  ctx.stroke();
+  // Tube highlight for a rounded, painted look
+  ctx.strokeStyle = "rgba(255,255,255,0.28)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(seatX + 1, seatY - 0.6); ctx.lineTo(headX - 1, headY + 1.4);
+  ctx.moveTo(headX - 0.6, headY + 5); ctx.lineTo(bbX + 1, bbY - 1);
+  ctx.stroke();
 
   // Fork — varies by bike style
   if (skin.bikeStyle === "mtb") {
-    // Suspension fork: two parallel stanchion lines with thicker lower legs
-    const forkMidY = headY + (wheelY - headY) * 0.55;
-    const forkTipX = frontWheelX;
-    // Upper stanchions (thin, lighter)
-    ctx.strokeStyle = "#888888";
+    // Suspension fork on one straight axis from head tube to hub: silver stanchions
+    // sliding into Fox-style orange lowers, with a crown at the top.
+    const topX = headX + 0.6;
+    const topY = headY + 5;
+    const along = (t: number) => ({ x: topX + (frontWheelX - topX) * t, y: topY + (wheelY - topY) * t });
+    const split = along(0.42);
+    ctx.strokeStyle = "#c3c8cd";
     ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(headX + 1, headY); ctx.lineTo(headX + 3, forkMidY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(headX + 4, headY); ctx.lineTo(headX + 6, forkMidY); ctx.stroke();
-    // Lower fork legs (thicker, frame color)
-    ctx.strokeStyle = c.frame;
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(headX + 3, forkMidY); ctx.lineTo(forkTipX, wheelY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(headX + 6, forkMidY); ctx.lineTo(forkTipX + 3, wheelY); ctx.stroke();
-    // Fork crown (connects the two legs)
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(headX + 2, forkMidY); ctx.lineTo(headX + 7, forkMidY); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(topX, topY); ctx.lineTo(split.x, split.y);
+    ctx.stroke();
+    ctx.strokeStyle = MTB_FORK_ORANGE;
+    ctx.lineWidth = 2.7;
+    ctx.beginPath();
+    ctx.moveTo(split.x, split.y); ctx.lineTo(frontWheelX, wheelY);
+    ctx.stroke();
+    ctx.strokeStyle = "#2b2b2b";
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(topX - 1.4, topY); ctx.lineTo(topX + 1.6, topY);
+    ctx.stroke();
   } else {
-    // Standard rigid fork (two segments)
-    const forkMidX = headX + (frontWheelX - headX) * 0.6;
-    const forkMidY = headY + (wheelY - headY) * 0.9;
-    ctx.beginPath(); ctx.moveTo(headX, headY); ctx.lineTo(forkMidX, forkMidY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(forkMidX, forkMidY); ctx.lineTo(frontWheelX, wheelY); ctx.stroke();
+    // Rigid fork with a gentle forward rake to the dropout
+    ctx.strokeStyle = c.frame;
+    ctx.lineWidth = tube * 0.85;
+    ctx.beginPath();
+    ctx.moveTo(headX + 0.6, headY + 5);
+    ctx.quadraticCurveTo(headX + (frontWheelX - headX) * 0.55, headY + (wheelY - headY) * 0.75, frontWheelX, wheelY);
+    ctx.stroke();
   }
 
-  // Chainring (sprocket circle at BB)
-  ctx.fillStyle = c.frame;
+  // Chainring: hollow ring with a spider
+  ctx.strokeStyle = "#4a4d52";
+  ctx.lineWidth = 1.1;
   ctx.beginPath();
-  ctx.arc(bbX, bbY, 4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = c.wheel;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(bbX, bbY, 4, 0, Math.PI * 2);
+  ctx.arc(bbX, bbY, 3.6, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.fillStyle = "#8d9297";
+  ctx.beginPath();
+  ctx.arc(bbX, bbY, 1.4, 0, Math.PI * 2);
+  ctx.fill();
 
-  // Seat post + saddle
-  ctx.strokeStyle = c.frame;
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(seatX - 1, seatY - 3); ctx.stroke();
+  // Silver seat post + shaped saddle (narrow nose forward)
+  ctx.strokeStyle = "#a4a9ae";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(seatX, seatY); ctx.lineTo(seatX - 0.8, seatY - 3.2); ctx.stroke();
   ctx.fillStyle = c.wheel;
-  ctx.fillRect(seatX - 6, seatY - 5, 10, 3);
+  ctx.beginPath();
+  ctx.moveTo(seatX - 6, seatY - 5.2);
+  ctx.quadraticCurveTo(seatX - 2, seatY - 6.2, seatX + 4.5, seatY - 4.4);
+  ctx.lineTo(seatX + 4.2, seatY - 3.4);
+  ctx.quadraticCurveTo(seatX - 1, seatY - 3.6, seatX - 5.6, seatY - 3);
+  ctx.closePath();
+  ctx.fill();
 
   // Crank arms + pedals
-  const pedalLX = bbX - 8;
-  const pedalRX = bbX + 8;
+  const pedalLX = bbX - 7;
+  const pedalRX = bbX + 7;
   const pedalY = bbY;
-  ctx.strokeStyle = c.wheel;
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(bbX, bbY); ctx.lineTo(pedalLX, pedalY); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(bbX, bbY); ctx.lineTo(pedalRX, pedalY); ctx.stroke();
-  ctx.fillStyle = c.wheel;
-  ctx.fillRect(pedalLX - 3, pedalY - 1, 6, 3);
-  ctx.fillRect(pedalRX - 3, pedalY - 1, 6, 3);
+  ctx.strokeStyle = "#3d4045";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(pedalLX, pedalY); ctx.lineTo(pedalRX, pedalY);
+  ctx.stroke();
+  ctx.fillStyle = "#2c2e31";
+  ctx.fillRect(pedalLX - 2.4, pedalY - 0.9, 4.8, 1.8);
+  ctx.fillRect(pedalRX - 2.4, pedalY - 0.9, 4.8, 1.8);
+
+  ctx.restore();
 }
 
 export function drawHandlebars(
@@ -296,14 +363,14 @@ export function drawHandlebars(
     const stemTopX = headX;
     const stemTopY = headY - 5;
     ctx.strokeStyle = c.wheel;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.6;
     // Stem
     ctx.beginPath();
     ctx.moveTo(headX, headY);
     ctx.lineTo(stemTopX, stemTopY);
     ctx.stroke();
     // Drops: curved bar that goes forward then down (lowered)
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(stemTopX - 1, stemTopY);
     ctx.quadraticCurveTo(stemTopX + 6, stemTopY - 1, stemTopX + 5, stemTopY + 5);
@@ -323,11 +390,16 @@ export function drawHandlebars(
     ctx.moveTo(headX, headY);
     ctx.lineTo(stemTopX, stemTopY);
     ctx.stroke();
-    // Wide flat bar
-    ctx.lineWidth = 2.5;
+    // Wide flat bar with rubber grips
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(stemTopX - 6, stemTopY);
     ctx.lineTo(stemTopX + 4, stemTopY);
+    ctx.stroke();
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(stemTopX - 6, stemTopY);
+    ctx.lineTo(stemTopX - 3.5, stemTopY);
     ctx.stroke();
     return { gripX: stemTopX - 4, gripY: stemTopY };
   }
@@ -341,25 +413,32 @@ export function drawHandlebars(
   ctx.moveTo(headX, headY);
   ctx.lineTo(stemTopX, stemTopY);
   ctx.stroke();
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 1.6;
   ctx.beginPath();
   ctx.moveTo(stemTopX - 3, stemTopY);
   ctx.lineTo(stemTopX + 2, stemTopY);
+  ctx.stroke();
+  // Rubber grip
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(stemTopX - 3.2, stemTopY);
+  ctx.lineTo(stemTopX - 1, stemTopY);
   ctx.stroke();
   return { gripX: stemTopX - 2, gripY: stemTopY };
 }
 
 export function getWheelParams(skin: SkinDefinition): {
-  spokeCount: number; spokeWidth: number; spokeColor?: string; knobby: boolean;
+  spokeCount: number; spokeWidth: number; spokeColor?: string; knobby: boolean; tyreWidth: number;
 } {
-  let spokeCount = 6, spokeWidth = 1.2, spokeColor: string | undefined, knobby = false;
+  let spokeCount = 12, spokeWidth = 0.5, spokeColor: string | undefined, knobby = false, tyreWidth = 2.3;
   switch (skin.bikeStyle) {
-    case "racing":  spokeCount = 5; break;
-    case "mtb":     knobby = true; break;
-    case "cruiser": spokeCount = 3; spokeWidth = 3.6; spokeColor = skin.colors.frame; break;
-    case "fatTire": spokeCount = 8; spokeColor = "#aaaaaa"; break;
+    case "racing":  spokeCount = 16; spokeWidth = 0.4; tyreWidth = 1.7; break;
+    case "mtb":     knobby = true; tyreWidth = 2.8; break;
+    case "cruiser": spokeCount = 3; spokeWidth = 3; spokeColor = skin.colors.frame; tyreWidth = 2.6; break;
+    case "fixie":   spokeCount = 4; spokeWidth = 1.6; spokeColor = skin.colors.frame; tyreWidth = 1.9; break;
+    case "fatTire": spokeCount = 10; spokeColor = "#8f9499"; tyreWidth = 4.2; break;
   }
-  return { spokeCount, spokeWidth, spokeColor, knobby };
+  return { spokeCount, spokeWidth, spokeColor, knobby, tyreWidth };
 }
 
 export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, skin: SkinDefinition) {
@@ -393,9 +472,9 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
   ctx.translate(-g.pivotX, -g.pivotY);
 
   // ── Wheels ──
-  const { spokeCount, spokeWidth, spokeColor, knobby } = getWheelParams(skin);
-  drawWheel(ctx, g.rearWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby);
-  drawWheel(ctx, g.frontWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby);
+  const { spokeCount, spokeWidth, spokeColor, knobby, tyreWidth } = getWheelParams(skin);
+  drawWheel(ctx, g.rearWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby, tyreWidth);
+  drawWheel(ctx, g.frontWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby, tyreWidth);
 
   // ── Frame ──
   drawBikeFrame(ctx, skin, g);

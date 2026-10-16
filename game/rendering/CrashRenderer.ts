@@ -35,15 +35,15 @@ export function drawCrashBike(
   const localX = -PLAYER_WIDTH / 2;
   const localY = -PLAYER_HEIGHT / 2;
   const g = getBikeGeometry(skin.bikeStyle, localX, localY);
-  const { spokeCount, spokeWidth, spokeColor, knobby } = getWheelParams(skin);
+  const { spokeCount, spokeWidth, spokeColor, knobby, tyreWidth } = getWheelParams(skin);
 
   drawWheel(
     ctx, g.rearWheelX, g.wheelY, g.wheelR, crash.bikeWheelRotation,
-    c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby
+    c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby, tyreWidth
   );
   drawWheel(
     ctx, g.frontWheelX, g.wheelY, g.wheelR, crash.bikeWheelRotation,
-    c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby
+    c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby, tyreWidth
   );
   drawBikeFrame(ctx, skin, g);
   drawHandlebars(ctx, skin, g);

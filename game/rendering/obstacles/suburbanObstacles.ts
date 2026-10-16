@@ -1,4 +1,5 @@
 import type { EnvironmentPalette } from "../../environments/types";
+import { drawVehicle } from "../vehicle";
 
 // --- Suburban biome obstacle draw functions ---
 
@@ -260,262 +261,356 @@ export function drawCurvedRamp(ctx: CanvasRenderingContext2D, x: number, y: numb
 
 export function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const basketTop = y;
-  const basketBottom = y + h - 14;
-  const basketLeft = x + 8;
-  const basketRight = x + w;
-  const bw = basketRight - basketLeft;
-  const bh = basketBottom - basketTop;
 
+  // Side-view supermarket trolley: push handle at the back (left), a wire basket
+  // that tapers toward the nose, a frame with a bottom rack, and four small casters
+  // (two visible). Everything is derived from w/h so the sprite scales with its spec.
+  const casterR = h * 0.09;
+  const wheelY = y + h - casterR;
+  const railY = y + h * 0.8;
+  const rackY = y + h * 0.7;
+
+  // Basket outline: wide at the top, front edge slanting back toward the bottom.
+  const topBack = { x: x + w * 0.22, y: y + h * 0.16 };
+  const topFront = { x: x + w, y: y + h * 0.12 };
+  const botFront = { x: x + w * 0.84, y: y + h * 0.58 };
+  const botBack = { x: x + w * 0.3, y: y + h * 0.58 };
+  const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, t: number) => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  });
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Frame: back leg, front leg and the lower rail the casters hang from.
+  const rearWheelX = x + w * 0.3;
+  const frontWheelX = x + w * 0.86;
   ctx.strokeStyle = c.trolley;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 1.6;
   ctx.beginPath();
-  ctx.moveTo(x, basketTop + 4);
-  ctx.lineTo(basketLeft, basketTop);
+  ctx.moveTo(topBack.x, topBack.y);
+  ctx.lineTo(rearWheelX, railY);
+  ctx.lineTo(frontWheelX, railY);
+  ctx.lineTo(botFront.x, botFront.y);
+  ctx.stroke();
+
+  // Bottom rack (for crates) between the legs.
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.32, rackY);
+  ctx.lineTo(x + w * 0.84, rackY);
+  for (let i = 0; i <= 5; i++) {
+    const rx = x + w * (0.34 + i * 0.1);
+    ctx.moveTo(rx, rackY);
+    ctx.lineTo(rx, railY);
+  }
+  ctx.stroke();
+
+  // See-through basket body.
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = c.trolleyBasket;
+  ctx.beginPath();
+  ctx.moveTo(topBack.x, topBack.y);
+  ctx.lineTo(topFront.x, topFront.y);
+  ctx.lineTo(botFront.x, botFront.y);
+  ctx.lineTo(botBack.x, botBack.y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Wire mesh: verticals follow the taper, horizontals follow the sides.
+  ctx.strokeStyle = c.trolley;
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  for (let i = 1; i < 7; i++) {
+    const t = i / 7;
+    const a = lerp(topBack, topFront, t);
+    const b = lerp(botBack, botFront, t);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  for (let i = 1; i < 4; i++) {
+    const t = i / 4;
+    const a = lerp(topBack, botBack, t);
+    const b = lerp(topFront, botFront, t);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+
+  // Basket rim, with a thicker top edge.
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(topBack.x, topBack.y);
+  ctx.lineTo(botBack.x, botBack.y);
+  ctx.lineTo(botFront.x, botFront.y);
+  ctx.lineTo(topFront.x, topFront.y);
+  ctx.stroke();
+  ctx.strokeStyle = c.trolleyBasket;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(topBack.x, topBack.y);
+  ctx.lineTo(topFront.x, topFront.y);
+  ctx.stroke();
+
+  // Push handle: rises back from the basket, ends in a plastic grip.
+  const gripX = x + w * 0.04;
+  const gripY = y + h * 0.04;
+  ctx.strokeStyle = c.trolley;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(topBack.x, topBack.y);
+  ctx.lineTo(gripX + 1, gripY + 1);
   ctx.stroke();
   ctx.strokeStyle = c.trolleyAccent;
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(x, basketTop + 2);
-  ctx.lineTo(x, basketTop + 10);
+  ctx.moveTo(gripX - 1, gripY);
+  ctx.lineTo(gripX + 4, gripY + 1.2);
   ctx.stroke();
 
-  ctx.fillStyle = c.trolleyBasket;
-  ctx.beginPath();
-  ctx.moveTo(basketLeft + 2, basketBottom);
-  ctx.lineTo(basketLeft, basketTop);
-  ctx.lineTo(basketRight, basketTop);
-  ctx.lineTo(basketRight - 2, basketBottom);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = c.trolley;
-  ctx.lineWidth = 0.8;
-  for (let i = 1; i <= 3; i++) {
-    const gy = basketTop + bh * (i / 4);
-    ctx.beginPath();
-    ctx.moveTo(basketLeft, gy);
-    ctx.lineTo(basketRight, gy);
-    ctx.stroke();
-  }
-  for (let i = 1; i <= 3; i++) {
-    const gx = basketLeft + bw * (i / 4);
-    ctx.beginPath();
-    ctx.moveTo(gx, basketTop);
-    ctx.lineTo(gx, basketBottom);
-    ctx.stroke();
-  }
-
-  ctx.strokeStyle = c.trolley;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(basketLeft + 2, basketBottom);
-  ctx.lineTo(basketLeft, basketTop);
-  ctx.lineTo(basketRight, basketTop);
-  ctx.lineTo(basketRight - 2, basketBottom);
-  ctx.closePath();
-  ctx.stroke();
-
-  const wheelR = 5;
-  const wy = y + h - wheelR - 1;
-  for (const wx of [x + 14, x + w - 8]) {
-    ctx.fillStyle = c.trolleyBasket;
+  // Casters: short swivel fork plus a small dark wheel.
+  for (const wx of [rearWheelX, frontWheelX]) {
     ctx.strokeStyle = c.trolley;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.arc(wx, wy, wheelR, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(wx, railY);
+    ctx.lineTo(wx, wheelY);
     ctx.stroke();
-    ctx.lineWidth = 0.6;
-    for (let i = 0; i < 4; i++) {
-      const a = (i * Math.PI) / 2;
-      ctx.beginPath();
-      ctx.moveTo(wx, wy);
-      ctx.lineTo(wx + Math.cos(a) * wheelR, wy + Math.sin(a) * wheelR);
-      ctx.stroke();
-    }
+    ctx.fillStyle = c.carWheel;
+    ctx.beginPath();
+    ctx.arc(wx, wheelY, casterR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = c.trolley;
+    ctx.beginPath();
+    ctx.arc(wx, wheelY, casterR * 0.35, 0, Math.PI * 2);
+    ctx.fill();
   }
 
-  ctx.strokeStyle = c.trolley;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(basketLeft + 4, basketBottom);
-  ctx.lineTo(x + 14, wy - wheelR);
-  ctx.moveTo(basketRight - 4, basketBottom);
-  ctx.lineTo(x + w - 8, wy - wheelR);
-  ctx.stroke();
+  ctx.restore();
 }
 
+// --- Road vehicles ---
+// Shared side-view recipe lives in ../vehicle.ts.
+
+/** Small hatchback — the most common traffic obstacle. */
 export function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, {
+    body: c.car,
+    bodyDark: c.carRoof,
+    outline: [[0.02, 0.84], [0.0, 0.52], [0.04, 0.34], [0.2, 0.06], [0.56, 0.04], [0.73, 0.35], [0.96, 0.43], [1.0, 0.6], [0.99, 0.84]],
+    windows: [[0.1, 0.36], [0.23, 0.13], [0.54, 0.12], [0.67, 0.36]],
+    pillars: [0.4],
+    wheels: [0.2, 0.8],
+    wheelR: 7,
+    claddingFrom: 0.74,
+    tailLight: [0.005, 0.4, 0.04, 0.14],
+    headLight: [0.95, 0.47, 0.045, 0.1],
+  });
+}
 
-  // Body (lower)
-  ctx.fillStyle = c.car;
+/** Tall, boxy SUV — wider and higher than the hatchback. */
+export function drawSuv(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, {
+    body: c.suv ?? c.car,
+    bodyDark: c.suvDark ?? c.carRoof,
+    outline: [[0.01, 0.84], [0.0, 0.36], [0.03, 0.08], [0.09, 0.02], [0.61, 0.02], [0.75, 0.31], [0.97, 0.37], [1.0, 0.52], [0.99, 0.84]],
+    windows: [[0.05, 0.33], [0.08, 0.1], [0.59, 0.09], [0.7, 0.33]],
+    pillars: [0.27, 0.47],
+    wheels: [0.19, 0.81],
+    wheelR: 8.5,
+    claddingFrom: 0.68,
+    tailLight: [0.0, 0.34, 0.03, 0.16],
+    headLight: [0.955, 0.4, 0.04, 0.08],
+  });
+  // Roof rails.
+  ctx.fillStyle = c.suvDark ?? c.carRoof;
+  ctx.fillRect(x + w * 0.12, y, w * 0.44, 1.4);
+}
+
+/** Delivery van — long cargo box, short nose, parcel logo on the side. */
+export function drawDeliveryVan(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  const accent = c.vanAccent ?? c.trolleyAccent;
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, {
+    body: c.van ?? c.car,
+    bodyDark: c.vanDark ?? c.carRoof,
+    outline: [[0.01, 0.86], [0.0, 0.08], [0.03, 0.01], [0.74, 0.01], [0.87, 0.36], [0.98, 0.45], [1.0, 0.6], [0.99, 0.86]],
+    windows: [[0.73, 0.36], [0.73, 0.08], [0.77, 0.08], [0.85, 0.36]],
+    pillars: [],
+    wheels: [0.17, 0.82],
+    wheelR: 8.5,
+    claddingFrom: 0.74,
+    tailLight: [0.0, 0.5, 0.025, 0.14],
+    headLight: [0.955, 0.48, 0.04, 0.08],
+  });
+
+  // Livery stripe, sliding-door seam and a simple parcel logo.
+  ctx.fillStyle = accent;
+  ctx.fillRect(x + w * 0.01, y + h * 0.55, w * 0.7, h * 0.07);
+  ctx.strokeStyle = c.vanDark ?? c.carRoof;
+  ctx.lineWidth = 0.8;
   ctx.beginPath();
-  ctx.moveTo(x + 4, y + 14);
-  ctx.lineTo(x + w - 4, y + 14);
-  ctx.quadraticCurveTo(x + w, y + 14, x + w, y + 18);
-  ctx.lineTo(x + w, y + h - 10);
-  ctx.quadraticCurveTo(x + w, y + h - 6, x + w - 4, y + h - 6);
-  ctx.lineTo(x + 4, y + h - 6);
-  ctx.quadraticCurveTo(x, y + h - 6, x, y + h - 10);
-  ctx.lineTo(x, y + 18);
-  ctx.quadraticCurveTo(x, y + 14, x + 4, y + 14);
-  ctx.fill();
-
-  // Roof
-  ctx.fillStyle = c.carRoof;
-  ctx.beginPath();
-  ctx.moveTo(x + 16, y + 14);
-  ctx.lineTo(x + 12, y + 4);
-  ctx.quadraticCurveTo(x + 14, y, x + 18, y);
-  ctx.lineTo(x + w - 18, y);
-  ctx.quadraticCurveTo(x + w - 14, y, x + w - 12, y + 4);
-  ctx.lineTo(x + w - 16, y + 14);
-  ctx.closePath();
-  ctx.fill();
-
-  // Windows
-  ctx.fillStyle = c.carWindow;
-  ctx.fillRect(x + 16, y + 2, 18, 11);
-  ctx.fillRect(x + w - 34, y + 2, 18, 11);
-  ctx.fillStyle = "rgba(255,255,255,0.2)";
-  ctx.fillRect(x + 17, y + 3, 6, 4);
-  ctx.fillRect(x + w - 33, y + 3, 6, 4);
-
-  // Door line
-  ctx.strokeStyle = c.carRoof;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.5, y + 14);
-  ctx.lineTo(x + w * 0.5, y + h - 10);
+  ctx.moveTo(x + w * 0.5, y + h * 0.06);
+  ctx.lineTo(x + w * 0.5, y + h * 0.74);
   ctx.stroke();
 
-  // Bumpers
-  ctx.fillStyle = c.carBumper;
-  ctx.fillRect(x - 1, y + h - 10, 6, 3);
-  ctx.fillRect(x + w - 5, y + h - 10, 6, 3);
-
-  // Headlight / Taillight
-  ctx.fillStyle = c.carHeadlight;
+  const bx = x + w * 0.2;
+  const by = y + h * 0.17;
+  const bs = h * 0.26;
+  ctx.fillStyle = accent;
   ctx.beginPath();
-  ctx.arc(x + w - 3, y + 20, 2.5, 0, Math.PI * 2);
+  ctx.moveTo(bx, by + bs * 0.25);
+  ctx.lineTo(bx + bs * 0.5, by);
+  ctx.lineTo(bx + bs, by + bs * 0.25);
+  ctx.lineTo(bx + bs, by + bs);
+  ctx.lineTo(bx, by + bs);
+  ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = c.carTaillight;
-  ctx.beginPath();
-  ctx.arc(x + 3, y + 20, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Wheels
-  ctx.fillStyle = c.carWheel;
-  ctx.beginPath();
-  ctx.arc(x + 16, y + h - 7, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x + w - 16, y + h - 7, 9, 0, Math.PI * 2);
-  ctx.fill();
-  // Hubcaps
-  ctx.fillStyle = c.carBumper;
-  ctx.beginPath();
-  ctx.arc(x + 16, y + h - 7, 4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x + w - 16, y + h - 7, 4, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Outline
-  ctx.strokeStyle = c.carRoof;
+  ctx.strokeStyle = c.van ?? c.car;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(x + 4, y + 14);
-  ctx.lineTo(x + w - 4, y + 14);
-  ctx.quadraticCurveTo(x + w, y + 14, x + w, y + 18);
-  ctx.lineTo(x + w, y + h - 10);
-  ctx.moveTo(x, y + h - 10);
-  ctx.lineTo(x, y + 18);
-  ctx.quadraticCurveTo(x, y + 14, x + 4, y + 14);
+  ctx.moveTo(bx + bs * 0.5, by + bs * 0.12);
+  ctx.lineTo(bx + bs * 0.5, by + bs);
   ctx.stroke();
 }
 
+/** Another cyclist riding the same way — a diamond-frame road bike with a rider. */
 export function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const wheelR = 9;
-  const rearWX = x + wheelR + 2;
-  const frontWX = x + w - wheelR - 2;
+  const wheelR = h * 0.155;
   const wheelY = y + h - wheelR;
+  const rear = { x: x + wheelR + 0.5, y: wheelY };
+  const front = { x: x + w - wheelR - 0.5, y: wheelY };
+  const bb = { x: x + w * 0.47, y: wheelY + 0.5 };
+  const seat = { x: x + w * 0.35, y: y + h * 0.5 };
+  const headTop = { x: x + w * 0.73, y: y + h * 0.52 };
+  const headBottom = { x: x + w * 0.76, y: y + h * 0.63 };
 
-  ctx.strokeStyle = c.bikeFrame;
-  ctx.lineWidth = 2;
-  for (const wx of [rearWX, frontWX]) {
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Wheels: dark tyre, thin spokes, hub.
+  for (const p of [rear, front]) {
+    ctx.strokeStyle = c.carWheel;
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, wheelR - 0.9, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.lineWidth = 0.7;
-    for (let i = 0; i < 6; i++) {
-      const a = (i * Math.PI) / 3;
-      ctx.beginPath();
-      ctx.moveTo(wx + Math.cos(a) * 2, wheelY + Math.sin(a) * 2);
-      ctx.lineTo(wx + Math.cos(a) * wheelR, wheelY + Math.sin(a) * wheelR);
-      ctx.stroke();
+    ctx.strokeStyle = "rgba(60,60,60,0.45)";
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI) / 4;
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + Math.cos(a) * (wheelR - 1.8), p.y + Math.sin(a) * (wheelR - 1.8));
     }
+    ctx.stroke();
     ctx.fillStyle = c.bikeFrame;
     ctx.beginPath();
-    ctx.arc(wx, wheelY, 1.5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 1.1, 0, Math.PI * 2);
     ctx.fill();
-    ctx.lineWidth = 2;
   }
 
-  const pedalX = x + w * 0.45;
-  const pedalY = wheelY - 4;
-  const seatX = x + w * 0.3;
-  const seatY = y + h * 0.52;
+  // Far leg first so the frame and near leg overlap it.
+  const hip = { x: seat.x + 0.5, y: seat.y - 1.5 };
+  const crank = 3.2;
+  const pedalNear = { x: bb.x + crank * 0.8, y: bb.y - crank * 0.6 };
+  const pedalFar = { x: bb.x - crank * 0.8, y: bb.y + crank * 0.6 };
+  ctx.strokeStyle = palette.player.pants;
+  ctx.globalAlpha = 0.7;
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(bb.x - 1, bb.y - 8);
+  ctx.lineTo(pedalFar.x, pedalFar.y);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Diamond frame: chainstay, seatstay, seat tube, top tube, down tube, fork.
   ctx.strokeStyle = c.bikeFrame;
+  ctx.lineWidth = 1.7;
+  ctx.beginPath();
+  ctx.moveTo(rear.x, rear.y);
+  ctx.lineTo(bb.x, bb.y);
+  ctx.lineTo(seat.x, seat.y + 2);
+  ctx.lineTo(rear.x, rear.y);
+  ctx.moveTo(seat.x + 0.4, seat.y + 3.5);
+  ctx.lineTo(headTop.x, headTop.y);
+  ctx.lineTo(headBottom.x, headBottom.y);
+  ctx.lineTo(bb.x, bb.y);
+  ctx.moveTo(headBottom.x, headBottom.y);
+  ctx.lineTo(front.x, front.y);
+  ctx.stroke();
+
+  // Stem, handlebar and saddle.
+  ctx.strokeStyle = c.carWheel;
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(headTop.x, headTop.y);
+  ctx.lineTo(headTop.x + 0.6, headTop.y - 2);
+  ctx.lineTo(headTop.x + 3.2, headTop.y - 1.6);
+  ctx.lineTo(headTop.x + 3.6, headTop.y + 0.8);
+  ctx.stroke();
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(rearWX, wheelY);
-  ctx.lineTo(pedalX, pedalY);
-  ctx.lineTo(frontWX, wheelY);
-  ctx.moveTo(pedalX, pedalY);
-  ctx.lineTo(seatX, seatY);
-  ctx.moveTo(seatX, seatY);
-  ctx.lineTo(frontWX - 2, seatY - 4);
+  ctx.moveTo(seat.x - 2.6, seat.y - 0.6);
+  ctx.lineTo(seat.x + 2.4, seat.y - 0.2);
   ctx.stroke();
 
-  ctx.fillStyle = c.bikeRider;
-  ctx.fillRect(seatX - 4, seatY - 2, 8, 3);
+  // Chainring.
+  ctx.strokeStyle = c.carWheel;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(bb.x, bb.y, 2.4, 0, Math.PI * 2);
+  ctx.stroke();
 
-  const shoulderX = seatX + 6;
-  const shoulderY = seatY - 14;
+  // Rider: torso leaning toward the bars, near leg, arm, head with helmet.
+  const shoulder = { x: x + w * 0.58, y: y + h * 0.27 };
   ctx.strokeStyle = c.bikeRider;
-  ctx.lineWidth = 3.5;
+  ctx.lineWidth = 4.2;
   ctx.beginPath();
-  ctx.moveTo(seatX + 2, seatY);
-  ctx.lineTo(shoulderX, shoulderY);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(shoulder.x, shoulder.y);
   ctx.stroke();
 
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = palette.player.pants;
+  ctx.lineWidth = 2.8;
   ctx.beginPath();
-  ctx.moveTo(shoulderX, shoulderY);
-  ctx.lineTo(frontWX - 4, seatY - 6);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(bb.x + 3.5, bb.y - 9.5);
+  ctx.lineTo(pedalNear.x, pedalNear.y);
   ctx.stroke();
 
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = c.bikeRider;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(seatX + 2, seatY);
-  ctx.lineTo(pedalX - 3, pedalY);
-  ctx.moveTo(seatX + 2, seatY);
-  ctx.lineTo(pedalX + 3, pedalY);
+  ctx.moveTo(shoulder.x, shoulder.y);
+  ctx.lineTo(shoulder.x + 3.2, shoulder.y + 5);
+  ctx.stroke();
+  ctx.strokeStyle = palette.player.skin;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(shoulder.x + 3.2, shoulder.y + 5);
+  ctx.lineTo(headTop.x + 3.2, headTop.y - 1.6);
   ctx.stroke();
 
-  // Head — use palette player skin
+  const head = { x: shoulder.x + 3, y: shoulder.y - 5.2 };
   ctx.fillStyle = palette.player.skin;
   ctx.beginPath();
-  ctx.arc(shoulderX + 1, shoulderY - 7, 5, 0, Math.PI * 2);
+  ctx.arc(head.x, head.y, 3.6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = c.bikeRider;
+  ctx.fillStyle = c.trolleyAccent;
   ctx.beginPath();
-  ctx.arc(shoulderX + 1, shoulderY - 8, 5.5, Math.PI, 0);
+  ctx.ellipse(head.x - 0.4, head.y - 1.2, 4.4, 3, -0.15, Math.PI, 0);
   ctx.fill();
+
+  ctx.restore();
 }
 
 export function drawBusStop(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {

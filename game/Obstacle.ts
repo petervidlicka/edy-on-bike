@@ -9,8 +9,10 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.TALL_TREE]:       { width: 22, height: 72 },  // 50% taller — needs double-jump
   [ObstacleType.GIANT_TREE]:      { width: 30, height: 108 }, // 50% taller than tall tree, bushy
   [ObstacleType.SHOPPING_TROLLEY]:{ width: 38, height: 38 },
-  [ObstacleType.CAR]:             { width: 80, height: 42 },
-  [ObstacleType.PERSON_ON_BIKE]:  { width: 38, height: 52 },
+  [ObstacleType.CAR]:             { width: 70, height: 36 },  // small hatchback
+  [ObstacleType.SUV]:             { width: 84, height: 46 },
+  [ObstacleType.DELIVERY_VAN]:    { width: 92, height: 52 },  // still single-jumpable (apex ~120px)
+  [ObstacleType.PERSON_ON_BIKE]:  { width: 46, height: 52 },  // long wheelbase so it reads as a bike
   [ObstacleType.BUS_STOP]:        { width: 129, height: 68 },
   [ObstacleType.SHIPPING_CONTAINER]: { width: 176, height: 75 },
   [ObstacleType.STRAIGHT_RAMP]:   { width: 90, height: 30 },
@@ -24,7 +26,11 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.PINK_G_CLASS]:    { width: 76, height: 46 },
   [ObstacleType.CACTUS]:          { width: 22, height: 60 },
   [ObstacleType.DUBAI_CHOCOLATE]: { width: 176, height: 75 },
-  [ObstacleType.LAMBORGHINI_HURACAN]: { width: 88, height: 28 },
+  [ObstacleType.LAMBORGHINI_HURACAN]: { width: 88, height: 24 },  // supercars sit low
+  [ObstacleType.FERRARI_458]:     { width: 88, height: 24 },
+  [ObstacleType.CONVERTIBLE]:     { width: 80, height: 26 },
+  [ObstacleType.ROLLS_ROYCE_PHANTOM]: { width: 112, height: 32 }, // long limo — real 5.76 m at game scale
+  [ObstacleType.PORSCHE_911]:     { width: 88, height: 26 },
   [ObstacleType.DUBAI_BILLBOARD]:    { width: 309, height: 92 },
 };
 

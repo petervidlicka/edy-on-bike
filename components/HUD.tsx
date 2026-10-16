@@ -1,4 +1,5 @@
 import { INITIAL_SPEED } from "@/game/constants";
+import { formatMultiplier } from "@/game/ComboChain";
 import type { TrickFeedbackData } from "@/hooks/useGameEngine";
 
 /** Guards against browsers firing both onTouchStart and onClick. */
@@ -10,7 +11,7 @@ const TRICK_COLOR_SKETCHY = "#d97706";
 interface HUDProps {
   score: number;
   speed: number;
-  trickFeedback: { name: string; points: number; sketchy?: boolean } | null;
+  trickFeedback: TrickFeedbackData | null;
   musicMuted: boolean;
   sfxMuted: boolean;
   onToggleMusic: () => void;
@@ -173,7 +174,7 @@ export function AudioControls({
   );
 }
 
-/** "Backflip +50"-style feedback; renders nothing when there's no recent trick. */
+/** "Backflip +75 (×1.5)"-style feedback; renders nothing when there's no recent trick. */
 export function TrickFeedbackPopup({
   trickFeedback,
 }: {
@@ -191,6 +192,7 @@ export function TrickFeedbackPopup({
       }}
     >
       {trickFeedback.name} +{trickFeedback.points}
+      {trickFeedback.multiplier > 1 && ` (\u00d7${formatMultiplier(trickFeedback.multiplier)})`}
     </span>
   );
 }

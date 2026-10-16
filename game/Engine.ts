@@ -11,19 +11,31 @@ import {
   AMBULANCE_CHANCE,
   CRASH_DURATION,
   BIG_TRICK_POINTS,
+  COMBO_MIN_LINKS_FOR_SUMMARY,
+  COMBO_FLASH_MULTIPLIER,
+  COMBO_CONFETTI_MULTIPLIER,
+  COMBO_CONFETTI_COUNT,
 } from "./constants";
-import type { GameEvent } from "./events";
+import type { ComboEndReason, GameEvent } from "./events";
+import { createChain, addLink, tickChain, endChain } from "./ComboChain";
 import {
   FloatingText,
   createTrickFloatingText,
+  createComboSummaryText,
   updateFloatingTexts,
   processTrickLanding,
   TrickContext
 } from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers, getTotalLayerWidth } from "./Background";
-import { drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider, createParticles, updateParticles, drawParticles, drawAmbulance, drawReviveFlash } from "./rendering";
-import type { Particle } from "./rendering";
+import {
+  drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider,
+  createParticles, updateParticles, drawParticles, drawAmbulance, drawReviveFlash,
+  createConfettiBurst, updateConfetti, drawConfetti,
+  createComboFx, triggerComboFx, clearComboFx, updateComboFx,
+  drawComboMeter, drawComboFlash, resolveDisplayFont,
+} from "./rendering";
+import type { Particle, ConfettiPiece } from "./rendering";
 import type { ParticleOverlayConfig } from "./environments/types";
 import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
@@ -35,6 +47,9 @@ import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbul
 import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
 import type { GhostSnapshot } from "./multiplayer/protocol";
 import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
+
+/** Milliseconds per 60fps frame; converts the capped `dt` into game time for the chain timers. */
+const FRAME_MS = 1000 / 60;
 
 /**
  * Why the engine is paused. The loop runs only while no reason is held, so the
@@ -48,7 +63,7 @@ export type EngineCallbacks = {
   onStateChange: (state: GameState) => void;
   onSpeedUpdate?: (speed: number) => void;
   /** Legacy trick callback, kept alongside `onGameEvent` for the HUD's trick popup. */
-  onTrickLanded?: (trickName: string, points: number, sketchy?: boolean) => void;
+  onTrickLanded?: (trickName: string, points: number, sketchy?: boolean, multiplier?: number) => void;
   /** Receives every game event (run start, tricks, crashes, ...) for React-side reactions. */
   onGameEvent?: (event: GameEvent) => void;
   /**
@@ -88,6 +103,12 @@ export class Engine {
   private rafId: number = 0;
   private pauseReasons = new Set<PauseReason>();
   private floatingTexts: FloatingText[] = [];
+  /** Trick chain across landings; ticked from update() so it freezes while paused. */
+  private chain = createChain();
+  private comboFx = createComboFx();
+  private confetti: ConfettiPiece[] = [];
+  /** Canvas font stack for the combo meter, resolved on first use (needs the mounted DOM). */
+  private displayFont: string | null = null;
   private canvasW: number = 0;
   private canvasH: number = 0;
   private groundY: number = 0;
@@ -171,6 +192,9 @@ export class Engine {
     this.debugIndex = 0;
     this.obstacles = [];
     this.floatingTexts = [];
+    this.chain = createChain();
+    clearComboFx(this.comboFx);
+    this.confetti = [];
     this.envManager.reset();
     this.particles = [];
     this.particleConfig = null;
@@ -326,6 +350,14 @@ export class Engine {
       if (processTrickLanding(trickCtx, hadFlip, hadPose, prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
     }
 
+    // Trick chain: the window only drains on the ground (not in the air, not riding an obstacle)
+    const dtMs = dt * FRAME_MS;
+    updateComboFx(this.comboFx, dtMs);
+    updateConfetti(this.confetti, dt);
+    if (tickChain(this.chain, dtMs, this.player.isOnGround && !this.player.ridingObstacle)) {
+      this.finishChain("expired");
+    }
+
     // Update floating texts (float up + fade out)
     this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
 
@@ -396,6 +428,10 @@ export class Engine {
 
   private startCrash(): void {
     this.emit({ type: "crash" });
+    // A crash ends the chain without paying a cash-in; a revive starts a fresh one
+    this.finishChain("crash");
+    clearComboFx(this.comboFx);
+    this.confetti = [];
     this.state = GameState.CRASHING;
     this.sound.stopMusic();
     this.sound.playCrash();
@@ -498,12 +534,42 @@ export class Engine {
   }
 
   private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): void {
-    this.score += bonus;
+    const isSketchy = sketchy ?? false;
+    const prevMultiplier = this.chain.multiplier;
+    const { multiplier, paid } = addLink(this.chain, bonus);
+    this.score += paid;
     this.distance = this.score * SCORE_PER_PX;
     this.callbacks.onScoreUpdate(this.score);
-    this.sound.playBackflipSuccess();
-    this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width, sketchy ?? false));
-    this.emit({ type: "trickLanded", label, points: bonus, sketchy: sketchy ?? false, big: bonus >= BIG_TRICK_POINTS });
+    this.sound.playComboStep(this.chain.links);
+    this.floatingTexts.push(createTrickFloatingText(label, paid, this.player.x, this.player.y, this.player.width, isSketchy, multiplier));
+    this.emit({ type: "trickLanded", label, points: paid, sketchy: isSketchy, big: bonus >= BIG_TRICK_POINTS, multiplier });
+    this.emit({ type: "comboChanged", links: this.chain.links, multiplier });
+
+    // A sketchy landing still counts as a link, but it breaks the chain
+    if (isSketchy) {
+      this.finishChain("sketchy");
+      return;
+    }
+    // Feedback only when the multiplier actually climbs into a tier
+    const climbed = multiplier > prevMultiplier;
+    triggerComboFx(this.comboFx, climbed && multiplier >= COMBO_FLASH_MULTIPLIER);
+    if (climbed && multiplier >= COMBO_CONFETTI_MULTIPLIER) {
+      this.confetti.push(...createConfettiBurst(this.canvasW / 2, 70, COMBO_CONFETTI_COUNT));
+    }
+  }
+
+  /**
+   * Ends the trick chain. A chain of 2+ links is announced with an event; unless it
+   * ended in a crash it also pays out a "cash-in" sound and summary text (the points
+   * were already paid link by link).
+   */
+  private finishChain(reason: ComboEndReason): void {
+    const summary = endChain(this.chain);
+    if (!summary || summary.links < COMBO_MIN_LINKS_FOR_SUMMARY) return;
+    this.emit({ type: "comboEnded", links: summary.links, multiplier: summary.multiplier, total: summary.total, reason });
+    if (reason === "crash") return;
+    this.sound.playComboCashIn(summary.multiplier);
+    this.floatingTexts.push(createComboSummaryText(summary, this.player.x, this.player.y, this.player.width, this.canvasW));
   }
 
   /**
@@ -513,7 +579,7 @@ export class Engine {
    */
   private emit(event: GameEvent): void {
     if (event.type === "trickLanded") {
-      this.callbacks.onTrickLanded?.(event.label, event.points, event.sketchy);
+      this.callbacks.onTrickLanded?.(event.label, event.points, event.sketchy, event.multiplier);
     }
     this.callbacks.onGameEvent?.(event);
   }
@@ -565,12 +631,20 @@ export class Engine {
     }
 
     for (const ft of this.floatingTexts) {
-      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color);
+      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color, ft.size);
     }
 
     if (crashing) {
       ctx.restore();
     }
+
+    // Combo overlay in screen space, never shaken
+    drawConfetti(ctx, this.confetti);
+    if (this.state === GameState.RUNNING && this.chain.links > 0) {
+      this.displayFont ??= resolveDisplayFont(this.canvas);
+      drawComboMeter(ctx, this.chain, this.comboFx, canvasW, canvasH, this.displayFont, performance.now());
+    }
+    drawComboFlash(ctx, this.comboFx, canvasW, canvasH);
   }
 
   private buildSnapshot(): GhostSnapshot {

@@ -1,3 +1,5 @@
+import { COMBO_PITCH_MAX_STEPS, COMBO_PITCH_SEMITONES_PER_LINK } from "./constants";
+
 export class SoundManager {
   // AudioContext is created lazily on first play to satisfy browser autoplay policy
   private ctx: AudioContext | null = null;
@@ -258,10 +260,17 @@ export class SoundManager {
     this.currentTrack = track;
   }
 
-  playBackflipSuccess(): void {
+  /**
+   * Trick-landed arpeggio. The first link of a chain plays the plain C5-E5-A5; every
+   * further link transposes it up, so the rising pitch tells the player the chain is growing.
+   * @param links - Position of this landing in the chain (1 = first).
+   */
+  playComboStep(links = 1): void {
     if (this.sfxMuted) return;
     const ctx = this.getCtx();
     const now = ctx.currentTime;
+    const steps = Math.min(Math.max(0, links - 1), COMBO_PITCH_MAX_STEPS);
+    const transpose = 2 ** ((steps * COMBO_PITCH_SEMITONES_PER_LINK) / 12);
     // Ascending 3-note arpeggio
     const notes = [523.25, 659.25, 880.00]; // C5, E5, A5
     notes.forEach((freq, i) => {
@@ -270,12 +279,55 @@ export class SoundManager {
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.type = "sine";
-      osc.frequency.value = freq;
+      osc.frequency.value = freq * transpose;
       const t = now + i * 0.06;
       gain.gain.setValueAtTime(0.22, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
       osc.start(t);
       osc.stop(t + 0.12);
+    });
+  }
+
+  /**
+   * "Cash-in" when a chain of 2+ links ends: a major chord with a coin-like shimmer,
+   * fuller (extra octave note, brighter shimmer, a bit louder) at higher multipliers.
+   * @param multiplier - The chain's final multiplier.
+   */
+  playComboCashIn(multiplier: number): void {
+    if (this.sfxMuted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    const big = multiplier >= 3;
+    const level = 0.16 + Math.min(multiplier, 4) * 0.025;
+
+    // C major chord (C5 E5 G5, plus C6 when big), struck together
+    const chord = big ? [523.25, 659.25, 783.99, 1046.5] : [523.25, 659.25, 783.99];
+    for (const freq of chord) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(level, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.5);
+    }
+
+    // Coin shimmer: two quick bright blips (B6 then E7)
+    [1975.53, 2637.02].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = freq;
+      const t = now + 0.07 + i * 0.07;
+      gain.gain.setValueAtTime(big ? 0.08 : 0.05, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.25);
     });
   }
 

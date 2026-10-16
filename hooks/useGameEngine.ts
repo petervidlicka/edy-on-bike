@@ -11,7 +11,7 @@ import { GameState } from "@/game/types";
 import { INITIAL_SPEED } from "@/game/constants";
 
 /** A landed trick to flash in the HUD (single-player and multiplayer share the popup). */
-export type TrickFeedbackData = { name: string; points: number; sketchy?: boolean };
+export type TrickFeedbackData = { name: string; points: number; sketchy?: boolean; multiplier: number };
 
 /** How long a landed trick stays on screen. */
 const TRICK_FEEDBACK_MS = 2000;
@@ -97,9 +97,9 @@ export function useGameEngine(
         },
         onPauseChange: (paused, reasons) => optionsRef.current.onPauseChange?.(paused, reasons),
         onGameEvent: (event) => optionsRef.current.onGameEvent?.(event),
-        onTrickLanded: (name, points, sketchy) => {
+        onTrickLanded: (name, points, sketchy, multiplier = 1) => {
           if (trickTimeout) clearTimeout(trickTimeout);
-          setTrickFeedback({ name, points, sketchy });
+          setTrickFeedback({ name, points, sketchy, multiplier });
           trickTimeout = setTimeout(() => setTrickFeedback(null), TRICK_FEEDBACK_MS);
         },
       },

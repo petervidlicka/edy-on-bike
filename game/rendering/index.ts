@@ -6,3 +6,8 @@ export { drawCrashBike, drawCrashRider } from "./CrashRenderer";
 export { createParticles, updateParticles, drawParticles } from "./ParticleRenderer";
 export type { Particle } from "./ParticleRenderer";
 export { drawAmbulance, drawReviveFlash } from "./AmbulanceRenderer";
+export { createConfettiBurst, updateConfetti, drawConfetti } from "./ConfettiRenderer";
+export type { ConfettiPiece } from "./ConfettiRenderer";
+export { createComboFx, triggerComboFx, clearComboFx, updateComboFx } from "./ComboEffects";
+export type { ComboFx } from "./ComboEffects";
+export { drawComboMeter, drawComboFlash, resolveDisplayFont } from "./ComboRenderer";

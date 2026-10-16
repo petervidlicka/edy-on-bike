@@ -6,11 +6,12 @@ export function drawFloatingText(
   x: number,
   y: number,
   opacity: number,
-  color: string = "#1a7a2e"
+  color: string = "#1a7a2e",
+  fontSize: number = 21
 ) {
   ctx.save();
   ctx.globalAlpha = Math.max(0, opacity);
-  ctx.font = "bold 21px sans-serif";
+  ctx.font = `bold ${fontSize}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.strokeStyle = "rgba(0,0,0,0.6)";

@@ -1,4 +1,6 @@
 import { PlayerState, TrickType } from "./types";
+import { formatMultiplier } from "./ComboChain";
+import type { ComboSummary } from "./ComboChain";
 import {
   BACKFLIP_BONUS,
   SUPERMAN_BONUS,
@@ -19,6 +21,8 @@ export interface FloatingText {
   opacity: number;
   velocityY: number;
   color: string;
+  /** Font size in px; the renderer's default when omitted. */
+  size?: number;
 }
 
 export interface TrickResult {
@@ -143,23 +147,58 @@ export function resetAllTrickState(player: PlayerState): void {
   resetPoseState(player);
 }
 
-/** Create a floating text instance for an awarded trick. */
+/**
+ * Create a floating text instance for an awarded trick.
+ * @param bonus - Points actually paid (already includes the chain multiplier).
+ * @param multiplier - Chain multiplier; shown as " x1.5" when above 1.
+ */
 export function createTrickFloatingText(
   label: string,
   bonus: number,
   playerX: number,
   playerY: number,
   playerWidth: number,
-  sketchy: boolean = false
+  sketchy: boolean = false,
+  multiplier: number = 1
 ): FloatingText {
+  const multiplierSuffix = multiplier > 1 ? ` \u00d7${formatMultiplier(multiplier)}` : "";
   return {
-    text: `${label}! +${bonus}`,
+    text: `${label}! +${bonus}${multiplierSuffix}`,
     x: playerX + playerWidth / 2,
     y: playerY - 10,
     opacity: 1,
     velocityY: -1.5,
     color: sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN,
   };
+}
+
+/** Colour of the chain summary text. */
+export const COMBO_SUMMARY_COLOR = "#facc15";
+const COMBO_SUMMARY_SIZE = 26;
+/** Rough glyph width / font size, to keep the centred summary on screen. */
+const SUMMARY_CHAR_WIDTH_EM = 0.55;
+
+/**
+ * Create the big "COMBO x3 · 5 tricks · +640" text shown when a chain cashes in.
+ * It sits above the rider and is nudged right so it never runs off the left edge
+ * on narrow screens (the rider is only 20% in from the left).
+ * @param summary - What the finished chain earned.
+ * @param playerX - Rider's left edge.
+ * @param playerY - Rider's top edge.
+ * @param playerWidth - Rider's width.
+ * @param canvasW - Canvas width, for keeping the text on screen.
+ */
+export function createComboSummaryText(
+  summary: ComboSummary,
+  playerX: number,
+  playerY: number,
+  playerWidth: number,
+  canvasW: number
+): FloatingText {
+  const text = `COMBO \u00d7${formatMultiplier(summary.multiplier)} \u00b7 ${summary.links} tricks \u00b7 +${summary.total}`;
+  const halfWidth = (text.length * COMBO_SUMMARY_SIZE * SUMMARY_CHAR_WIDTH_EM) / 2 + 8;
+  const x = Math.min(Math.max(playerX + playerWidth / 2, halfWidth), canvasW - halfWidth);
+  return { text, x, y: playerY - 70, opacity: 1, velocityY: -0.7, color: COMBO_SUMMARY_COLOR, size: COMBO_SUMMARY_SIZE };
 }
 
 /** Advance floating texts upward and fade out. Returns only still-visible texts. */

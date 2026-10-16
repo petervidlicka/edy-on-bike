@@ -14,7 +14,8 @@ export function UnlockToast({ message }: { message: string | null }) {
       role="status"
       style={{
         position: "fixed",
-        top: "18%",
+        // Below the canvas-drawn combo meter (top centre, ~12-85px tall)
+        top: "24%",
         left: "50%",
         transform: "translateX(-50%)",
         pointerEvents: "none",

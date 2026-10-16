@@ -8,18 +8,27 @@
  */
 import type { BiomeId } from "./environments/types";
 
+/** Why a trick chain ended. */
+export type ComboEndReason = "expired" | "sketchy" | "crash";
+
 /**
  * Something notable that happened during a run.
  * - `runStart`: a run began (not fired again when a revive resumes it).
- * - `trickLanded`: a trick landing was scored; `points` is what was paid, `big` marks
- *   standout tricks (see `BIG_TRICK_POINTS`) for stronger feedback.
+ * - `trickLanded`: a trick landing was scored; `points` is what was paid (after the chain
+ *   multiplier, which is also given), `big` marks standout tricks (by their base bonus,
+ *   see `BIG_TRICK_POINTS`) for stronger feedback.
+ * - `comboChanged`: a landing extended the trick chain.
+ * - `comboEnded`: a chain of 2+ links ended; `reason` tells a time-out ("expired") or a
+ *   sketchy landing ("sketchy") from a "crash", which pays no cash-in.
  * - `crash`: the rider crashed (fires before any ambulance revive).
  * - `revive`: the ambulance brought the rider back.
  * - `biomeChanged`: the transition into a new biome started.
  */
 export type GameEvent =
   | { type: "runStart" }
-  | { type: "trickLanded"; label: string; points: number; sketchy: boolean; big: boolean }
+  | { type: "trickLanded"; label: string; points: number; sketchy: boolean; big: boolean; multiplier: number }
+  | { type: "comboChanged"; links: number; multiplier: number }
+  | { type: "comboEnded"; links: number; multiplier: number; total: number; reason: ComboEndReason }
   | { type: "crash" }
   | { type: "revive" }
   | { type: "biomeChanged"; biome: BiomeId };

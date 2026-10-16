@@ -15,6 +15,8 @@ interface HUDProps {
   sfxMuted: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  /** Pauses the run; shows a pause button next to the audio toggles. */
+  onPause?: () => void;
   onJump: () => void;
   onBackflip: () => void;
   onFrontflip: () => void;
@@ -71,6 +73,15 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
         </>
       )}
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+      <rect x="14" y="4" width="4" height="16" rx="1" />
     </svg>
   );
 }
@@ -260,6 +271,7 @@ export default function HUD({
   sfxMuted,
   onToggleMusic,
   onToggleSfx,
+  onPause,
   onJump,
   onBackflip,
   onFrontflip,
@@ -313,7 +325,13 @@ export default function HUD({
         sfxMuted={sfxMuted}
         onToggleMusic={onToggleMusic}
         onToggleSfx={onToggleSfx}
-      />
+      >
+        {onPause && (
+          <button onClick={onPause} title="Pause (Esc or P)" style={btnStyle}>
+            <PauseIcon />
+          </button>
+        )}
+      </AudioControls>
 
       {/* Jump button — bottom left */}
       <button

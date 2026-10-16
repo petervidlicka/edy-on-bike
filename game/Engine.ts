@@ -34,12 +34,23 @@ import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
 import type { GhostSnapshot } from "./multiplayer/protocol";
 import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
 
+/**
+ * Why the engine is paused. The loop runs only while no reason is held, so the
+ * visibility hook can't un-pause a game the player paused on purpose.
+ */
+export type PauseReason = "user" | "hidden" | "orientation";
+
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
   onGameOver: (score: number) => void;
   onStateChange: (state: GameState) => void;
   onSpeedUpdate?: (speed: number) => void;
   onTrickLanded?: (trickName: string, points: number, sketchy?: boolean) => void;
+  /**
+   * Fires whenever the set of pause reasons changes, so React can show or hide
+   * the pause menu. `paused` is true while any reason is held.
+   */
+  onPauseChange?: (paused: boolean, reasons: readonly PauseReason[]) => void;
 };
 
 /** Optional Engine dependencies, used by multiplayer to make runs reproducible across clients. */
@@ -70,7 +81,7 @@ export class Engine {
   private distanceSinceLastObstacle: number = 0;
   private nextObstacleGap: number = 0;
   private rafId: number = 0;
-  private isPaused = false;
+  private pauseReasons = new Set<PauseReason>();
   private floatingTexts: FloatingText[] = [];
   private canvasW: number = 0;
   private canvasH: number = 0;
@@ -121,6 +132,8 @@ export class Engine {
     } else {
       this.player.y = Math.min(this.player.y, this.groundY - this.player.height);
     }
+    // The loop is stopped while paused; setting the canvas size cleared it, so redraw the frozen frame.
+    if (this.isPaused()) this.render();
   }
 
   start(): void {
@@ -132,6 +145,8 @@ export class Engine {
   }
 
   restart(): void {
+    const wasPaused = this.isPaused();
+    this.pauseReasons.clear();
     this.sound.stopSiren();
     this.sound.reset();
     this.ambulance = null;
@@ -156,6 +171,11 @@ export class Engine {
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
     this.callbacks.onStateChange(this.state);
+    if (wasPaused) {
+      // The loop was stopped by the pause; bring it back for the fresh run.
+      this.rafId = requestAnimationFrame(this.loop);
+      this.callbacks.onPauseChange?.(false, []);
+    }
   }
 
   jump(): void {
@@ -565,27 +585,54 @@ export class Engine {
     });
   }
 
-  pause(): void {
-    if (this.isPaused) return;
-    this.isPaused = true;
-    cancelAnimationFrame(this.rafId);
-    if (this.state === GameState.RUNNING) {
-      this.sound.pauseMusic();
-    } else if (this.state === GameState.AMBULANCE) {
-      this.sound.stopSiren();
+  /**
+   * Adds a pause reason; the first one stops the loop and the sound.
+   * A "user" pause is only allowed mid-run (RUNNING/AMBULANCE), never on the
+   * idle, crash or game-over screens.
+   */
+  pause(reason: PauseReason): void {
+    if (reason === "user" && this.state !== GameState.RUNNING && this.state !== GameState.AMBULANCE) return;
+    if (this.pauseReasons.has(reason)) return;
+    const wasPaused = this.isPaused();
+    this.pauseReasons.add(reason);
+    if (!wasPaused) {
+      cancelAnimationFrame(this.rafId);
+      if (this.state === GameState.RUNNING) {
+        this.sound.pauseMusic();
+      } else if (this.state === GameState.AMBULANCE) {
+        this.sound.stopSiren();
+      }
     }
+    this.notifyPauseChange();
   }
 
-  resume(): void {
-    if (!this.isPaused) return;
-    this.isPaused = false;
-    this.lastTime = 0; // reset so dt doesn't spike after a long pause
-    this.rafId = requestAnimationFrame(this.loop);
-    if (this.state === GameState.RUNNING) {
-      this.sound.resumeMusic();
-    } else if (this.state === GameState.AMBULANCE && this.ambulance?.phase === AmbulancePhase.DRIVING_IN) {
-      this.sound.playSiren();
+  /** Removes a pause reason; the loop and sound restart once no reason is left. */
+  resume(reason: PauseReason): void {
+    if (!this.pauseReasons.delete(reason)) return;
+    if (!this.isPaused()) {
+      this.lastTime = 0; // reset so dt doesn't spike after a long pause
+      this.rafId = requestAnimationFrame(this.loop);
+      if (this.state === GameState.RUNNING) {
+        this.sound.resumeMusic();
+      } else if (this.state === GameState.AMBULANCE && this.ambulance?.phase === AmbulancePhase.DRIVING_IN) {
+        this.sound.playSiren();
+      }
     }
+    this.notifyPauseChange();
+  }
+
+  /** True while any pause reason is held. */
+  isPaused(): boolean {
+    return this.pauseReasons.size > 0;
+  }
+
+  /** True if this specific reason is currently held. */
+  isPausedBy(reason: PauseReason): boolean {
+    return this.pauseReasons.has(reason);
+  }
+
+  private notifyPauseChange(): void {
+    this.callbacks.onPauseChange?.(this.isPaused(), [...this.pauseReasons]);
   }
 
   setMusicMuted(muted: boolean): void {

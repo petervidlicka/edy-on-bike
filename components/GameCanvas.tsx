@@ -7,6 +7,7 @@ import { loadSkinState } from "@/game/storage";
 import StartScreen from "./StartScreen";
 import HUD from "./HUD";
 import GameOverScreen from "./GameOverScreen";
+import { PauseMenu } from "./PauseMenu";
 
 import { useCheatCode } from "@/hooks/useCheatCode";
 import { useDebugObstaclesFlag } from "@/hooks/useDebugObstaclesFlag";
@@ -26,6 +27,8 @@ const DEBUG_OBSTACLE_SEQUENCE = [
 export default function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
+  // True while the player (or a hidden tab promoted to one) holds a "user" pause
+  const [userPaused, setUserPaused] = useState(false);
   const [newlyUnlockedSkins, setNewlyUnlockedSkins] = useState<string[]>([]);
   // ?obstacles=debug flag — off during prerender/hydration, then read from the URL
   const [debugObstacles, toggleDebugObstacles] = useDebugObstaclesFlag();
@@ -47,6 +50,7 @@ export default function GameCanvas() {
         recordBestScore(finalScore);
       },
       onStateChange: setGameState,
+      onPauseChange: (_paused, reasons) => setUserPaused(reasons.includes("user")),
     });
 
   // Sync skin to engine on mount, after hydration swaps in the saved skin, and on selection
@@ -63,7 +67,7 @@ export default function GameCanvas() {
     engineRef.current?.restart();
   }, [engineRef]);
 
-  useEngineInput(engineRef, canvasRef, { allowIdleStart: true });
+  useEngineInput(engineRef, canvasRef, { allowIdleStart: true, allowPause: true });
 
   // IDKFA cheat code — unlock all skins
   useCheatCode("IDKFA", unlockAllSkins);
@@ -74,8 +78,8 @@ export default function GameCanvas() {
   }, [engineRef]);
   useCheatCode("IDDQD", handleIddqd);
 
-  // Pause when tab is hidden or device is in portrait (mobile)
-  usePauseOnHidden(engineRef);
+  // Pause when tab is hidden or device is in portrait (mobile); a hidden tab leaves the pause menu up
+  usePauseOnHidden(engineRef, { promoteToUserPause: true });
 
   return (
     <>
@@ -110,11 +114,22 @@ export default function GameCanvas() {
           sfxMuted={sfxMuted}
           onToggleMusic={toggleMusic}
           onToggleSfx={toggleSfx}
+          onPause={() => engineRef.current?.pause("user")}
           onJump={() => engineRef.current?.jump()}
           onBackflip={() => engineRef.current?.backflip()}
           onFrontflip={() => engineRef.current?.frontflip()}
           onSuperman={() => engineRef.current?.superman()}
           onNoHander={() => engineRef.current?.noHander()}
+        />
+      )}
+
+      {userPaused && (
+        <PauseMenu
+          engineRef={engineRef}
+          musicMuted={musicMuted}
+          sfxMuted={sfxMuted}
+          onToggleMusic={toggleMusic}
+          onToggleSfx={toggleSfx}
         />
       )}
 

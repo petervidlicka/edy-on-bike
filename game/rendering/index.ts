@@ -8,6 +8,8 @@ export type { Particle } from "./ParticleRenderer";
 export { drawAmbulance, drawReviveFlash } from "./AmbulanceRenderer";
 export { createConfettiBurst, updateConfetti, drawConfetti } from "./ConfettiRenderer";
 export type { ConfettiPiece } from "./ConfettiRenderer";
+export { getRearWheelContact, emitSparks, updateSparks, drawSparks } from "./SparkRenderer";
+export type { Spark } from "./SparkRenderer";
 export { createComboFx, triggerComboFx, clearComboFx, updateComboFx } from "./ComboEffects";
 export type { ComboFx } from "./ComboEffects";
 export { drawComboMeter, drawComboFlash, resolveDisplayFont } from "./ComboRenderer";

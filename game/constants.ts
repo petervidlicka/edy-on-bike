@@ -54,6 +54,25 @@ export const COMBO_CONFETTI_COUNT = 48;
 export const COMBO_PITCH_SEMITONES_PER_LINK = 1.5;
 export const COMBO_PITCH_MAX_STEPS = 7;
 
+// Grinds (riding along the top of a rideable obstacle). Tune these by playing.
+/** Shortest ride (ms) that counts as a grind; shorter touches pay nothing. */
+export const GRIND_MIN_MS = 300;
+/** Grind payout before the chain multiplier: GRIND_BASE + GRIND_PER_SEC per second ridden. */
+export const GRIND_BASE = 10;
+export const GRIND_PER_SEC = 40;
+/** Pose while grinding. Negative riderCrouch lowers the hips (positive stands taller); negative bikeTilt dips the nose. */
+export const GRIND_RIDER_CROUCH = -0.6;
+export const GRIND_BIKE_TILT = -0.05;
+/** Sparks emitted per frame at the rear-wheel contact while grinding (inclusive range). */
+export const GRIND_SPARKS_MIN = 2;
+export const GRIND_SPARKS_MAX = 3;
+/** Hard cap on live sparks so a long grind on a slow device can't flood the pool. */
+export const GRIND_SPARK_MAX = 90;
+/** Scrape sound: loudness and the band-pass centre/width of the filtered noise. */
+export const GRIND_SOUND_GAIN = 0.06;
+export const GRIND_SOUND_FREQ_HZ = 3000;
+export const GRIND_SOUND_Q = 1.2;
+
 /**
  * Largest bonus one landing can pay before any chain multiplier: three pose cycles
  * plus three flips landed together (MAX_FLIP_COUNT caps both in Player.ts), the

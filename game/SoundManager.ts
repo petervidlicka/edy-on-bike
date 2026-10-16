@@ -1,4 +1,10 @@
-import { COMBO_PITCH_MAX_STEPS, COMBO_PITCH_SEMITONES_PER_LINK } from "./constants";
+import {
+  COMBO_PITCH_MAX_STEPS,
+  COMBO_PITCH_SEMITONES_PER_LINK,
+  GRIND_SOUND_FREQ_HZ,
+  GRIND_SOUND_GAIN,
+  GRIND_SOUND_Q,
+} from "./constants";
 
 export class SoundManager {
   // AudioContext is created lazily on first play to satisfy browser autoplay policy
@@ -16,6 +22,10 @@ export class SoundManager {
   private sirenGain1: GainNode | null = null;
   private sirenGain2: GainNode | null = null;
   private sirenScheduler: ReturnType<typeof setInterval> | null = null;
+
+  // Grind scrape: looping band-passed noise that runs while the rider rides an obstacle.
+  private grindSource: AudioBufferSourceNode | null = null;
+  private grindGain: GainNode | null = null;
 
   // Dual-slot music system for crossfading between biome tracks
   private musicAudioA: HTMLAudioElement | null = null;
@@ -92,6 +102,8 @@ export class SoundManager {
 
   setSfxMuted(muted: boolean): void {
     this.sfxMuted = muted;
+    // A looping sound would otherwise keep scraping after the player muted effects
+    if (muted) this.stopGrind();
   }
 
   // isDouble = true for the second (in-air) jump — higher pitch
@@ -417,6 +429,60 @@ export class SoundManager {
     this.sirenGain2 = null;
   }
 
+  /**
+   * Starts the looping grind scrape: band-passed white noise (a metallic hiss around
+   * 3 kHz) at low gain. Safe to call repeatedly; a running scrape is replaced, never stacked.
+   */
+  startGrind(): void {
+    if (this.sfxMuted) return;
+    this.stopGrind();
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+
+    // One second of noise is enough to loop without an audible repeat once filtered
+    const bufferSize = ctx.sampleRate;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = GRIND_SOUND_FREQ_HZ;
+    filter.Q.value = GRIND_SOUND_Q;
+
+    // Short fade-in so the scrape doesn't click on
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(GRIND_SOUND_GAIN, now + 0.05);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    source.start(now);
+    this.grindSource = source;
+    this.grindGain = gain;
+  }
+
+  /** Fades the grind scrape out and releases its nodes; a no-op when none is playing. */
+  stopGrind(): void {
+    const ctx = this.ctx;
+    if (ctx && this.grindSource && this.grindGain) {
+      const now = ctx.currentTime;
+      // Fade before stopping so the scrape doesn't end with a click
+      this.grindGain.gain.cancelScheduledValues(now);
+      this.grindGain.gain.setValueAtTime(this.grindGain.gain.value, now);
+      this.grindGain.gain.linearRampToValueAtTime(0, now + 0.08);
+      this.grindSource.stop(now + 0.1);
+    }
+    this.grindSource = null;
+    this.grindGain = null;
+  }
+
   playRevive(): void {
     if (this.sfxMuted) return;
     const ctx = this.getCtx();
@@ -475,6 +541,7 @@ export class SoundManager {
 
   destroy(): void {
     this.stopSiren();
+    this.stopGrind();
     this.stopMusic();
     if (this.musicAudioA) {
       this.musicAudioA.src = "";
@@ -490,6 +557,7 @@ export class SoundManager {
 
   /** Full reset: stop music and revert to the default suburban track. Call on game restart. */
   reset(): void {
+    this.stopGrind();
     this.stopMusic();
     this.currentTrack = "/music.mp3";
     this.activeSlot = "A";

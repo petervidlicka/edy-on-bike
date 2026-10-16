@@ -27,11 +27,10 @@ export interface EnvironmentPalette {
   treeHighlight: string;
   backgroundTreeTrunk: string;
 
-  // Background creatures & people
+  // Background creatures (pedestrian colours come from environments/pedestrians.ts)
   creature: string;
   creatureLeg: string;
   creatureTail: string;
-  person: string;
 
   // Player colors
   player: {
@@ -82,6 +81,13 @@ export interface EnvironmentPalette {
     rampMetal: string;
     rampMetalDark: string;
 
+    // Suburban traffic variants (optional — fall back to the car colours)
+    suv?: string;
+    suvDark?: string;
+    van?: string;
+    vanDark?: string;
+    vanAccent?: string;
+
     // Dubai-specific (optional — not needed by suburban)
     camel?: string;
     camelLeg?: string;
@@ -100,6 +106,12 @@ export interface EnvironmentPalette {
     lamboGreen?: string;
     lamboGreenDark?: string;
     lamboWindow?: string;
+    ferrariRed?: string;
+    ferrariRedDark?: string;
+    convertible?: string;
+    convertibleDark?: string;
+    porsche?: string;
+    porscheDark?: string;
     billboardFrame?: string;
     billboardPost?: string;
   };

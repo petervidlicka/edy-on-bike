@@ -1,93 +1,116 @@
 import type { EnvironmentPalette } from "../../environments/types";
+import { drawVehicle, type VehicleShape } from "../vehicle";
 
 // --- Dubai biome obstacle draw functions ---
 
+/** Dromedary in profile, facing right: long legs, one hump, neck dipping then rising to the head. */
 export function drawCamel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const bodyColor = palette.obstacle.camel ?? "#c8a060";
   const legColor = palette.obstacle.camelLeg ?? "#a08040";
   const saddleColor = palette.obstacle.camelSaddle ?? "#c44040";
+  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
 
-  // Legs (4 thick strokes)
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Contact shadow.
+  ctx.fillStyle = "rgba(0,0,0,0.15)";
+  ctx.beginPath();
+  ctx.ellipse(x + w * 0.47, y + h - 0.5, w * 0.36, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Legs: thigh into a knobbly knee, then a thin cannon bone and a splayed foot pad.
+  const leg = (top: [number, number], knee: [number, number], foot: [number, number], color: string, width: number) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(...top);
+    ctx.lineTo(...knee);
+    ctx.stroke();
+    ctx.lineWidth = width * 0.62;
+    ctx.beginPath();
+    ctx.moveTo(...knee);
+    ctx.lineTo(...foot);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(knee[0], knee[1], width * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(foot[0] + 0.8, foot[1] - 0.6, 2.1, 0.9, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  // Far legs (darker, slightly offset).
+  leg(P(0.33, 0.52), P(0.31, 0.76), P(0.32, 0.985), legColor, 3.4);
+  leg(P(0.66, 0.54), P(0.7, 0.77), P(0.69, 0.985), legColor, 3.2);
+
+  // Tail.
   ctx.strokeStyle = legColor;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 1.1;
   ctx.beginPath();
-  ctx.moveTo(x + w * 0.2, y + h * 0.58);
-  ctx.lineTo(x + w * 0.18, y + h * 0.92);
-  ctx.moveTo(x + w * 0.32, y + h * 0.6);
-  ctx.lineTo(x + w * 0.34, y + h * 0.95);
-  ctx.moveTo(x + w * 0.58, y + h * 0.58);
-  ctx.lineTo(x + w * 0.56, y + h * 0.92);
-  ctx.moveTo(x + w * 0.7, y + h * 0.6);
-  ctx.lineTo(x + w * 0.72, y + h * 0.95);
+  ctx.moveTo(...P(0.17, 0.34));
+  ctx.quadraticCurveTo(...P(0.12, 0.42), ...P(0.14, 0.58));
   ctx.stroke();
 
-  // Hooves
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.16, y + h * 0.92);
-  ctx.lineTo(x + w * 0.2, y + h * 0.95);
-  ctx.moveTo(x + w * 0.32, y + h * 0.95);
-  ctx.lineTo(x + w * 0.36, y + h * 0.98);
-  ctx.moveTo(x + w * 0.54, y + h * 0.92);
-  ctx.lineTo(x + w * 0.58, y + h * 0.95);
-  ctx.moveTo(x + w * 0.7, y + h * 0.95);
-  ctx.lineTo(x + w * 0.74, y + h * 0.98);
-  ctx.stroke();
-
-  // Body (large oval)
+  // Body, hump, neck and head as one silhouette.
   ctx.fillStyle = bodyColor;
   ctx.beginPath();
-  ctx.ellipse(x + w * 0.48, y + h * 0.48, w * 0.3, h * 0.16, 0, 0, Math.PI * 2);
+  ctx.moveTo(...P(0.17, 0.34));
+  ctx.bezierCurveTo(...P(0.22, 0.2), ...P(0.3, 0.05), ...P(0.42, 0.05));
+  ctx.bezierCurveTo(...P(0.54, 0.05), ...P(0.6, 0.22), ...P(0.68, 0.3));
+  ctx.bezierCurveTo(...P(0.74, 0.36), ...P(0.8, 0.42), ...P(0.84, 0.32));
+  ctx.bezierCurveTo(...P(0.86, 0.24), ...P(0.86, 0.16), ...P(0.89, 0.12));
+  ctx.quadraticCurveTo(...P(0.94, 0.09), ...P(0.99, 0.16));
+  ctx.quadraticCurveTo(...P(1.0, 0.22), ...P(0.96, 0.24));
+  ctx.quadraticCurveTo(...P(0.92, 0.24), ...P(0.9, 0.27));
+  ctx.bezierCurveTo(...P(0.88, 0.4), ...P(0.84, 0.52), ...P(0.74, 0.56));
+  ctx.bezierCurveTo(...P(0.62, 0.62), ...P(0.38, 0.62), ...P(0.26, 0.56));
+  ctx.bezierCurveTo(...P(0.18, 0.52), ...P(0.15, 0.44), ...P(0.17, 0.34));
+  ctx.closePath();
   ctx.fill();
 
-  // Hump
+  // Belly shading and a light catch along the hump.
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = "rgba(90,60,20,0.18)";
+  ctx.fillRect(x, y + h * 0.48, w, h);
+  ctx.restore();
+  ctx.strokeStyle = "rgba(255,240,210,0.35)";
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.ellipse(x + w * 0.48, y + h * 0.3, w * 0.12, h * 0.12, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(...P(0.3, 0.13));
+  ctx.quadraticCurveTo(...P(0.42, 0.06), ...P(0.52, 0.13));
+  ctx.stroke();
 
-  // Saddle blanket
+  // Saddle blanket draped behind the hump.
   ctx.fillStyle = saddleColor;
   ctx.beginPath();
-  ctx.moveTo(x + w * 0.35, y + h * 0.35);
-  ctx.lineTo(x + w * 0.6, y + h * 0.35);
-  ctx.lineTo(x + w * 0.58, y + h * 0.52);
-  ctx.lineTo(x + w * 0.37, y + h * 0.52);
+  ctx.moveTo(...P(0.5, 0.12));
+  ctx.quadraticCurveTo(...P(0.58, 0.18), ...P(0.62, 0.27));
+  ctx.lineTo(...P(0.58, 0.44));
+  ctx.lineTo(...P(0.47, 0.42));
   ctx.closePath();
   ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.fillRect(x + w * 0.475, y + h * 0.38, w * 0.11, h * 0.025);
 
-  // Neck
-  ctx.fillStyle = bodyColor;
+  // Near legs over the body.
+  leg(P(0.27, 0.5), P(0.25, 0.76), P(0.27, 0.985), bodyColor, 3.8);
+  leg(P(0.72, 0.52), P(0.75, 0.77), P(0.76, 0.985), bodyColor, 3.6);
+
+  // Ear, eye, nostril.
+  ctx.fillStyle = legColor;
   ctx.beginPath();
-  ctx.moveTo(x + w * 0.2, y + h * 0.4);
-  ctx.lineTo(x + w * 0.1, y + h * 0.12);
-  ctx.lineTo(x + w * 0.22, y + h * 0.14);
-  ctx.lineTo(x + w * 0.28, y + h * 0.42);
-  ctx.closePath();
+  ctx.ellipse(x + w * 0.895, y + h * 0.1, 1, 1.6, -0.4, 0, Math.PI * 2);
   ctx.fill();
-
-  // Head
+  ctx.fillStyle = "#2e2418";
   ctx.beginPath();
-  ctx.ellipse(x + w * 0.08, y + h * 0.1, w * 0.08, h * 0.06, -0.3, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.925, y + h * 0.145, 0.75, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillRect(x + w * 0.975, y + h * 0.17, 0.9, 0.6);
 
-  // Ear
-  ctx.beginPath();
-  ctx.ellipse(x + w * 0.14, y + h * 0.04, w * 0.025, h * 0.04, 0.3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Eye
-  ctx.fillStyle = "#2a2a2a";
-  ctx.beginPath();
-  ctx.arc(x + w * 0.07, y + h * 0.09, 1.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Tail
-  ctx.strokeStyle = bodyColor;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.78, y + h * 0.42);
-  ctx.quadraticCurveTo(x + w * 0.88, y + h * 0.38, x + w * 0.85, y + h * 0.52);
-  ctx.stroke();
+  ctx.restore();
 }
 
 export function drawSandTrap(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
@@ -150,394 +173,88 @@ export function drawSandTrap(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.stroke();
 }
 
+const LAND_CRUISER_SHAPE: VehicleShape = {
+  outline: [[0.01, 0.84], [0.0, 0.4], [0.02, 0.12], [0.06, 0.05], [0.57, 0.04], [0.69, 0.33], [0.96, 0.38], [1.0, 0.5], [0.995, 0.84]],
+  windows: [[0.04, 0.35], [0.07, 0.11], [0.55, 0.1], [0.65, 0.35]],
+  pillars: [0.24, 0.42],
+  wheels: [0.19, 0.8],
+  wheelR: 8.5,
+  claddingFrom: 0.72,
+  tailLight: [0.0, 0.36, 0.03, 0.18],
+  headLight: [0.94, 0.41, 0.05, 0.08],
+};
+
+/** Toyota Land Cruiser–style full-size 4x4: long bonnet, flat roof, chrome grille. */
 export function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const bodyColor = "#f0ece8"; // Pearl white
-  const bodyDark = "#d0ccc8";
-  const chrome = "#c8c8c8";
-  const wheelR = 10;
-  const wheelY = y + h - wheelR;
-  const bodyTop = y + 13;
-  const bodyBottom = y + h - wheelR - 2;
-  const roofTop = y + 2;
-
-  // Mirror horizontally so the car faces left (direction of travel),
-  // and shift up 10px to compensate for the universal road-sink offset
-  // (which would otherwise push the wheels halfway through the road).
-  ctx.save();
-  ctx.translate(2 * x + w, -10);
-  ctx.scale(-1, 1);
-
-  // --- Wheel arches (rounded, larger than G-Class) ---
-  ctx.fillStyle = "#1a1a1a";
-  for (const wx of [x + 18, x + w - 18]) {
-    ctx.beginPath();
-    ctx.arc(wx, bodyBottom + 1, wheelR + 3, Math.PI, 0);
-    ctx.fill();
-  }
-
-  // --- Main body (boxy but with slight contour) ---
-  ctx.fillStyle = bodyColor;
-  ctx.beginPath();
-  ctx.moveTo(x + 3, bodyTop);
-  ctx.lineTo(x + w - 2, bodyTop);
-  // Front bumper curves down slightly
-  ctx.quadraticCurveTo(x + w + 1, bodyTop, x + w + 1, bodyTop + 4);
-  ctx.lineTo(x + w + 1, bodyBottom);
-  ctx.lineTo(x - 1, bodyBottom);
-  ctx.lineTo(x - 1, bodyTop + 3);
-  ctx.quadraticCurveTo(x - 1, bodyTop, x + 3, bodyTop);
-  ctx.closePath();
-  ctx.fill();
-
-  // --- Lower body trim / cladding (dark gray) ---
-  ctx.fillStyle = "#5a5a5a";
-  ctx.fillRect(x, bodyBottom - 4, w, 4);
-
-  // --- Roof (slightly angled windshield) ---
-  ctx.fillStyle = bodyDark;
-  ctx.beginPath();
-  ctx.moveTo(x + 8, bodyTop);
-  ctx.lineTo(x + 6, roofTop + 2);
-  ctx.lineTo(x + w - 14, roofTop);
-  // Windshield angle — front slopes slightly
-  ctx.lineTo(x + w - 8, bodyTop);
-  ctx.closePath();
-  ctx.fill();
-
-  // --- Roof rails (chrome bars on top) ---
-  ctx.strokeStyle = chrome;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(x + 10, roofTop);
-  ctx.lineTo(x + w - 16, roofTop - 1);
-  ctx.stroke();
-  // Rail supports
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + 14, roofTop);
-  ctx.lineTo(x + 14, roofTop + 3);
-  ctx.moveTo(x + w - 20, roofTop - 1);
-  ctx.lineTo(x + w - 20, roofTop + 3);
-  ctx.moveTo(x + w * 0.5, roofTop);
-  ctx.lineTo(x + w * 0.5, roofTop + 3);
-  ctx.stroke();
-
-  // --- Windows ---
-  ctx.fillStyle = c.carWindow;
-  // Rear quarter window
-  ctx.fillRect(x + 10, roofTop + 3, 14, bodyTop - roofTop - 4);
-  // Rear door window
-  ctx.fillRect(x + 26, roofTop + 3, 16, bodyTop - roofTop - 4);
-  // Front door window
-  ctx.fillRect(x + w * 0.56, roofTop + 2, 16, bodyTop - roofTop - 3);
-  // Windshield (angled)
-  ctx.beginPath();
-  ctx.moveTo(x + w - 14, roofTop + 2);
-  ctx.lineTo(x + w - 8, bodyTop);
-  ctx.lineTo(x + w - 4, bodyTop);
-  ctx.lineTo(x + w - 10, roofTop + 2);
-  ctx.closePath();
-  ctx.fill();
-  // Window glare
-  ctx.fillStyle = "rgba(255,255,255,0.25)";
-  ctx.fillRect(x + 11, roofTop + 4, 5, 3);
-  ctx.fillRect(x + w * 0.57, roofTop + 3, 5, 3);
-
-  // --- B-pillar, C-pillar ---
-  ctx.fillStyle = bodyDark;
-  ctx.fillRect(x + 24, roofTop + 2, 3, bodyTop - roofTop);
-  ctx.fillRect(x + w * 0.54, roofTop + 2, 3, bodyTop - roofTop);
-
-  // --- Front grille (prominent Toyota chrome grille) ---
-  ctx.fillStyle = chrome;
-  ctx.fillRect(x + w - 2, bodyTop + 3, 3, bodyBottom - bodyTop - 10);
-  ctx.strokeStyle = "#999";
-  ctx.lineWidth = 0.7;
-  // Horizontal grille slats
-  for (let i = 1; i <= 4; i++) {
-    const gy = bodyTop + 3 + (bodyBottom - bodyTop - 10) * (i / 5);
-    ctx.beginPath();
-    ctx.moveTo(x + w - 2, gy);
-    ctx.lineTo(x + w + 1, gy);
-    ctx.stroke();
-  }
-
-  // --- Headlights (angular, LED-style) ---
-  ctx.fillStyle = c.carHeadlight;
-  // Upper headlight
-  ctx.beginPath();
-  ctx.moveTo(x + w - 1, bodyTop + 3);
-  ctx.lineTo(x + w + 1, bodyTop + 3);
-  ctx.lineTo(x + w + 1, bodyTop + 8);
-  ctx.lineTo(x + w - 3, bodyTop + 8);
-  ctx.closePath();
-  ctx.fill();
-  // Lower headlight
-  ctx.beginPath();
-  ctx.moveTo(x + w - 1, bodyBottom - 10);
-  ctx.lineTo(x + w + 1, bodyBottom - 10);
-  ctx.lineTo(x + w + 1, bodyBottom - 5);
-  ctx.lineTo(x + w - 3, bodyBottom - 5);
-  ctx.closePath();
-  ctx.fill();
-
-  // --- DRL strip (thin LED line connecting headlights) ---
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(x + w, bodyTop + 8);
-  ctx.lineTo(x + w, bodyBottom - 10);
-  ctx.stroke();
-
-  // --- Door lines ---
-  ctx.strokeStyle = bodyDark;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.36, bodyTop);
-  ctx.lineTo(x + w * 0.36, bodyBottom - 4);
-  ctx.moveTo(x + w * 0.64, bodyTop);
-  ctx.lineTo(x + w * 0.64, bodyBottom - 4);
-  ctx.stroke();
-
-  // --- Door handles (chrome) ---
-  ctx.fillStyle = chrome;
-  ctx.fillRect(x + w * 0.39, bodyTop + (bodyBottom - bodyTop) * 0.38, 6, 2.5);
-  ctx.fillRect(x + w * 0.67, bodyTop + (bodyBottom - bodyTop) * 0.38, 6, 2.5);
-
-  // --- Side body crease line (character line) ---
-  ctx.strokeStyle = bodyDark;
-  ctx.lineWidth = 0.7;
-  ctx.beginPath();
-  ctx.moveTo(x + 4, bodyTop + (bodyBottom - bodyTop) * 0.45);
-  ctx.lineTo(x + w - 4, bodyTop + (bodyBottom - bodyTop) * 0.42);
-  ctx.stroke();
-
-  // --- Rear bumper + taillight ---
-  ctx.fillStyle = "#5a5a5a";
-  ctx.fillRect(x - 2, bodyBottom - 5, 4, 8);
-  ctx.fillStyle = c.carTaillight;
-  ctx.fillRect(x - 1, bodyTop + 4, 3, 8);
-  ctx.fillRect(x - 1, bodyBottom - 12, 3, 8);
-
-  // --- Wheels (large, modern alloy) ---
-  ctx.fillStyle = c.carWheel;
-  ctx.beginPath();
-  ctx.arc(x + 18, wheelY, wheelR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x + w - 18, wheelY, wheelR, 0, Math.PI * 2);
-  ctx.fill();
-  // Alloy rims
-  ctx.fillStyle = chrome;
-  ctx.beginPath();
-  ctx.arc(x + 18, wheelY, 5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x + w - 18, wheelY, 5, 0, Math.PI * 2);
-  ctx.fill();
-  // Multi-spoke pattern
-  ctx.strokeStyle = "#aaa";
-  ctx.lineWidth = 1;
-  for (const wx of [x + 18, x + w - 18]) {
-    for (let i = 0; i < 6; i++) {
-      const a = (i * Math.PI * 2) / 6;
-      ctx.beginPath();
-      ctx.moveTo(wx + Math.cos(a) * 2.5, wheelY + Math.sin(a) * 2.5);
-      ctx.lineTo(wx + Math.cos(a) * (wheelR - 1.5), wheelY + Math.sin(a) * (wheelR - 1.5));
-      ctx.stroke();
-    }
-  }
-
-  // --- Body outline ---
-  ctx.strokeStyle = bodyDark;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + 3, bodyTop);
-  ctx.lineTo(x + w - 2, bodyTop);
-  ctx.lineTo(x + w + 1, bodyTop + 4);
-  ctx.lineTo(x + w + 1, bodyBottom);
-  ctx.lineTo(x - 1, bodyBottom);
-  ctx.lineTo(x - 1, bodyTop + 3);
-  ctx.closePath();
-  ctx.stroke();
-
-  ctx.restore();
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, LAND_CRUISER_SHAPE, {
+    body: c.car,
+    bodyDark: c.carRoof,
+    cladding: "#6b6b6b",
+  });
+  // Chrome grille bars and a roof rack.
+  ctx.fillStyle = "#b9bcc0";
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + w * 0.97, y + h * (0.53 + i * 0.05), w * 0.03, 0.9);
+  ctx.fillStyle = "#555555";
+  ctx.fillRect(x + w * 0.1, y + h * 0.01, w * 0.44, 1.4);
+  for (const fx of [0.13, 0.33, 0.51]) ctx.fillRect(x + w * fx, y + h * 0.01, 1.2, h * 0.04);
+  // Side step.
+  ctx.fillStyle = "#3f3f3f";
+  ctx.fillRect(x + w * 0.3, y + h * 0.8, w * 0.38, 1.6);
 }
 
+const PINK_G_CLASS_SHAPE: VehicleShape = {
+  outline: [[0.075, 0.84], [0.065, 0.06], [0.09, 0.02], [0.66, 0.02], [0.685, 0.05], [0.72, 0.37], [0.975, 0.4], [1.0, 0.46], [1.0, 0.84]],
+  windows: [[0.11, 0.37], [0.11, 0.09], [0.645, 0.09], [0.68, 0.37]],
+  pillars: [0.3, 0.48],
+  wheels: [0.25, 0.81],
+  wheelR: 8.5,
+  claddingFrom: 0.76,
+  tailLight: [0.07, 0.42, 0.025, 0.14],
+};
+
+/** Pink Mercedes G-Class–style off-roader: a pure box with upright glass, round lamps and a rear spare wheel. */
 export function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const pink = palette.obstacle.pinkGClass ?? "#e87a9f";
-  const pinkDark = palette.obstacle.pinkGClassRoof ?? "#d06888";
   const c = palette.obstacle;
-  const wheelR = 9;
-  const wheelY = y + h - wheelR;
-  const bodyTop = y + 13;
-  const bodyBottom = y + h - wheelR - 3;
-  const roofTop = y + 1;
+  const pink = c.pinkGClass ?? "#e87a9f";
+  const pinkDark = c.pinkGClassRoof ?? "#d06888";
 
-  // Mirror horizontally so the car faces left (direction of travel),
-  // and shift up 10px to compensate for the universal road-sink offset
-  // (which would otherwise push the wheels halfway through the road).
-  ctx.save();
-  ctx.translate(2 * x + w, -10);
-  ctx.scale(-1, 1);
-
-  // --- Wheel arches (squared off, drawn before body) ---
-  ctx.fillStyle = "#1a1a1a";
-  ctx.fillRect(x + 9, bodyBottom - 2, 20, wheelR + 5);
-  ctx.fillRect(x + w - 29, bodyBottom - 2, 20, wheelR + 5);
-
-  // --- Main body (extremely boxy rectangle) ---
-  ctx.fillStyle = pink;
-  ctx.fillRect(x + 2, bodyTop, w - 4, bodyBottom - bodyTop);
-
-  // --- Roof (flat, very angular) ---
-  ctx.fillStyle = pinkDark;
-  // Roof slab
-  ctx.fillRect(x + 10, roofTop, w - 20, bodyTop - roofTop);
-  // A-pillar (rear)
-  ctx.fillRect(x + 10, roofTop, 5, bodyTop - roofTop + 2);
-  // B-pillar (center)
-  ctx.fillRect(x + w * 0.46, roofTop, 4, bodyTop - roofTop + 2);
-  // C-pillar (front)
-  ctx.fillRect(x + w - 15, roofTop, 5, bodyTop - roofTop + 2);
-
-  // --- Windows (two separate panes) ---
-  ctx.fillStyle = c.carWindow;
-  // Rear window
-  ctx.fillRect(x + 16, roofTop + 2, w * 0.28, bodyTop - roofTop - 3);
-  // Front window
-  ctx.fillRect(x + w * 0.50, roofTop + 2, w * 0.24, bodyTop - roofTop - 3);
-  // Window glare
-  ctx.fillStyle = "rgba(255,255,255,0.25)";
-  ctx.fillRect(x + 17, roofTop + 3, 7, 4);
-  ctx.fillRect(x + w * 0.51, roofTop + 3, 7, 4);
-
-  // --- Flat hood area (front of body above grille) ---
-  ctx.fillStyle = pink;
-  ctx.fillRect(x + w - 15, bodyTop, 13, 4);
-
-  // --- Front grille (vertical chrome slats) ---
-  ctx.fillStyle = "#c8c8c8";
-  ctx.fillRect(x + w - 3, bodyTop + 2, 3, bodyBottom - bodyTop - 6);
-  ctx.strokeStyle = "#888";
-  ctx.lineWidth = 0.8;
-  for (let i = 1; i <= 5; i++) {
-    const gy = bodyTop + 2 + (bodyBottom - bodyTop - 6) * (i / 6);
-    ctx.beginPath();
-    ctx.moveTo(x + w - 3, gy);
-    ctx.lineTo(x + w, gy);
-    ctx.stroke();
-  }
-
-  // --- Headlights (round — iconic G-Class feature) ---
-  ctx.fillStyle = c.carHeadlight;
-  ctx.strokeStyle = "#c8c8c8";
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.arc(x + w - 1, bodyTop + 8, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(x + w - 1, bodyBottom - 8, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // --- Front turn signal (small amber below headlight) ---
-  ctx.fillStyle = "#e8a030";
-  ctx.fillRect(x + w - 3, bodyTop + 13, 3, 2);
-  ctx.fillRect(x + w - 3, bodyBottom - 13, 3, 2);
-
-  // --- Door lines (vertical — flat panel construction) ---
-  ctx.strokeStyle = pinkDark;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.38, bodyTop);
-  ctx.lineTo(x + w * 0.38, bodyBottom);
-  ctx.moveTo(x + w * 0.62, bodyTop);
-  ctx.lineTo(x + w * 0.62, bodyBottom);
-  ctx.stroke();
-
-  // --- External door hinges (iconic G-Class detail) ---
-  ctx.fillStyle = "#888";
-  ctx.fillRect(x + w * 0.38 - 1, bodyTop + 4, 3, 4);
-  ctx.fillRect(x + w * 0.38 - 1, bodyBottom - 8, 3, 4);
-  ctx.fillRect(x + w * 0.62 - 1, bodyTop + 4, 3, 4);
-  ctx.fillRect(x + w * 0.62 - 1, bodyBottom - 8, 3, 4);
-
-  // --- Door handles (chrome) ---
-  ctx.fillStyle = "#c8c8c8";
-  ctx.fillRect(x + w * 0.42, bodyTop + (bodyBottom - bodyTop) * 0.4, 6, 2.5);
-  ctx.fillRect(x + w * 0.65, bodyTop + (bodyBottom - bodyTop) * 0.4, 6, 2.5);
-
-  // --- Side indicator on fender ---
-  ctx.fillStyle = "#e8a030";
-  ctx.fillRect(x + w * 0.28, bodyTop + 4, 4, 2);
-
-  // --- Running board / side step ---
-  ctx.fillStyle = "#888";
-  ctx.fillRect(x + 18, bodyBottom, w - 36, 3);
-
-  // --- Taillights (vertical rectangles — rear of G-Class) ---
-  ctx.fillStyle = c.carTaillight;
-  ctx.fillRect(x, bodyTop + 4, 3, 8);
-  ctx.fillRect(x, bodyBottom - 12, 3, 8);
-
-  // --- Rear bumper ---
-  ctx.fillStyle = "#888";
-  ctx.fillRect(x - 1, bodyBottom - 3, 4, 6);
-
-  // --- Spare tire on rear door (very visible from side) ---
-  ctx.fillStyle = "#222";
-  ctx.beginPath();
-  ctx.arc(x + 2, bodyTop + (bodyBottom - bodyTop) * 0.5, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "#444";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(x + 2, bodyTop + (bodyBottom - bodyTop) * 0.5, 9, 0, Math.PI * 2);
-  ctx.stroke();
-  // Spare tire hub
-  ctx.fillStyle = "#888";
-  ctx.beginPath();
-  ctx.arc(x + 2, bodyTop + (bodyBottom - bodyTop) * 0.5, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // --- Wheels (large, boxy arches) ---
+  // Spare wheel on the rear door, behind the body.
+  const sx = x + w * 0.065;
+  const sy = y + h * 0.47;
+  const sr = h * 0.2;
   ctx.fillStyle = c.carWheel;
   ctx.beginPath();
-  ctx.arc(x + 19, wheelY, wheelR, 0, Math.PI * 2);
+  ctx.arc(sx, sy, sr, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillStyle = pinkDark;
   ctx.beginPath();
-  ctx.arc(x + w - 19, wheelY, wheelR, 0, Math.PI * 2);
+  ctx.arc(sx, sy, sr * 0.72, 0, Math.PI * 2);
   ctx.fill();
-  // Chrome hubcaps (multi-spoke)
-  ctx.fillStyle = "#c8c8c8";
+
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, PINK_G_CLASS_SHAPE, {
+    body: pink,
+    bodyDark: pinkDark,
+    cladding: "#4a3d44",
+  });
+
+  // Round headlamp, fender-top indicator, door hinges, belt trim.
+  ctx.fillStyle = c.carHeadlight;
   ctx.beginPath();
-  ctx.arc(x + 19, wheelY, 4.5, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.975, y + h * 0.5, h * 0.055, 0, Math.PI * 2);
   ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x + w - 19, wheelY, 4.5, 0, Math.PI * 2);
-  ctx.fill();
-  // Spoke lines
-  ctx.strokeStyle = "#aaa";
-  ctx.lineWidth = 0.7;
-  for (const wx of [x + 19, x + w - 19]) {
-    for (let i = 0; i < 5; i++) {
-      const a = (i * Math.PI * 2) / 5;
-      ctx.beginPath();
-      ctx.moveTo(wx + Math.cos(a) * 2, wheelY + Math.sin(a) * 2);
-      ctx.lineTo(wx + Math.cos(a) * (wheelR - 1), wheelY + Math.sin(a) * (wheelR - 1));
-      ctx.stroke();
-    }
+  ctx.fillStyle = "#f0a040";
+  ctx.fillRect(x + w * 0.9, y + h * 0.37, w * 0.04, h * 0.035);
+  ctx.fillStyle = pinkDark;
+  for (const fx of [0.13, 0.32, 0.5]) {
+    ctx.fillRect(x + w * fx, y + h * 0.44, 1.3, 2);
+    ctx.fillRect(x + w * fx, y + h * 0.62, 1.3, 2);
   }
-
-  // --- Body outline ---
-  ctx.strokeStyle = pinkDark;
-  ctx.lineWidth = 1.2;
-  ctx.strokeRect(x + 2, bodyTop, w - 4, bodyBottom - bodyTop);
-
-  ctx.restore();
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  ctx.fillRect(x + w * 0.08, y + h * 0.52, w * 0.9, 0.8);
+  // Side step.
+  ctx.fillStyle = "#3a3036";
+  ctx.fillRect(x + w * 0.36, y + h * 0.82, w * 0.34, 1.6);
 }
 
 export function drawCactus(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
@@ -916,165 +633,404 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.textBaseline = "alphabetic";
 }
 
-export function drawLamborghiniHuracan(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const green = palette.obstacle.lamboGreen ?? "#2d8a35";
-  const greenDark = palette.obstacle.lamboGreenDark ?? "#1e6a25";
-  const windowColor = palette.obstacle.lamboWindow ?? "#2a3a4a";
-  const c = palette.obstacle;
-  const wheelR = 7;
-  const wheelY = y + h - wheelR;
-  const bodyBottom = y + h - wheelR - 1;
+const LAMBORGHINI_HURACAN_SHAPE: VehicleShape = {
+  angularArches: true,
+  outline: [
+    [0.0, 0.74], [0.0, 0.27], [0.006, 0.21], [0.18, 0.15], [0.47, 0.05], [0.55, 0.07],
+    [0.74, 0.32], [0.86, 0.43], [0.985, 0.58], [1.0, 0.66], [0.985, 0.84],
+  ],
+  windows: [[0.3, 0.33], [0.42, 0.09], [0.555, 0.1], [0.72, 0.35]],
+  pillars: [],
+  wheels: [0.2, 0.78],
+  wheelR: 6.6,
+  claddingFrom: 0.8,
+  tailLight: [0.0, 0.29, 0.03, 0.05],
+  headLight: [0.9, 0.5, 0.085, 0.04],
+};
 
-  // --- Wheel arches (low profile) ---
-  ctx.fillStyle = "#1a1a1a";
-  for (const wx of [x + 16, x + w - 16]) {
+/**
+ * Lamborghini Huracán–style supercar, built from the real car's side-profile proportions
+ * (4.52 m long, 2.62 m wheelbase, 1.165 m tall, ~1.0 m front / 0.9 m rear overhang):
+ * a single roof arc from the cab-forward screen to a short squared tail, angular
+ * flat-topped wheel arches, a big intake ahead of the rear wheel and louvred engine cover.
+ */
+export function drawLamborghiniHuracan(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  const green = c.lamboGreen ?? "#86c232";
+  const greenDark = c.lamboGreenDark ?? "#5e8f1f";
+  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  drawVehicle(ctx, x, y, w, h, c, LAMBORGHINI_HURACAN_SHAPE, {
+    body: green,
+    bodyDark: greenDark,
+    cladding: "#1c201c",
+    rim: { color: "#232326", spokes: 5, caliper: "#e7c21b" },
+    window: c.lamboWindow ?? "#2a3a4a",
+  });
+
+  ctx.save();
+  ctx.lineJoin = "round";
+  // Large side intake ahead of the rear wheel, under the window's rear point.
+  ctx.fillStyle = "#151815";
+  ctx.beginPath();
+  ctx.moveTo(...P(0.25, 0.43));
+  ctx.lineTo(...P(0.37, 0.38));
+  ctx.lineTo(...P(0.335, 0.6));
+  ctx.lineTo(...P(0.27, 0.64));
+  ctx.closePath();
+  ctx.fill();
+
+  // Signature crease: from the front arch back along the flank, kicking up to the window point.
+  ctx.strokeStyle = "rgba(255,255,255,0.4)";
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(...P(0.9, 0.5));
+  ctx.lineTo(...P(0.42, 0.43));
+  ctx.lineTo(...P(0.34, 0.33));
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.moveTo(...P(0.9, 0.53));
+  ctx.lineTo(...P(0.42, 0.46));
+  ctx.stroke();
+
+  // Louvred engine cover.
+  ctx.strokeStyle = "rgba(20,24,20,0.7)";
+  ctx.lineWidth = 0.7;
+  for (let i = 0; i < 4; i++) {
+    const t = 0.06 + i * 0.06;
+    const ty = 0.21 - (t - 0.006) * 0.35;
     ctx.beginPath();
-    ctx.arc(wx, bodyBottom + 2, wheelR + 2, Math.PI, 0);
+    ctx.moveTo(...P(t, ty + 0.03));
+    ctx.lineTo(...P(t + 0.035, ty + 0.01));
+    ctx.stroke();
+  }
+
+  // Rear diffuser, mirror and door shut line.
+  ctx.fillStyle = "#1c201c";
+  ctx.fillRect(...P(0.0, 0.64), w * 0.06, h * 0.12);
+  ctx.fillStyle = greenDark;
+  ctx.beginPath();
+  ctx.ellipse(...P(0.69, 0.3), w * 0.02, h * 0.035, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.22)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(...P(0.4, 0.34));
+  ctx.lineTo(...P(0.42, 0.78));
+  ctx.stroke();
+  ctx.restore();
+}
+
+const FERRARI_458_SHAPE: VehicleShape = {
+  outline: [
+    [0.0, 0.76], [0.0, 0.28], [0.007, 0.22], [0.13, 0.17], [0.31, 0.09], [0.46, 0.025], [0.56, 0.05],
+    [0.72, 0.29], [0.8, 0.32], [0.9, 0.44], [0.98, 0.56], [1.0, 0.64], [0.985, 0.85],
+  ],
+  windows: [[0.36, 0.22], [0.46, 0.07], [0.555, 0.085], [0.69, 0.3], [0.5, 0.31]],
+  pillars: [],
+  wheels: [0.183, 0.769],
+  wheelR: 6.6,
+  claddingFrom: 0.82,
+};
+
+/**
+ * Ferrari 458–style supercar, laid out from the real car's side-profile proportions
+ * (4.53 m long, 2.65 m wheelbase, 1.21 m tall, ~1.05 m front / 0.83 m rear overhang):
+ * teardrop side glass, long falling bonnet over muscular front wings, a fastback deck
+ * to a short ducktail, the scooped intake behind the door and round twin tail lamps.
+ */
+export function drawFerrari458(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  const red = c.ferrariRed ?? "#d11f1f";
+  const redDark = c.ferrariRedDark ?? "#9a1414";
+  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  drawVehicle(ctx, x, y, w, h, c, FERRARI_458_SHAPE, {
+    body: red,
+    bodyDark: redDark,
+    cladding: "#1e1616",
+    rim: { color: "#c3c6ca", spokes: 5, caliper: "#f2c200", thin: true },
+    window: "#22303c",
+  });
+
+  ctx.save();
+  // Round twin tail lamps on the rear face.
+  ctx.fillStyle = c.carTaillight;
+  for (const fy of [0.33, 0.43]) {
+    ctx.beginPath();
+    ctx.arc(...P(0.012, fy), h * 0.045, 0, Math.PI * 2);
     ctx.fill();
   }
-
-  // --- Main body (very low, wedge-shaped) ---
-  ctx.fillStyle = green;
-  ctx.beginPath();
-  // Rear — slightly angled up
-  ctx.moveTo(x, bodyBottom);
-  ctx.lineTo(x, y + h * 0.38);
-  // Rear deck rises to roofline
-  ctx.lineTo(x + w * 0.12, y + h * 0.22);
-  // Roof (very low, flat)
-  ctx.lineTo(x + w * 0.32, y + h * 0.1);
-  // Windshield angle (very aggressive rake)
-  ctx.lineTo(x + w * 0.52, y + 1);
-  // Hood slopes down — wedge shape
-  ctx.lineTo(x + w * 0.85, y + h * 0.2);
-  // Front nose (very low)
-  ctx.lineTo(x + w, y + h * 0.35);
-  ctx.lineTo(x + w, bodyBottom);
-  ctx.closePath();
-  ctx.fill();
-
-  // --- Side air intake (large angular scoop) ---
-  ctx.fillStyle = "#1a1a1a";
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.42, y + h * 0.42);
-  ctx.lineTo(x + w * 0.58, y + h * 0.32);
-  ctx.lineTo(x + w * 0.58, y + h * 0.55);
-  ctx.lineTo(x + w * 0.42, y + h * 0.62);
-  ctx.closePath();
-  ctx.fill();
-
-  // --- Body crease line (sharp Lamborghini character line) ---
-  ctx.strokeStyle = greenDark;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + 3, y + h * 0.45);
-  ctx.lineTo(x + w * 0.4, y + h * 0.42);
-  ctx.moveTo(x + w * 0.6, y + h * 0.38);
-  ctx.lineTo(x + w - 3, y + h * 0.4);
-  ctx.stroke();
-
-  // --- Window (very low, angular) ---
-  ctx.fillStyle = windowColor;
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.18, y + h * 0.2);
-  ctx.lineTo(x + w * 0.32, y + h * 0.12);
-  ctx.lineTo(x + w * 0.5, y + 3);
-  ctx.lineTo(x + w * 0.48, y + h * 0.18);
-  ctx.lineTo(x + w * 0.32, y + h * 0.25);
-  ctx.closePath();
-  ctx.fill();
-  // Window glare
-  ctx.fillStyle = "rgba(255,255,255,0.15)";
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.44, y + 6);
-  ctx.lineTo(x + w * 0.48, y + 4);
-  ctx.lineTo(x + w * 0.46, y + h * 0.18);
-  ctx.lineTo(x + w * 0.42, y + h * 0.2);
-  ctx.closePath();
-  ctx.fill();
-
-  // --- Rear engine vent ---
-  ctx.fillStyle = "#1a1a1a";
-  ctx.beginPath();
-  ctx.moveTo(x + w * 0.04, y + h * 0.28);
-  ctx.lineTo(x + w * 0.14, y + h * 0.22);
-  ctx.lineTo(x + w * 0.14, y + h * 0.35);
-  ctx.lineTo(x + w * 0.04, y + h * 0.38);
-  ctx.closePath();
-  ctx.fill();
-
-  // --- Front splitter (low) ---
-  ctx.fillStyle = "#1a1a1a";
-  ctx.fillRect(x + w * 0.78, bodyBottom - 2, w * 0.22 + 1, 3);
-
-  // --- Rear diffuser ---
-  ctx.fillStyle = "#1a1a1a";
-  ctx.fillRect(x - 1, bodyBottom - 2, w * 0.12, 3);
-
-  // --- Headlights (angular LED) ---
+  // Long swept headlamp along the top of the front wing.
   ctx.fillStyle = c.carHeadlight;
   ctx.beginPath();
-  ctx.moveTo(x + w * 0.85, y + h * 0.2);
-  ctx.lineTo(x + w - 1, y + h * 0.34);
-  ctx.lineTo(x + w - 4, y + h * 0.34);
-  ctx.lineTo(x + w * 0.84, y + h * 0.24);
+  ctx.moveTo(...P(0.86, 0.4));
+  ctx.lineTo(...P(0.975, 0.53));
+  ctx.lineTo(...P(0.97, 0.57));
+  ctx.lineTo(...P(0.87, 0.45));
   ctx.closePath();
   ctx.fill();
+  // Scooped intake behind the door, fed by the rising flank line.
+  ctx.fillStyle = "#1a1212";
+  ctx.beginPath();
+  ctx.moveTo(...P(0.37, 0.38));
+  ctx.quadraticCurveTo(...P(0.31, 0.42), ...P(0.29, 0.56));
+  ctx.lineTo(...P(0.33, 0.54));
+  ctx.quadraticCurveTo(...P(0.34, 0.44), ...P(0.37, 0.38));
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(...P(0.68, 0.62));
+  ctx.quadraticCurveTo(...P(0.5, 0.5), ...P(0.37, 0.38));
+  ctx.stroke();
+  // Front-wing highlight, rear diffuser, mirror.
+  ctx.strokeStyle = "rgba(255,255,255,0.28)";
+  ctx.beginPath();
+  ctx.moveTo(...P(0.73, 0.33));
+  ctx.quadraticCurveTo(...P(0.85, 0.36), ...P(0.97, 0.56));
+  ctx.stroke();
+  ctx.fillStyle = "#1e1616";
+  ctx.fillRect(...P(0.0, 0.66), w * 0.07, h * 0.12);
+  ctx.fillStyle = redDark;
+  ctx.beginPath();
+  ctx.ellipse(...P(0.685, 0.27), w * 0.02, h * 0.035, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
 
-  // --- Taillights (Y-shaped Lamborghini style — simplified) ---
-  ctx.fillStyle = c.carTaillight;
-  ctx.beginPath();
-  ctx.moveTo(x + 1, y + h * 0.32);
-  ctx.lineTo(x + 4, y + h * 0.28);
-  ctx.lineTo(x + 4, y + h * 0.42);
-  ctx.lineTo(x + 1, y + h * 0.45);
-  ctx.closePath();
-  ctx.fill();
+const CONVERTIBLE_SHAPE: VehicleShape = {
+  outline: [[0.0, 0.8], [0.0, 0.52], [0.04, 0.44], [0.6, 0.44], [0.86, 0.48], [0.97, 0.56], [1.0, 0.64], [0.99, 0.82]],
+  windows: [[0.6, 0.44], [0.53, 0.12], [0.555, 0.12], [0.63, 0.44]],
+  pillars: [],
+  wheels: [0.19, 0.8],
+  wheelR: 6.6,
+  claddingFrom: 0.84,
+  tailLight: [0.0, 0.5, 0.03, 0.08],
+  headLight: [0.93, 0.52, 0.06, 0.05],
+};
 
-  // --- Rear spoiler (small lip) ---
-  ctx.fillStyle = greenDark;
-  ctx.fillRect(x - 1, y + h * 0.3, 3, 2);
+/** Generic open-top roadster: long bonnet, short deck, raked screen and tan leather seats. */
+export function drawConvertible(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  const body = c.convertible ?? "#1f5fbf";
+  const bodyDark = c.convertibleDark ?? "#164586";
+  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
 
-  // --- Wheels (low profile) ---
-  ctx.fillStyle = c.carWheel;
-  ctx.beginPath();
-  ctx.arc(x + 16, wheelY, wheelR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x + w - 16, wheelY, wheelR, 0, Math.PI * 2);
-  ctx.fill();
-  // Sport alloy rims
-  ctx.fillStyle = "#2a2a2a";
-  ctx.beginPath();
-  ctx.arc(x + 16, wheelY, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x + w - 16, wheelY, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-  // Y-spoke pattern
-  ctx.strokeStyle = "#555";
-  ctx.lineWidth = 0.8;
-  for (const wx of [x + 16, x + w - 16]) {
-    for (let i = 0; i < 5; i++) {
-      const a = (i * Math.PI * 2) / 5;
-      ctx.beginPath();
-      ctx.moveTo(wx + Math.cos(a) * 1.5, wheelY + Math.sin(a) * 1.5);
-      ctx.lineTo(wx + Math.cos(a) * (wheelR - 1), wheelY + Math.sin(a) * (wheelR - 1));
-      ctx.stroke();
-    }
+  // Seat backs sit in the cockpit, behind the body side.
+  ctx.save();
+  ctx.fillStyle = "#b07a4a";
+  for (const fx of [0.33, 0.45]) {
+    ctx.beginPath();
+    ctx.ellipse(...P(fx, 0.34), w * 0.035, h * 0.13, -0.15, 0, Math.PI * 2);
+    ctx.fill();
   }
+  ctx.restore();
 
-  // --- Body outline ---
-  ctx.strokeStyle = greenDark;
+  drawVehicle(ctx, x, y, w, h, c, CONVERTIBLE_SHAPE, {
+    body,
+    bodyDark,
+    cladding: "#262a30",
+    window: "rgba(150,200,225,0.55)",
+  });
+
+  ctx.save();
+  // Windscreen frame and cockpit opening line.
+  ctx.strokeStyle = "#2c2c2c";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(x, bodyBottom);
-  ctx.lineTo(x, y + h * 0.38);
-  ctx.lineTo(x + w * 0.12, y + h * 0.22);
-  ctx.lineTo(x + w * 0.32, y + h * 0.1);
-  ctx.lineTo(x + w * 0.52, y + 1);
-  ctx.lineTo(x + w * 0.85, y + h * 0.2);
-  ctx.lineTo(x + w, y + h * 0.35);
-  ctx.lineTo(x + w, bodyBottom);
+  ctx.moveTo(...P(0.6, 0.44));
+  ctx.lineTo(...P(0.53, 0.12));
   ctx.stroke();
+  ctx.fillStyle = "#1c1c1c";
+  ctx.fillRect(...P(0.26, 0.44), w * 0.33, 1.2);
+  // Door seam and a chrome side strip.
+  ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(...P(0.36, 0.46));
+  ctx.lineTo(...P(0.37, 0.8));
+  ctx.moveTo(...P(0.56, 0.46));
+  ctx.lineTo(...P(0.55, 0.8));
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,0.4)";
+  ctx.fillRect(...P(0.05, 0.58), w * 0.88, 0.7);
+  ctx.restore();
+}
+
+const ROLLS_ROYCE_PHANTOM_SHAPE: VehicleShape = {
+  outline: [
+    [0.0, 0.79], [0.0, 0.42], [0.06, 0.39], [0.15, 0.36], [0.27, 0.04], [0.57, 0.025],
+    [0.69, 0.33], [0.945, 0.37], [1.0, 0.38], [1.0, 0.79],
+  ],
+  windows: [[0.23, 0.33], [0.29, 0.08], [0.56, 0.07], [0.655, 0.33]],
+  pillars: [0.42],
+  wheels: [0.217, 0.835],
+  wheelR: 7.6,
+  claddingFrom: 0.86,
+  tailLight: [0.0, 0.44, 0.018, 0.16],
+  headLight: [0.965, 0.42, 0.03, 0.07],
+};
+
+/**
+ * Rolls-Royce Phantom–style limousine, from the real car's proportions (5.76 m long,
+ * 3.55 m wheelbase, 1.65 m tall): long flat bonnet, upright Pantheon-style grille,
+ * thick C-pillar, rear-hinged coach doors and a two-tone black-over-silver body.
+ */
+export function drawRollsRoycePhantom(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  drawVehicle(ctx, x, y, w, h, c, ROLLS_ROYCE_PHANTOM_SHAPE, {
+    body: "#1b1c21",
+    bodyDark: "#0f1013",
+    lowerTone: ["#a7abb1", 0.4, 0.82],
+    cladding: "#3a3c40",
+    window: "#2c3a46",
+  });
+
+  ctx.save();
+  // Pantheon-style grille: tall chrome frame with vertical vanes.
+  ctx.fillStyle = "#d9dbde";
+  ctx.fillRect(...P(0.982, 0.4), w * 0.018, h * 0.3);
+  ctx.fillStyle = "#8a8d92";
+  for (let i = 0; i < 4; i++) ctx.fillRect(...P(0.984, 0.43 + i * 0.065), w * 0.014, 0.6);
+  // Chrome belt line and rocker, coach-door seams.
+  ctx.fillStyle = "#d9dbde";
+  ctx.fillRect(...P(0.02, 0.395), w * 0.95, 0.8);
+  ctx.fillRect(...P(0.27, 0.8), w * 0.47, 0.8);
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(...P(0.3, 0.34)); ctx.lineTo(...P(0.3, 0.8));
+  ctx.moveTo(...P(0.42, 0.34)); ctx.lineTo(...P(0.42, 0.8));
+  ctx.moveTo(...P(0.57, 0.34)); ctx.lineTo(...P(0.57, 0.8));
+  ctx.stroke();
+  // Door handles.
+  ctx.fillStyle = "#d9dbde";
+  ctx.fillRect(...P(0.32, 0.47), w * 0.02, 0.8);
+  ctx.fillRect(...P(0.53, 0.47), w * 0.02, 0.8);
+  ctx.restore();
+}
+
+const PORSCHE_911_SHAPE: VehicleShape = {
+  outline: [
+    [0.005, 0.87], [0.0, 0.7], [0.001, 0.48], [0.025, 0.38], [0.08, 0.31], [0.138, 0.24],
+    [0.21, 0.15], [0.294, 0.071], [0.34, 0.04], [0.383, 0.017], [0.425, 0.004], [0.465, 0.0],
+    [0.505, 0.012], [0.54, 0.04], [0.6, 0.15], [0.69, 0.3], [0.758, 0.32], [0.853, 0.38],
+    [0.962, 0.49], [0.99, 0.6], [1.0, 0.68], [0.995, 0.9],
+  ],
+  windows: [[0.223, 0.27], [0.3, 0.15], [0.4, 0.08], [0.5, 0.08], [0.615, 0.335]],
+  pillars: [0.358],
+  wheels: [0.209, 0.782],
+  wheelR: 7.2,
+  claddingFrom: 0.86,
+};
+
+/**
+ * Porsche 911 GT3 RS–style sports car. Every key point (wheel centres, roofline, glass,
+ * door, intakes, wing) is measured from a side-view reference drawing and normalised to
+ * the car's length and height, so the silhouette matches the real shape at game scale.
+ */
+export function drawPorsche911(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
+  const c = palette.obstacle;
+  const body = c.porsche ?? "#2fa8c9";
+  const bodyDark = c.porscheDark ?? "#1f7d97";
+  const carbon = "#1b1f22";
+  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+
+  // Wing uprights behind the body, from the engine deck up to the wing.
+  ctx.save();
+  ctx.strokeStyle = carbon;
+  ctx.lineCap = "round";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(...P(0.039, 0.36)); ctx.lineTo(...P(0.022, 0.16));
+  ctx.moveTo(...P(0.104, 0.25)); ctx.lineTo(...P(0.076, 0.15));
+  ctx.stroke();
+  ctx.restore();
+
+  drawVehicle(ctx, x, y, w, h, c, PORSCHE_911_SHAPE, {
+    body,
+    bodyDark,
+    cladding: "#22282c",
+    rim: { color: "#2a2b2e", spokes: 5 },
+    window: "#26343f",
+  });
+
+  ctx.save();
+  // Slim tail lamp across the rear.
+  ctx.fillStyle = c.carTaillight;
+  ctx.fillRect(...P(0.02, 0.38), w * 0.075, h * 0.05);
+  // Slanted headlamp on the front wing.
+  ctx.fillStyle = "#e9eef0";
+  ctx.beginPath();
+  ctx.ellipse(...P(0.891, 0.47), w * 0.032, h * 0.06, 0.55, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = c.carHeadlight;
+  ctx.beginPath();
+  ctx.ellipse(...P(0.891, 0.47), w * 0.016, h * 0.032, 0.55, 0, Math.PI * 2);
+  ctx.fill();
+  // RS side intake ahead of the rear wheel.
+  ctx.fillStyle = "#151a1d";
+  ctx.beginPath();
+  ctx.moveTo(...P(0.281, 0.37));
+  ctx.lineTo(...P(0.33, 0.38));
+  ctx.lineTo(...P(0.346, 0.58));
+  ctx.lineTo(...P(0.294, 0.51));
+  ctx.closePath();
+  ctx.fill();
+  // Louvres on top of the front wing, fuel cap, front intake.
+  ctx.strokeStyle = "#151a1d";
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  for (const fx of [0.75, 0.765, 0.78]) {
+    ctx.moveTo(...P(fx, 0.36));
+    ctx.lineTo(...P(fx + 0.008, 0.4));
+  }
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.ellipse(...P(0.707, 0.39), w * 0.02, h * 0.035, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "#151a1d";
+  ctx.fillRect(...P(0.952, 0.69), w * 0.021, h * 0.13);
+  // Door: rear edge curving into the sill, front shut line, handle.
+  ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(...P(0.373, 0.32));
+  ctx.quadraticCurveTo(...P(0.36, 0.72), ...P(0.42, 0.8));
+  ctx.moveTo(...P(0.645, 0.33));
+  ctx.quadraticCurveTo(...P(0.66, 0.55), ...P(0.655, 0.8));
+  ctx.stroke();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(...P(0.397, 0.45), w * 0.05, 0.9);
+  // Mirror on the door.
+  ctx.fillStyle = bodyDark;
+  ctx.beginPath();
+  ctx.ellipse(...P(0.578, 0.3), w * 0.024, h * 0.04, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Swan-neck wing: main plane with an upper mount hooking over it.
+  ctx.fillStyle = carbon;
+  ctx.beginPath();
+  ctx.moveTo(...P(-0.009, 0.064));
+  ctx.lineTo(...P(0.07, 0.083));
+  ctx.lineTo(...P(0.076, 0.131));
+  ctx.lineTo(...P(0.063, 0.16));
+  ctx.lineTo(...P(-0.002, 0.126));
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = carbon;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(...P(0.076, 0.1));
+  ctx.quadraticCurveTo(...P(0.135, 0.08), ...P(0.127, 0.155));
+  ctx.stroke();
+
+  // Front splitter and rear diffuser.
+  ctx.fillStyle = carbon;
+  ctx.fillRect(...P(0.92, 0.88), w * 0.08, h * 0.035);
+  ctx.fillRect(...P(0.0, 0.78), w * 0.05, h * 0.1);
+  ctx.restore();
 }

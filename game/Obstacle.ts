@@ -1,6 +1,13 @@
 import { ObstacleInstance, ObstacleType } from "./types";
 import { MIN_OBSTACLE_GAP, MIN_OBSTACLE_GAP_LATE } from "./constants";
+import { HITBOX_PADDING } from "./Collision";
 import type { EnvironmentDefinition, WeightedType } from "./environments/types";
+
+/** How far (px) non-ramp obstacles sit into the road so they look grounded. */
+const MAX_ROAD_SINK = 10;
+
+/** Minimum vertical hitbox overlap (px) between a grounded rider and an obstacle. */
+const MIN_HIT_BAND = 6;
 
 // Dimensions for each obstacle type
 export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: number }> = {
@@ -9,8 +16,10 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.TALL_TREE]:       { width: 22, height: 72 },  // 50% taller — needs double-jump
   [ObstacleType.GIANT_TREE]:      { width: 30, height: 108 }, // 50% taller than tall tree, bushy
   [ObstacleType.SHOPPING_TROLLEY]:{ width: 38, height: 38 },
-  [ObstacleType.CAR]:             { width: 80, height: 42 },
-  [ObstacleType.PERSON_ON_BIKE]:  { width: 38, height: 52 },
+  [ObstacleType.CAR]:             { width: 70, height: 36 },  // small hatchback
+  [ObstacleType.SUV]:             { width: 84, height: 46 },
+  [ObstacleType.DELIVERY_VAN]:    { width: 92, height: 52 },  // still single-jumpable (apex ~120px)
+  [ObstacleType.PERSON_ON_BIKE]:  { width: 46, height: 52 },  // long wheelbase so it reads as a bike
   [ObstacleType.BUS_STOP]:        { width: 129, height: 68 },
   [ObstacleType.SHIPPING_CONTAINER]: { width: 176, height: 75 },
   [ObstacleType.STRAIGHT_RAMP]:   { width: 90, height: 30 },
@@ -24,7 +33,11 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.PINK_G_CLASS]:    { width: 76, height: 46 },
   [ObstacleType.CACTUS]:          { width: 22, height: 60 },
   [ObstacleType.DUBAI_CHOCOLATE]: { width: 176, height: 75 },
-  [ObstacleType.LAMBORGHINI_HURACAN]: { width: 88, height: 28 },
+  [ObstacleType.LAMBORGHINI_HURACAN]: { width: 88, height: 24 },  // supercars sit low
+  [ObstacleType.FERRARI_458]:     { width: 88, height: 24 },
+  [ObstacleType.CONVERTIBLE]:     { width: 80, height: 26 },
+  [ObstacleType.ROLLS_ROYCE_PHANTOM]: { width: 112, height: 32 }, // long limo — real 5.76 m at game scale
+  [ObstacleType.PORSCHE_911]:     { width: 88, height: 26 },
   [ObstacleType.DUBAI_BILLBOARD]:    { width: 309, height: 92 },
 };
 
@@ -46,9 +59,11 @@ export function createObstacle(
   const spec = OBSTACLE_SPECS[type];
   // Ramps keep exact positioning (physics-dependent), everything else sits
   // slightly into the road so obstacles look grounded rather than floating.
-  // Offset is capped at (height - 17) to guarantee collision overlap remains.
+  // The sink is capped so a grounded rider's hitbox still overlaps the obstacle's
+  // by MIN_HIT_BAND px; otherwise low cars would only collide in a 1px sliver.
   const isRamp = type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP || type === ObstacleType.CONTAINER_WITH_RAMP;
-  const yOffset = isRamp ? 0 : Math.max(0, Math.min(spec.height - 17, 10));
+  const maxSink = spec.height - 2 * HITBOX_PADDING - MIN_HIT_BAND;
+  const yOffset = isRamp ? 0 : Math.max(0, Math.min(maxSink, MAX_ROAD_SINK));
   return {
     type,
     x: canvasWidth + 60,

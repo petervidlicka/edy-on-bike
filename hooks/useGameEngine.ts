@@ -3,12 +3,14 @@
  * the multiplayer race and the multiplayer backdrop. Owns the Engine instance and
  * the React state the HUDs read from it, so each screen only adds its own rules.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Engine } from "@/game/Engine";
 import type { EngineOptions } from "@/game/Engine";
 import { GameState } from "@/game/types";
 import { INITIAL_SPEED } from "@/game/constants";
-import type { TrickFeedbackData } from "@/components/HUD";
+
+/** A landed trick to flash in the HUD (single-player and multiplayer share the popup). */
+export type TrickFeedbackData = { name: string; points: number; sketchy?: boolean };
 
 /** How long a landed trick stays on screen. */
 const TRICK_FEEDBACK_MS = 2000;
@@ -64,8 +66,9 @@ export function useGameEngine(
   const [trickFeedback, setTrickFeedback] = useState<TrickFeedbackData | null>(null);
 
   // Engine callbacks outlive the render that created them, so they read options from here.
+  // Layout effect: refreshed before paint, so a frame can't run between commit and update with stale callbacks.
   const optionsRef = useRef(options);
-  useEffect(() => {
+  useLayoutEffect(() => {
     optionsRef.current = options;
   });
 

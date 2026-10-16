@@ -11,7 +11,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 /** Full URL of the leaderboard endpoint for this build. */
-export const LEADERBOARD_URL = `${API_BASE}/api/leaderboard`;
+const LEADERBOARD_URL = `${API_BASE}/api/leaderboard`;
 
 /** A leaderboard request that failed; `message` is safe to show to the player. */
 export class LeaderboardError extends Error {

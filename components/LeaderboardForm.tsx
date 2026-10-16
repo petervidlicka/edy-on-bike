@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { glassBtn } from "./sharedStyles";
 import { loadPlayerName, savePlayerName } from "@/game/storage";
 import { LeaderboardError, submitScore } from "@/lib/leaderboardClient";
@@ -19,6 +19,17 @@ export default function LeaderboardForm({
   const [error, setError] = useState("");
   /** A submit reached the API and failed — offer a way past the form so an outage can't trap the player. */
   const [submitFailed, setSubmitFailed] = useState(false);
+  // Refs, not state: rapid Space presses arrive before a re-render, so the guards must be synchronous
+  /** A submit is on the wire — further saves and skips wait for it. */
+  const inFlightRef = useRef(false);
+  /** onSaved has fired; the form is on its way out and must not advance again. */
+  const advancedRef = useRef(false);
+
+  const advance = useCallback(() => {
+    if (advancedRef.current) return;
+    advancedRef.current = true;
+    onSaved();
+  }, [onSaved]);
 
   useEffect(() => {
     const saved = loadPlayerName();
@@ -29,7 +40,9 @@ export default function LeaderboardForm({
 
   const saveAndAdvance = useCallback(
     async (nameToSave: string) => {
+      if (inFlightRef.current || advancedRef.current) return;
       const trimmed = nameToSave.trim();
+      inFlightRef.current = true;
       setSubmitting(true);
       if (trimmed) {
         try {
@@ -44,15 +57,23 @@ export default function LeaderboardForm({
               : "Couldn't save your score. Please try again.",
           );
           setSubmitFailed(true);
+          inFlightRef.current = false;
           setSubmitting(false);
           return;
         }
       }
+      inFlightRef.current = false;
       setSubmitting(false);
-      onSaved();
+      advance();
     },
-    [score, skinName, onSaved],
+    [score, skinName, advance],
   );
+
+  /** Skips saving after a failure; ignored while a retry is still on the wire so it can't double-advance. */
+  const handleSkip = () => {
+    if (inFlightRef.current) return;
+    advance();
+  };
 
   const handleSaveScore = async () => {
     if (submitting) return;
@@ -70,8 +91,11 @@ export default function LeaderboardForm({
       if (e.code !== "Space") return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      e.preventDefault();
       e.stopImmediatePropagation();
+      // A focused button handles Space natively, so "Continue without saving" stays reachable by keyboard
+      if (tag === "BUTTON") return;
+      e.preventDefault();
+      if (e.repeat) return; // holding Space must not resubmit
       const currentName =
         name.trim() || loadPlayerName().trim();
       if (!currentName) {
@@ -187,7 +211,8 @@ export default function LeaderboardForm({
 
       {submitFailed && (
         <button
-          onClick={onSaved}
+          onClick={handleSkip}
+          disabled={submitting}
           style={{
             ...glassBtn,
             fontSize: "0.78rem",

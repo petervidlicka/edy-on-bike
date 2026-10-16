@@ -13,16 +13,19 @@ export const MAX_MESSAGE_CHARS = 1_024;
 export const MIN_UPDATE_INTERVAL_MS = 40;
 
 /**
- * Every SkinId in game/types.ts (`satisfies` rejects typos; a new skin must be
- * added here too). Unknown ids fall back to the default skin.
+ * Every SkinId in game/types.ts. Keyed by the union so adding a skin there fails
+ * to compile until it's listed here, instead of the server quietly turning it
+ * into "default". Unknown ids from clients fall back to the default skin.
  */
 const SKIN_IDS: ReadonlySet<string> = new Set(
-  ["default", "racer", "cowboy", "royal", "neon", "stealth"] satisfies SkinId[],
+  Object.keys({
+    default: true, racer: true, cowboy: true, royal: true, neon: true, stealth: true,
+  } satisfies Record<SkinId, true>),
 );
 
-/** Every TrickType in game/types.ts, as sent on the wire. */
+/** Every TrickType in game/types.ts, as sent on the wire; exhaustive for the same reason. */
 const TRICK_TYPES: ReadonlySet<string> = new Set(
-  ["NONE", "SUPERMAN", "NO_HANDER"] satisfies `${TrickType}`[],
+  Object.keys({ NONE: true, SUPERMAN: true, NO_HANDER: true } satisfies Record<`${TrickType}`, true>),
 );
 
 /**

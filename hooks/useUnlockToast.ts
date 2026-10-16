@@ -13,7 +13,7 @@ const TOAST_MS = 2500;
 
 /**
  * Watches the live score and announces bikes it passes the unlock threshold of,
- * with a chime. One run can cross several tiers; they are announced together.
+ * with a chime and Edy's voice line. One run can cross several tiers; they are announced together.
  * @param engineRef - Engine used to play the chime.
  * @param gameState - Current engine state; the target is computed when a run starts.
  * @param score - Live score.
@@ -63,6 +63,7 @@ export function useUnlockToast(
     }
     if (names.length === 0) return;
     engineRef.current?.playUnlockChime();
+    engineRef.current?.announce("skinUnlocked");
     haptic("success");
     // Showing a toast in response to the score is the point of this effect
     // eslint-disable-next-line react-hooks/set-state-in-effect

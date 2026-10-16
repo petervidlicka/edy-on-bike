@@ -19,8 +19,8 @@ const TRICK_FEEDBACK_MS = 2000;
 
 /** Screen-specific hooks into the engine; all optional. */
 export interface UseGameEngineOptions {
-  /** Runs after the score has been set to the final value. */
-  onGameOver?: (finalScore: number) => void;
+  /** Runs after the score has been set to the final value; gets the engine so the screen can trigger voice lines. */
+  onGameOver?: (finalScore: number, engine: Engine) => void;
   /** Runs on every engine state change (speed is already reset when a run starts). */
   onStateChange?: (state: GameState) => void;
   /** Runs whenever the engine's set of pause reasons changes. */
@@ -91,7 +91,7 @@ export function useGameEngine(
         onSpeedUpdate: setSpeed,
         onGameOver: (finalScore) => {
           setScore(finalScore);
-          optionsRef.current.onGameOver?.(finalScore);
+          optionsRef.current.onGameOver?.(finalScore, engine);
         },
         onStateChange: (state) => {
           if (state === GameState.RUNNING) setSpeed(INITIAL_SPEED);

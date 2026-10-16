@@ -64,3 +64,9 @@ In the internal `emit()` from the shared groundwork, map game events → `sound.
 2. `voiceLines.ts` manifest and `VoiceManager`.
 3. Hook up the events and ducking.
 4. Playtest for annoyance: if it's too chatty, lower the chances or raise the cooldown.
+
+## Implementation notes (code side, done)
+- Clips are discovered from `public/voice/manifest.json` (`{ "files": [...] }`, regenerate with `npm run voice:manifest`) instead of a hard-coded file list, so adding a recording needs no code change and the game never requests a file that does not exist. `game/voiceLines.ts` holds the chance/priority table, the game-event mapping and the naming convention; how to add clips is in `public/voice/README.md`.
+- Per-variant crash lines (`crash-faceplant-<n>`, `crash-tree-hang-<n>`, `crash-car-bonk-<n>`) fall back to the generic `crash-<n>` set.
+- `newBest` and `skinUnlocked` are triggered from React through `Engine.announce(...)`.
+- Still open: record/source the clips, then playtest chances and cooldown for annoyance.

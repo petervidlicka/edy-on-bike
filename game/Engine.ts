@@ -10,7 +10,9 @@ import {
   SKETCHY_TOLERANCE,
   AMBULANCE_CHANCE,
   CRASH_DURATION,
+  BIG_TRICK_POINTS,
 } from "./constants";
+import type { GameEvent } from "./events";
 import {
   FloatingText,
   createTrickFloatingText,
@@ -45,7 +47,10 @@ export type EngineCallbacks = {
   onGameOver: (score: number) => void;
   onStateChange: (state: GameState) => void;
   onSpeedUpdate?: (speed: number) => void;
+  /** Legacy trick callback, kept alongside `onGameEvent` for the HUD's trick popup. */
   onTrickLanded?: (trickName: string, points: number, sketchy?: boolean) => void;
+  /** Receives every game event (run start, tricks, crashes, ...) for React-side reactions. */
+  onGameEvent?: (event: GameEvent) => void;
   /**
    * Fires whenever the set of pause reasons changes, so React can show or hide
    * the pause menu. `paused` is true while any reason is held.
@@ -142,6 +147,7 @@ export class Engine {
     this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng));
     this.sound.startMusic();
     this.callbacks.onStateChange(this.state);
+    this.emit({ type: "runStart" });
   }
 
   restart(): void {
@@ -247,6 +253,7 @@ export class Engine {
 
     // Environment progression
     const envResult = this.envManager.update(dt, this.elapsedMs);
+    if (envResult.biomeStarted) this.emit({ type: "biomeChanged", biome: envResult.biomeStarted });
     if (envResult.musicCrossfade) {
       this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
     }
@@ -388,6 +395,7 @@ export class Engine {
   }
 
   private startCrash(): void {
+    this.emit({ type: "crash" });
     this.state = GameState.CRASHING;
     this.sound.stopMusic();
     this.sound.playCrash();
@@ -472,6 +480,7 @@ export class Engine {
     this.distanceSinceLastObstacle = 0;
     this.nextObstacleGap = 500;
 
+    this.emit({ type: "revive" });
     this.floatingTexts.push({
       text: "REVIVED!",
       x: this.player.x + this.player.width / 2,
@@ -494,7 +503,19 @@ export class Engine {
     this.callbacks.onScoreUpdate(this.score);
     this.sound.playBackflipSuccess();
     this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width, sketchy ?? false));
-    this.callbacks.onTrickLanded?.(label, bonus, sketchy);
+    this.emit({ type: "trickLanded", label, points: bonus, sketchy: sketchy ?? false, big: bonus >= BIG_TRICK_POINTS });
+  }
+
+  /**
+   * Single exit for game events. Internal reactions are routed here first, then
+   * React is told through `callbacks.onGameEvent`. Keeps feature code ignorant of
+   * who listens.
+   */
+  private emit(event: GameEvent): void {
+    if (event.type === "trickLanded") {
+      this.callbacks.onTrickLanded?.(event.label, event.points, event.sketchy);
+    }
+    this.callbacks.onGameEvent?.(event);
   }
 
   private render(): void {
@@ -661,6 +682,7 @@ export class Engine {
 
   forceNextBiome(): void {
     const result = this.envManager.forceNextBiome();
+    if (result.biomeStarted) this.emit({ type: "biomeChanged", biome: result.biomeStarted });
     if (result.musicCrossfade) {
       this.sound.crossfadeTo(result.musicCrossfade.track, result.musicCrossfade.durationMs);
     }

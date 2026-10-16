@@ -39,6 +39,8 @@ const MUSIC_CROSSFADE_MS = 3000;
 // ── Events emitted by update() for Engine to act on ──
 
 export interface EnvUpdateResult {
+  /** If set, a transition into this biome just started (Engine announces it as an event). */
+  biomeStarted?: BiomeId;
   /** If set, Engine should crossfade music to the new track. */
   musicCrossfade?: { track: string; durationMs: number };
   /** If set, Engine should append new biome buildings to the existing layer (transition start). */
@@ -90,6 +92,8 @@ export class EnvironmentManager {
           if (nextEnv) {
             this.startTransition(nextEnv);
             this.currentBiomeIndex = nextIndex;
+
+            result.biomeStarted = nextEnv.id;
 
             // Signal Engine to append new biome buildings to the existing layer
             result.appendBackground = { toEnv: nextEnv };
@@ -184,6 +188,7 @@ export class EnvironmentManager {
     if (!nextEnv) return result;
     this.startTransition(nextEnv);
     this.currentBiomeIndex = nextIndex;
+    result.biomeStarted = nextEnv.id;
     if (nextEnv.musicTrack !== this.currentEnv.musicTrack) {
       result.musicCrossfade = {
         track: nextEnv.musicTrack,

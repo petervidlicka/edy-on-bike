@@ -27,6 +27,8 @@ export const RAMP_GRAVITY_MULTIPLIER = 0.5;
 export const DOUBLE_CHAIN_BONUS = 100;
 export const TRIPLE_CHAIN_BONUS = 200;
 export const COMBO_MULTIPLIER = 2;
+/** A landing worth at least this many points counts as a "big" trick in game events. */
+export const BIG_TRICK_POINTS = 150;
 
 // Crash animation
 export const CRASH_DURATION = 1.2; // seconds

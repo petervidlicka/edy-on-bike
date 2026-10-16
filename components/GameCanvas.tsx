@@ -63,7 +63,15 @@ export default function GameCanvas() {
     engineRef.current?.setDebugObstacles(debugObstacles ? DEBUG_OBSTACLE_SEQUENCE : null, 700);
   }, [engineRef, debugObstacles]);
 
+  // Straight into the next run (same as the pause menu's Restart); Home keeps the start screen reachable
   const handleRestart = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.restart();
+    engine.start();
+  }, [engineRef]);
+
+  const handleHome = useCallback(() => {
     engineRef.current?.restart();
   }, [engineRef]);
 
@@ -140,6 +148,7 @@ export default function GameCanvas() {
           skinName={getSkinById(selectedSkinId).name}
           newlyUnlockedSkins={newlyUnlockedSkins}
           onRestart={handleRestart}
+          onHome={handleHome}
         />
       )}
 

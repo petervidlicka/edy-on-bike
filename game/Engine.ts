@@ -145,8 +145,9 @@ export class Engine {
   }
 
   restart(): void {
+    // Drop only the player's pause: a phone still held in portrait (or a hidden tab) keeps the game frozen.
     const wasPaused = this.isPaused();
-    this.pauseReasons.clear();
+    const hadUserPause = this.pauseReasons.delete("user");
     this.sound.stopSiren();
     this.sound.reset();
     this.ambulance = null;
@@ -171,11 +172,12 @@ export class Engine {
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
     this.callbacks.onStateChange(this.state);
-    if (wasPaused) {
+    if (wasPaused && !this.isPaused()) {
       // The loop was stopped by the pause; bring it back for the fresh run.
+      this.lastTime = 0;
       this.rafId = requestAnimationFrame(this.loop);
-      this.callbacks.onPauseChange?.(false, []);
     }
+    if (hadUserPause) this.notifyPauseChange();
   }
 
   jump(): void {

@@ -2,7 +2,8 @@
  * Client-side multiplayer state for one race: buffers remote snapshots, tracks
  * live scores and crash status, and throttles the local player's updates.
  */
-import type { GhostSnapshot, PlayerInfo, ServerMessage, ClientMessage } from "./types";
+import type { GhostSnapshot, PlayerInfo, ServerMessage, ClientMessage } from "./protocol";
+import type { SkinId } from "../types";
 import { InterpolationBuffer } from "./interpolation";
 import { NETWORK_SYNC_INTERVAL_MS } from "../constants";
 
@@ -10,7 +11,7 @@ import { NETWORK_SYNC_INTERVAL_MS } from "../constants";
 export interface GhostPlayer {
   id: string;
   name: string;
-  skinId: string;
+  skinId: SkinId;
   snapshot: GhostSnapshot;
   /** ms since this player's newest snapshot — lets the renderer fade out ghosts that stopped updating. */
   staleMs: number;

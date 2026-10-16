@@ -2,6 +2,9 @@
  * Input validation for the multiplayer server. Clients are untrusted: everything
  * they send is re-checked here before it is stored, ranked or relayed to others.
  */
+import type { SkinId, TrickType } from "../game/types";
+import { MAX_NAME_LENGTH } from "../game/multiplayer/protocol";
+import type { GhostSnapshot } from "../game/multiplayer/protocol";
 
 /** Largest client message we accept. Real snapshots are ~250 chars of JSON. */
 export const MAX_MESSAGE_CHARS = 1_024;
@@ -9,14 +12,21 @@ export const MAX_MESSAGE_CHARS = 1_024;
 /** Clients send at ~15 Hz (67ms); anything much faster is spam, not gameplay. */
 export const MIN_UPDATE_INTERVAL_MS = 40;
 
-/** Matches the lobby's name input. */
-const MAX_NAME_LENGTH = 16;
+/**
+ * Every SkinId in game/types.ts. Keyed by the union so adding a skin there fails
+ * to compile until it's listed here, instead of the server quietly turning it
+ * into "default". Unknown ids from clients fall back to the default skin.
+ */
+const SKIN_IDS: ReadonlySet<string> = new Set(
+  Object.keys({
+    default: true, racer: true, cowboy: true, royal: true, neon: true, stealth: true,
+  } satisfies Record<SkinId, true>),
+);
 
-/** Mirrors SkinId in game/types.ts — unknown ids fall back to the default skin. */
-const SKIN_IDS = new Set(["default", "racer", "cowboy", "royal", "neon", "stealth"]);
-
-/** Mirrors TrickType in game/types.ts. */
-const TRICK_TYPES = new Set(["NONE", "SUPERMAN", "NO_HANDER"]);
+/** Every TrickType in game/types.ts, as sent on the wire; exhaustive for the same reason. */
+const TRICK_TYPES: ReadonlySet<string> = new Set(
+  Object.keys({ NONE: true, SUPERMAN: true, NO_HANDER: true } satisfies Record<`${TrickType}`, true>),
+);
 
 /**
  * Score plausibility. Distance scoring tops out at ~30 pts/s (max speed 10px/frame
@@ -32,23 +42,6 @@ const BONUS_REFILL_PER_SEC = 250;
 /** Same ceiling as the leaderboard API. */
 const MAX_SCORE = 99_999;
 
-/** Ghost snapshot as relayed to other players — only these fields, nothing else. */
-export interface RelaySnapshot {
-  t: number;
-  h: number;
-  og: boolean;
-  wr: number;
-  bt: number;
-  rl: number;
-  rc: number;
-  lt: number;
-  ba: number;
-  fd: number;
-  at: string;
-  tp: number;
-  s: number;
-}
-
 const NUMERIC_FIELDS = ["t", "h", "wr", "bt", "rl", "rc", "lt", "ba", "fd", "tp", "s"] as const;
 
 /**
@@ -63,16 +56,16 @@ export function sanitizeName(raw: unknown): string | null {
 }
 
 /** @returns A known skin id, or "default" for anything unrecognised. */
-export function sanitizeSkinId(raw: unknown): string {
-  return typeof raw === "string" && SKIN_IDS.has(raw) ? raw : "default";
+export function sanitizeSkinId(raw: unknown): SkinId {
+  return typeof raw === "string" && SKIN_IDS.has(raw) ? (raw as SkinId) : "default";
 }
 
 /**
- * Rebuilds a snapshot from the expected fields only, so a client can't use the
- * relay to push arbitrary payloads to other players.
+ * Rebuilds a snapshot from the expected fields only (exactly GhostSnapshot), so a
+ * client can't use the relay to push arbitrary payloads to other players.
  * @returns The clean snapshot, or null if any field has the wrong type.
  */
-export function sanitizeSnapshot(raw: unknown): RelaySnapshot | null {
+export function sanitizeSnapshot(raw: unknown): GhostSnapshot | null {
   if (typeof raw !== "object" || raw === null) return null;
   const src = raw as Record<string, unknown>;
 
@@ -86,7 +79,7 @@ export function sanitizeSnapshot(raw: unknown): RelaySnapshot | null {
   const n = (key: (typeof NUMERIC_FIELDS)[number]) => src[key] as number;
   return {
     t: n("t"), h: n("h"), og: src.og, wr: n("wr"), bt: n("bt"), rl: n("rl"),
-    rc: n("rc"), lt: n("lt"), ba: n("ba"), fd: n("fd"), at: src.at, tp: n("tp"), s: n("s"),
+    rc: n("rc"), lt: n("lt"), ba: n("ba"), fd: n("fd"), at: src.at as TrickType, tp: n("tp"), s: n("s"),
   };
 }
 

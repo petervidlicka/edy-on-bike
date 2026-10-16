@@ -5,15 +5,13 @@
  * single-player), then wait for everyone to ready up.
  */
 import { useState, useCallback } from "react";
-import { PlayerInfo } from "@/game/multiplayer/types";
+import { MAX_NAME_LENGTH } from "@/game/multiplayer/protocol";
+import type { PlayerInfo } from "@/game/multiplayer/protocol";
 import { SkinId } from "@/game/types";
 import SkinPicker from "@/components/SkinPicker";
 import { useSavedSkinState } from "@/hooks/useSavedSkinState";
 import { useSavedPlayerName } from "@/hooks/useSavedPlayerName";
 import { savePlayerName } from "@/game/storage";
-
-/** Matches the server's name limit (party/validation.ts). */
-const MAX_NAME_LENGTH = 16;
 
 interface MultiplayerLobbyProps {
   roomCode: string | null;
@@ -23,8 +21,8 @@ interface MultiplayerLobbyProps {
   error?: string | null;
   /** Waiting for the server to accept a create/join — buttons stay disabled until it answers. */
   connecting?: boolean;
-  onCreateRoom: (name: string, skinId: string) => void;
-  onJoinRoom: (code: string, name: string, skinId: string) => void;
+  onCreateRoom: (name: string, skinId: SkinId) => void;
+  onJoinRoom: (code: string, name: string, skinId: SkinId) => void;
   onReady: () => void;
   onLeave: () => void;
 }

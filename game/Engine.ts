@@ -31,7 +31,7 @@ import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
 import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
 import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
-import type { GhostSnapshot } from "./multiplayer/types";
+import type { GhostSnapshot } from "./multiplayer/protocol";
 import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
 
 export type EngineCallbacks = {

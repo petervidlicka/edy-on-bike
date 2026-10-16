@@ -1,4 +1,5 @@
 import { INITIAL_SPEED } from "@/game/constants";
+import type { TrickFeedbackData } from "@/hooks/useGameEngine";
 
 /** Guards against browsers firing both onTouchStart and onClick. */
 let lastTouchTime = 0;
@@ -113,9 +114,6 @@ function ArrowSVG({ points }: { points: string }) {
     </svg>
   );
 }
-
-/** A landed trick to flash in the HUD (single-player and multiplayer share the popup). */
-export type TrickFeedbackData = { name: string; points: number; sketchy?: boolean };
 
 /**
  * Music/SFX toggles, top left. Extracted so the multiplayer race screen can reuse

@@ -23,10 +23,18 @@ export interface FloatingText {
   color: string;
   /** Font size in px; the renderer's default when omitted. */
   size?: number;
+  /** Tilt in radians (clockwise); set for comic pops. */
+  rotation?: number;
+  /** Outline colour; the renderer's dark default when omitted. */
+  outline?: string;
+  /** Comic pop: bounces in, stays solid, then fades. */
+  pop?: boolean;
 }
 
 export interface TrickResult {
   crashed: boolean;
+  /** For a crash: the trick was not finished (true) rather than overdone (false). */
+  underRotated?: boolean;
   label?: string;
   bonus?: number;
   sketchy?: boolean;
@@ -37,6 +45,12 @@ function computeTrickScore(baseName: string, basePoints: number, count: number):
   if (count === 2) return { label: `Double ${baseName}`, totalBonus: 2 * basePoints + DOUBLE_CHAIN_BONUS };
   const prefix = count === 3 ? "Triple" : `${count}x`;
   return { label: `${prefix} ${baseName}`, totalBonus: count * basePoints + TRIPLE_CHAIN_BONUS };
+}
+
+/** True when a flip of `angle` radians stopped short of its nearest whole turn (or never got a full one). */
+function isUnderRotated(angle: number, fullFlip: number): boolean {
+  const targetFlips = Math.round(angle / fullFlip);
+  return targetFlips < 1 || angle < targetFlips * fullFlip;
 }
 
 function countPrefix(count: number): string {
@@ -63,7 +77,7 @@ export function evaluateFlipLanding(angle: number, direction: number, fullFlip: 
       return { crashed: false, label: `Sketchy ${label}`, bonus: Math.round(totalBonus * SKETCHY_PENALTY), sketchy: true };
     }
   }
-  return { crashed: true };
+  return { crashed: true, underRotated: isUnderRotated(angle, fullFlip) };
 }
 
 /** Evaluate a pose-trick-only landing. */
@@ -78,7 +92,7 @@ export function evaluatePoseTrickLanding(player: PlayerState): TrickResult {
     return { crashed: false, label, bonus: totalBonus, sketchy: false };
   }
   // Trick started but never completed — crash
-  return { crashed: true };
+  return { crashed: true, underRotated: true };
 }
 
 /** Evaluate a combo landing (flip + pose simultaneously).
@@ -123,7 +137,9 @@ export function evaluateComboLanding(
     return { crashed: false, label: finalLabel, bonus: finalScore, sketchy };
   }
 
-  return { crashed: true };
+  // A flip that was off decides under/over; a flip that was fine means the pose was unfinished
+  const flipOff = !flipClean && !flipSketchy;
+  return { crashed: true, underRotated: flipOff ? isUnderRotated(angle, fullFlip) : true };
 }
 
 /** Reset flip-specific state on a player after landing. */
@@ -212,7 +228,8 @@ export function updateFloatingTexts(texts: FloatingText[], dt: number): Floating
 
 export interface TrickContext {
   player: PlayerState;
-  onCrash: () => void;
+  /** Called on a bad landing; `underRotated` says whether the trick was unfinished rather than overdone. */
+  onCrash: (underRotated: boolean) => void;
   onAwardBonus: (label: string, bonus: number, sketchy: boolean) => void;
 }
 
@@ -227,7 +244,7 @@ export function handleFlipLanding(
   const result = evaluateFlipLanding(angle, direction, fullFlip, tolerance, sketchyTolerance);
   resetFlipState(ctx.player);
   if (result.crashed) {
-    ctx.onCrash();
+    ctx.onCrash(result.underRotated ?? true);
     return true;
   }
   ctx.onAwardBonus(result.label!, result.bonus!, result.sketchy ?? false);
@@ -238,7 +255,7 @@ export function handlePoseTrickLanding(ctx: TrickContext): boolean {
   const result = evaluatePoseTrickLanding(ctx.player);
   resetPoseState(ctx.player);
   if (result.crashed) {
-    ctx.onCrash();
+    ctx.onCrash(result.underRotated ?? true);
     return true;
   }
   ctx.onAwardBonus(result.label!, result.bonus!, result.sketchy ?? false);
@@ -256,7 +273,7 @@ export function handleComboLanding(
   const result = evaluateComboLanding(ctx.player, angle, direction, fullFlip, tolerance, sketchyTolerance);
   resetAllTrickState(ctx.player);
   if (result.crashed) {
-    ctx.onCrash();
+    ctx.onCrash(result.underRotated ?? true);
     return true;
   }
   ctx.onAwardBonus(result.label!, result.bonus!, result.sketchy ?? false);

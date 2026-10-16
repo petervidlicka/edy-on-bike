@@ -7,6 +7,7 @@
  * own variants (new best, skin unlocked) when they emit them.
  */
 import type { BiomeId } from "./environments/types";
+import type { CrashVariantId } from "./crashes/types";
 import type { ObstacleType } from "./types";
 
 /** Why a trick chain ended. */
@@ -24,7 +25,9 @@ export type ComboEndReason = "expired" | "sketchy" | "crash";
  * - `grindEnded`: a ride along a rideable obstacle long enough to score ended (rolled off or
  *   jumped off); `points` is what was paid after the chain multiplier. Fires after the
  *   `trickLanded` / `comboChanged` events of the combo link it created.
- * - `crash`: the rider crashed (fires before any ambulance revive).
+ * - `crash`: the rider crashed (fires before any ambulance revive); `variant` is the id of the
+ *   crash animation that plays ("classic", "faceplant", "treeHang", "carBonk", ...), so voice
+ *   lines and sounds can match it.
  * - `revive`: the ambulance brought the rider back.
  * - `biomeChanged`: the transition into a new biome started.
  */
@@ -34,7 +37,7 @@ export type GameEvent =
   | { type: "comboChanged"; links: number; multiplier: number }
   | { type: "comboEnded"; links: number; multiplier: number; total: number; reason: ComboEndReason }
   | { type: "grindEnded"; obstacle: ObstacleType; points: number }
-  | { type: "crash" }
+  | { type: "crash"; variant: CrashVariantId }
   | { type: "revive" }
   | { type: "biomeChanged"; biome: BiomeId };
 

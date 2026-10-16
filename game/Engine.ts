@@ -1,4 +1,4 @@
-import { GameState, AmbulancePhase, AmbulanceState, CrashState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
+import { GameState, AmbulancePhase, AmbulanceState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
@@ -9,7 +9,6 @@ import {
   FLIP_TOLERANCE,
   SKETCHY_TOLERANCE,
   AMBULANCE_CHANCE,
-  CRASH_DURATION,
   BIG_TRICK_POINTS,
   COMBO_MIN_LINKS_FOR_SUMMARY,
   COMBO_FLASH_MULTIPLIER,
@@ -32,7 +31,7 @@ import {
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { createBackgroundLayers, updateLayers, getTotalLayerWidth } from "./Background";
 import {
-  drawBackground, drawPlayer, drawObstacle, drawFloatingText, drawCrashBike, drawCrashRider,
+  drawBackground, drawPlayer, drawObstacle, drawFloatingText,
   createParticles, updateParticles, drawParticles, drawAmbulance, drawReviveFlash,
   createConfettiBurst, updateConfetti, drawConfetti,
   createComboFx, triggerComboFx, clearComboFx, updateComboFx,
@@ -47,7 +46,11 @@ import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
-import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
+import { createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
+import {
+  beginCrash, createCrashPopText, createCrashState, crashPopFor, drawCrash, pickVariant, stepCrash, tickCrashAnim,
+} from "./crashes";
+import type { CrashCause } from "./crashes";
 import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
 import type { GhostSnapshot } from "./multiplayer/protocol";
 import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
@@ -137,15 +140,7 @@ export class Engine {
   private debugSequence: ObstacleType[] | null = null;
   private debugIndex: number = 0;
   private debugGap: number = 500;
-  private crashState: CrashState = {
-    elapsed: 0, duration: CRASH_DURATION,
-    shakeIntensity: 0, shakeOffsetX: 0, shakeOffsetY: 0,
-    riderX: 0, riderY: 0, riderVX: 0, riderVY: 0,
-    riderAngle: 0, riderAngularVel: 0, riderBounceCount: 0,
-    bikeX: 0, bikeY: 0, bikeVX: 0, bikeVY: 0,
-    bikeAngle: 0, bikeAngularVel: 0, bikeBounceCount: 0,
-    bikeWheelRotation: 0,
-  };
+  private crashState = createCrashState();
   private particles: Particle[] = [];
   private particleConfig: ParticleOverlayConfig | null = null;
   private rng: { random(): number } = { random: Math.random };
@@ -290,7 +285,7 @@ export class Engine {
   private update(dt: number, rawDt: number): void {
     // Multiplayer: the server counted us out (e.g. tab hidden too long) — crash out now
     if (this.multiplayer?.isLocalEliminated()) {
-      this.startCrash();
+      this.startCrash({ kind: "eliminated" });
       return;
     }
 
@@ -356,9 +351,11 @@ export class Engine {
     }
 
     const FULL_FLIP = Math.PI * 2;
+    // Where a botched landing plants the rider: the road, or the top of the obstacle landed on
+    let landingSurfaceY = this.groundY;
     const trickCtx: TrickContext = {
       player: this.player,
-      onCrash: () => this.startCrash(),
+      onCrash: (underRotated) => this.startCrash({ kind: "badLanding", underRotated, surfaceY: landingSurfaceY }),
       onAwardBonus: (label, bonus, sketchy) => this.awardTrickBonus(label, bonus, sketchy)
     };
 
@@ -366,6 +363,7 @@ export class Engine {
     if (wasAirborne && this.player.isOnGround) {
       const hadFlip = wasBackflipping;
       const hadPose = this.player.activeTrick !== TrickType.NONE;
+      landingSurfaceY = Math.min(this.groundY, this.player.y + this.player.height);
       if (processTrickLanding(trickCtx, hadFlip, hadPose, prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
     }
 
@@ -418,13 +416,14 @@ export class Engine {
       if (obs.rideable) {
         const result = checkRideableCollision(this.player, obs);
         if (result === "crash") {
-          this.startCrash();
+          this.startCrash({ kind: "obstacle", obstacle: obs });
           return;
         }
         if (result === "land_on_top") {
           // Check trick landing on rideable (combo-aware)
           const landFlip = this.player.isBackflipping;
           const landPose = this.player.activeTrick !== TrickType.NONE;
+          landingSurfaceY = obs.y;
           if (processTrickLanding(trickCtx, landFlip, landPose, this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
           this.player.ridingObstacle = obs;
           this.player.y = obs.y - this.player.height;
@@ -435,7 +434,7 @@ export class Engine {
         }
       } else {
         if (checkCollision(this.player, obs)) {
-          this.startCrash();
+          this.startCrash({ kind: "obstacle", obstacle: obs });
           return;
         }
       }
@@ -447,8 +446,14 @@ export class Engine {
     }
   }
 
-  private startCrash(): void {
-    this.emit({ type: "crash" });
+  /**
+   * Begins a crash. What was hit picks the animation.
+   * @param cause - What the rider crashed into (an obstacle, a botched landing, an elimination).
+   */
+  private startCrash(cause: CrashCause): void {
+    // Crashes are local only (multiplayer ghosts just fade), so Math.random is safe here
+    const variant = pickVariant(cause, Math.random);
+    this.emit({ type: "crash", variant });
     // A crash ends the chain without paying a cash-in; a revive starts a fresh one
     this.finishChain("crash");
     this.cancelGrind();
@@ -457,7 +462,10 @@ export class Engine {
     this.state = GameState.CRASHING;
     this.sound.stopMusic();
     this.sound.playCrash();
-    initCrashPhysics(this.crashState, this.player, this.speed);
+    beginCrash(this.crashState, variant, { player: this.player, speed: this.speed, groundY: this.groundY, cause });
+    this.floatingTexts.push(
+      createCrashPopText(crashPopFor(variant), { x: this.player.x + this.player.width / 2 + 18, y: this.player.y - 36 }, this.canvasW),
+    );
     this.callbacks.onStateChange(this.state);
   }
 
@@ -495,6 +503,11 @@ export class Engine {
     if (!this.ambulance) return;
 
     this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
+
+    // The crashed rider keeps wiggling while the ambulance drives up
+    if (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED) {
+      tickCrashAnim(this.crashState, rawDt);
+    }
 
     const action = updateAmbulanceLogic(this.ambulance, dt, rawDt, this.canvasW);
 
@@ -550,7 +563,9 @@ export class Engine {
   }
 
   private updateCrash(dt: number, rawDt: number): void {
-    if (updateCrashPhysics(this.crashState, dt, rawDt, this.groundY)) {
+    // The pop word ("SPLAT!") has to keep floating and fading while the crash plays
+    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
+    if (stepCrash(this.crashState, dt, rawDt, this.groundY)) {
       this.gameOver();
     }
   }
@@ -692,8 +707,7 @@ export class Engine {
       && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
 
     if (crashing || ambulancePreRevive || this.state === GameState.GAME_OVER) {
-      drawCrashBike(ctx, this.crashState, this.skin);
-      drawCrashRider(ctx, this.crashState, this.skin);
+      drawCrash(ctx, this.crashState, { skin: this.skin, palette, groundY });
     } else {
       drawPlayer(ctx, this.player, this.skin);
       drawSparks(ctx, this.sparks);
@@ -707,7 +721,13 @@ export class Engine {
     }
 
     for (const ft of this.floatingTexts) {
-      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color, ft.size);
+      if (ft.pop) this.displayFont ??= resolveDisplayFont(this.canvas);
+      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color, ft.size, {
+        rotation: ft.rotation,
+        outline: ft.outline,
+        pop: ft.pop,
+        fontFamily: ft.pop ? this.displayFont ?? undefined : undefined,
+      });
     }
 
     if (crashing) {

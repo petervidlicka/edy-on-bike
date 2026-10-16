@@ -1,29 +1,33 @@
 /**
- * Title, score, personal-best line and unlock notice shared by every game-over view.
+ * Title, score, personal-best line and unlock progress shared by every game-over view.
  */
+import { UnlockProgress } from "./UnlockProgress";
 
 interface GameOverHeaderProps {
   score: number;
   bestScore: number;
-  newlyUnlockedSkins?: string[];
+  /** Best before this run, so the unlock bar can animate from it. */
+  previousBest: number;
+  cheatUnlocked: boolean;
 }
 
 /**
- * @param props - The run's score, the saved best, and any skins this run unlocked.
+ * @param props - The run's score, the saved best, and the pre-run best and cheat state for the unlock bar.
  * @example
- * <GameOverHeader score={420} bestScore={900} />
+ * <GameOverHeader score={420} bestScore={900} previousBest={800} cheatUnlocked={false} />
  */
-export function GameOverHeader({ score, bestScore, newlyUnlockedSkins }: GameOverHeaderProps) {
+export function GameOverHeader({ score, bestScore, previousBest, cheatUnlocked }: GameOverHeaderProps) {
   const isNewBest = score > 0 && score >= bestScore;
   return (
     <>
       <h2
         style={{
           color: "#27435E",
-          fontSize: "2.5rem",
+          fontSize: "clamp(1.8rem, 9vh, 2.5rem)",
+          lineHeight: 1.1,
           fontFamily: "var(--font-fredoka), sans-serif",
           fontWeight: 600,
-          margin: "0 0 0.5rem",
+          margin: "0 0 clamp(0rem, 1vh, 0.5rem)",
           letterSpacing: "0.08em",
           textShadow: "0 2px 6px rgba(255,255,255,0.3)",
         }}
@@ -45,20 +49,9 @@ export function GameOverHeader({ score, bestScore, newlyUnlockedSkins }: GameOve
         </p>
       ) : null}
 
-      {newlyUnlockedSkins && newlyUnlockedSkins.length > 0 && (
-        <div style={{
-          background: "rgba(234,179,8,0.15)",
-          border: "1.5px solid rgba(234,179,8,0.4)",
-          borderRadius: "12px",
-          padding: "0.4rem 1rem",
-          marginTop: "0.3rem",
-          textAlign: "center",
-        }}>
-          <p style={{ color: "#92400e", fontSize: "0.85rem", fontWeight: 700, margin: 0 }}>
-            New bike unlocked: {newlyUnlockedSkins.join(", ")}!
-          </p>
-        </div>
-      )}
+      <div style={{ marginTop: "0.3rem" }}>
+        <UnlockProgress bestScore={bestScore} cheatUnlocked={cheatUnlocked} animateFrom={previousBest} />
+      </div>
     </>
   );
 }

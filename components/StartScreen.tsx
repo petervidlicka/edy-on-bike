@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SkinId } from "@/game/types";
 import SkinPicker from "./SkinPicker";
+import { UnlockProgress } from "./UnlockProgress";
 import { isMultiplayerEnabled } from "@/lib/multiplayerConfig";
 
 interface StartScreenProps {
@@ -26,14 +27,15 @@ export default function StartScreen({
         alignItems: "center",
         justifyContent: "center",
         pointerEvents: "none",
-        gap: "0.75rem",
+        gap: "clamp(0.3rem, 1.8vh, 0.75rem)",
         fontFamily: "var(--font-nunito), Arial, sans-serif",
       }}
     >
       <h1
         style={{
           color: "#27435E",
-          fontSize: "3rem",
+          fontSize: "clamp(2.2rem, 10vh, 3rem)",
+          lineHeight: 1.1,
           fontFamily: "var(--font-fredoka), sans-serif",
           fontWeight: 600,
           margin: 0,
@@ -59,6 +61,7 @@ export default function StartScreen({
         cheatUnlocked={cheatUnlocked}
         onSelectSkin={onSelectSkin}
       />
+      <UnlockProgress bestScore={bestScore} cheatUnlocked={cheatUnlocked} />
       <div
         style={{
           marginTop: "0.5rem",

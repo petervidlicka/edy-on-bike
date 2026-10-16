@@ -2,12 +2,14 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { GameState, ObstacleType } from "@/game/types";
-import { getSkinById, SKINS } from "@/game/skins";
+import { getSkinById } from "@/game/skins";
 import { loadSkinState } from "@/game/storage";
 import StartScreen from "./StartScreen";
 import HUD from "./HUD";
 import GameOverScreen from "./GameOverScreen";
 import { PauseMenu } from "./PauseMenu";
+import { UnlockToast } from "./UnlockToast";
+import { useUnlockToast } from "@/hooks/useUnlockToast";
 
 import { useCheatCode } from "@/hooks/useCheatCode";
 import { useDebugObstaclesFlag } from "@/hooks/useDebugObstaclesFlag";
@@ -29,7 +31,7 @@ export default function GameCanvas() {
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   // True while the player (or a hidden tab promoted to one) holds a "user" pause
   const [userPaused, setUserPaused] = useState(false);
-  const [newlyUnlockedSkins, setNewlyUnlockedSkins] = useState<string[]>([]);
+  const [previousBest, setPreviousBest] = useState(0);
   // ?obstacles=debug flag — off during prerender/hydration, then read from the URL
   const [debugObstacles, toggleDebugObstacles] = useDebugObstaclesFlag();
 
@@ -41,17 +43,15 @@ export default function GameCanvas() {
     useGameEngine(canvasRef, {
       onGameOver: (finalScore) => {
         setGameState(GameState.GAME_OVER);
-        // Determine newly unlocked skins before updating best score
-        const previousBest = loadSkinState().bestScore;
-        const unlocked = SKINS.filter(
-          s => finalScore >= s.unlockScore && previousBest < s.unlockScore && s.unlockScore > 0
-        );
-        setNewlyUnlockedSkins(unlocked.map(s => s.name));
+        // Remember the best from before this run so the unlock bar can animate from it
+        setPreviousBest(loadSkinState().bestScore);
         recordBestScore(finalScore);
       },
       onStateChange: setGameState,
       onPauseChange: (_paused, reasons) => setUserPaused(reasons.includes("user")),
     });
+
+  const unlockToast = useUnlockToast(engineRef, gameState, score, bestScore, cheatUnlocked);
 
   // Sync skin to engine on mount, after hydration swaps in the saved skin, and on selection
   useEffect(() => {
@@ -131,6 +131,8 @@ export default function GameCanvas() {
         />
       )}
 
+      <UnlockToast message={unlockToast} />
+
       {userPaused && (
         <PauseMenu
           engineRef={engineRef}
@@ -146,7 +148,8 @@ export default function GameCanvas() {
           score={score}
           bestScore={bestScore}
           skinName={getSkinById(selectedSkinId).name}
-          newlyUnlockedSkins={newlyUnlockedSkins}
+          previousBest={previousBest}
+          cheatUnlocked={cheatUnlocked}
           onRestart={handleRestart}
           onHome={handleHome}
         />

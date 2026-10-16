@@ -19,7 +19,9 @@ interface GameOverScreenProps {
   score: number;
   bestScore: number;
   skinName: string;
-  newlyUnlockedSkins?: string[];
+  /** Saved best before this run (for the unlock progress animation). */
+  previousBest: number;
+  cheatUnlocked: boolean;
   /** Starts a new run immediately. */
   onRestart: () => void;
   /** Returns to the start screen (bike picker, multiplayer link). */
@@ -36,7 +38,7 @@ const LEADERBOARD_FETCH_GRACE_MS = 1500;
  * @example
  * <GameOverScreen score={420} bestScore={900} skinName="Racer" onRestart={restart} onHome={home} />
  */
-export default function GameOverScreen({ score, bestScore, skinName, newlyUnlockedSkins, onRestart, onHome }: GameOverScreenProps) {
+export default function GameOverScreen({ score, bestScore, skinName, previousBest, cheatUnlocked, onRestart, onHome }: GameOverScreenProps) {
   const board = useGameOverLeaderboard();
   const lockoutActive = useInputLockout(GAME_OVER_LOCKOUT_MS);
   // Give a slow leaderboard fetch a little longer, so the layout doesn't flip under the player's finger
@@ -74,12 +76,12 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
         justifyContent: "center",
         pointerEvents: view === "form" ? "none" : "auto",
         cursor: view === "form" || locked ? undefined : "pointer",
-        gap: "0.4rem",
+        gap: "clamp(0.2rem, 1vh, 0.4rem)",
         fontFamily: "var(--font-nunito), Arial, sans-serif",
       }}
     >
       {view !== "leaderboard" && (
-        <GameOverHeader score={score} bestScore={bestScore} newlyUnlockedSkins={newlyUnlockedSkins} />
+        <GameOverHeader score={score} bestScore={bestScore} previousBest={previousBest} cheatUnlocked={cheatUnlocked} />
       )}
 
       {view === "summary" && (

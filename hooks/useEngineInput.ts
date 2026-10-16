@@ -21,8 +21,8 @@ export interface UseEngineInputOptions {
 }
 
 /**
- * Wires Space/tap to jump and the arrow keys to tricks (↓ backflip, ↑ frontflip,
- * ← superman, → no-hander). Ignores input aimed at form fields and buttons so
+ * Wires Space/tap to jump (and, while the rider is crashing, to skip the crash animation)
+ * and the arrow keys to tricks (↓ backflip, ↑ frontflip, ← superman, → no-hander). Ignores input aimed at form fields and buttons so
  * typing a name or pressing an overlay button never makes the rider jump.
  * @param engineRef - The engine to drive; a null ref ignores input.
  * @param canvasRef - Canvas that receives touch input.
@@ -36,11 +36,14 @@ export function useEngineInput(
   { allowIdleStart, allowPause = false }: UseEngineInputOptions,
 ): void {
   useEffect(() => {
-    const jumpIfAllowed = () => {
+    const jumpIfAllowed = (isKeyRepeat = false) => {
       const engine = engineRef.current;
       if (!engine || engine.isPaused()) return;
       const state = engine.getState();
       if (state === GameState.RUNNING || (allowIdleStart && state === GameState.IDLE)) {
+        engine.jump();
+      } else if (state === GameState.CRASHING && !isKeyRepeat) {
+        // A fresh press skips the crash animation (the engine decides if it may); a held key must not
         engine.jump();
       }
     };
@@ -57,7 +60,7 @@ export function useEngineInput(
         const tag = (e.target as HTMLElement)?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA") return;
         e.preventDefault();
-        jumpIfAllowed();
+        jumpIfAllowed(e.repeat);
       }
       if (e.code === "ArrowDown" || e.code === "ArrowUp" || e.code === "ArrowLeft" || e.code === "ArrowRight") {
         e.preventDefault();

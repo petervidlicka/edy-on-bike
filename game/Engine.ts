@@ -9,6 +9,7 @@ import {
   FLIP_TOLERANCE,
   SKETCHY_TOLERANCE,
   AMBULANCE_CHANCE,
+  CRASH_SKIP_AFTER_S,
   BIG_TRICK_POINTS,
   COMBO_MIN_LINKS_FOR_SUMMARY,
   COMBO_FLASH_MULTIPLIER,
@@ -141,6 +142,11 @@ export class Engine {
   private debugIndex: number = 0;
   private debugGap: number = 500;
   private crashState = createCrashState();
+  /**
+   * Decided when the crash starts (not when it ends) so the player can skip a crash
+   * animation that no ambulance follows; an ambulance, once rolled, always plays.
+   */
+  private ambulancePending = false;
   private particles: Particle[] = [];
   private particleConfig: ParticleOverlayConfig | null = null;
   private rng: { random(): number } = { random: Math.random };
@@ -190,6 +196,7 @@ export class Engine {
     this.cancelGrind();
     this.sound.reset();
     this.ambulance = null;
+    this.ambulancePending = false;
     this.hasBeenResurrected = false;
     this.iddqdActive = false;
     this.state = GameState.IDLE;
@@ -235,6 +242,8 @@ export class Engine {
       }
       // Jumping off the top ends the grind right away rather than on the next frame
       if (this.grind && !this.player.ridingObstacle) this.endGrind();
+    } else if (this.state === GameState.CRASHING) {
+      this.skipCrash();
     }
   }
 
@@ -447,7 +456,8 @@ export class Engine {
   }
 
   /**
-   * Begins a crash. What was hit picks the animation.
+   * Begins a crash. What was hit picks the animation; the ambulance is decided here too
+   * so the player may skip the animation when none is coming.
    * @param cause - What the rider crashed into (an obstacle, a botched landing, an elimination).
    */
   private startCrash(cause: CrashCause): void {
@@ -463,10 +473,22 @@ export class Engine {
     this.sound.stopMusic();
     this.sound.playCrash(variant);
     beginCrash(this.crashState, variant, { player: this.player, speed: this.speed, groundY: this.groundY, cause });
+    this.ambulancePending =
+      !this.multiplayer && !this.hasBeenResurrected && (this.iddqdActive || Math.random() < AMBULANCE_CHANCE);
     this.floatingTexts.push(
       createCrashPopText(crashPopFor(variant), { x: this.player.x + this.player.width / 2 + 18, y: this.player.y - 36 }, this.canvasW),
     );
     this.callbacks.onStateChange(this.state);
+  }
+
+  /**
+   * Cuts a crash animation short and goes on to game over. Only allowed once the crash has
+   * played for a moment, and never when an ambulance is coming: that always plays out.
+   */
+  private skipCrash(): void {
+    if (this.state !== GameState.CRASHING || this.isPaused() || this.ambulancePending) return;
+    if (this.crashState.elapsed < CRASH_SKIP_AFTER_S) return;
+    this.gameOver();
   }
 
   private gameOver(): void {
@@ -476,7 +498,8 @@ export class Engine {
       this.finalGameOver();
       return;
     }
-    if (!this.hasBeenResurrected && (this.iddqdActive || Math.random() < AMBULANCE_CHANCE)) {
+    if (this.ambulancePending) {
+      this.ambulancePending = false;
       this.hasBeenResurrected = true;
       this.iddqdActive = false;
       this.startAmbulanceSequence();
@@ -772,6 +795,10 @@ export class Engine {
   }
   activateIddqd(): void {
     this.iddqdActive = true;
+    // Typed mid-crash: the ambulance is already decided, so the cheat has to flip it
+    if (this.state === GameState.CRASHING && !this.multiplayer && !this.hasBeenResurrected) {
+      this.ambulancePending = true;
+    }
     this.floatingTexts.push({
       text: "GOD MODE",
       x: this.canvasW / 2,

@@ -28,6 +28,11 @@ export interface VoiceHost {
 export interface SayOptions {
   /** Picks a more specific clip set: a crash variant id, or a biome id. */
   variant?: string;
+  /**
+   * If a more important line is still playing, say this one right after it instead of dropping
+   * it. For moments that matter more than their timing, like a new personal best at game over.
+   */
+  wait?: boolean;
 }
 
 /** Minimum time between two lines starting, unless the new one outranks the last. */
@@ -38,10 +43,19 @@ const DUCK_IN_MS = 80;
 const DUCK_RELEASE_MS = 300;
 /** Playback-rate spread around 1 (±5 %) so repeats sound less canned. */
 const RATE_JITTER = 0.05;
+/** How long a held-back line stays worth saying; any later and it no longer fits the moment. */
+const HELD_LINE_TTL_MS = 2500;
 
 interface Playing {
   source: AudioBufferSourceNode;
   priority: number;
+}
+
+/** A line that could not be said yet: clips were still loading, or it was asked to `wait`. */
+interface HeldLine {
+  event: VoiceEvent;
+  variant?: string;
+  heldAtMs: number;
 }
 
 /** Shape of public/voice/manifest.json. */
@@ -57,6 +71,10 @@ export class VoiceManager {
   /** Index of the clip played last per key, so a line is never repeated back to back. */
   private lastIndex = new Map<string, number>();
   private preloadStarted = false;
+  /** True while the manifest and clips are being fetched and decoded. */
+  private loading = false;
+  /** The latest line held back to be said later; only one, so stale chatter never piles up. */
+  private held: HeldLine | null = null;
   private destroyed = false;
   private playing: Playing | null = null;
   private lastStartMs = -Infinity;
@@ -73,13 +91,18 @@ export class VoiceManager {
 
   /**
    * Starts loading every clip listed in the manifest. Call on the first user gesture (run start);
-   * it returns immediately, runs only once, and lines whose clips are not decoded yet are skipped.
+   * it returns immediately and runs only once. A line asked for while clips are still loading
+   * (the run-start line, typically) is held and said once they are ready, if still fresh.
    * Missing or broken clips are reported in one `console.info` summary, never as per-file errors.
    */
   preload(): void {
     if (this.preloadStarted || this.destroyed) return;
     this.preloadStarted = true;
-    void this.loadClips();
+    this.loading = true;
+    void this.loadClips().finally(() => {
+      this.loading = false;
+      this.sayHeld();
+    });
   }
 
   private async loadClips(): Promise<void> {
@@ -138,17 +161,32 @@ export class VoiceManager {
    * voice.say("crash", { variant: "faceplant" });
    */
   say(event: VoiceEvent, options: SayOptions = {}): boolean {
+    return this.trySay(event, options.variant, options.wait ?? false, false);
+  }
+
+  /**
+   * The rules behind `say`. A held line, said later, skips the cooldown: the line that held it
+   * back is what started the cooldown.
+   */
+  private trySay(event: VoiceEvent, variant: string | undefined, wait: boolean, ignoreCooldown: boolean): boolean {
     if (this.destroyed || this.host.isMuted()) return false;
-    const key = clipKeysFor({ event, variant: options.variant }).find((k) => (this.clips.get(k)?.length ?? 0) > 0);
-    if (!key) return false;
+    const key = clipKeysFor({ event, variant }).find((k) => (this.clips.get(k)?.length ?? 0) > 0);
+    if (!key) {
+      // The clip may simply not be decoded yet; say it when loading finishes
+      if (this.loading) this.hold(event, variant);
+      return false;
+    }
     const buffers = this.clips.get(key);
     if (!buffers) return false;
 
     const { chance, priority } = VOICE_EVENTS[event];
     const now = performance.now();
     if (this.playing) {
-      if (priority <= this.playing.priority) return false;
-    } else if (now - this.lastStartMs < GLOBAL_COOLDOWN_MS && priority <= this.lastPriority) {
+      if (priority <= this.playing.priority) {
+        if (wait) this.hold(event, variant);
+        return false;
+      }
+    } else if (!ignoreCooldown && now - this.lastStartMs < GLOBAL_COOLDOWN_MS && priority <= this.lastPriority) {
       return false;
     }
     // Roll last, so a failed roll costs neither the cooldown nor a repeat-guard slot
@@ -167,6 +205,21 @@ export class VoiceManager {
     return true;
   }
 
+  private hold(event: VoiceEvent, variant: string | undefined): void {
+    this.held = { event, variant, heldAtMs: performance.now() };
+  }
+
+  /**
+   * Says the held line if it is still fresh.
+   * @returns True when it started playing.
+   */
+  private sayHeld(): boolean {
+    const held = this.held;
+    this.held = null;
+    if (!held || performance.now() - held.heldAtMs > HELD_LINE_TTL_MS) return false;
+    return this.trySay(held.event, held.variant, false, true);
+  }
+
   private play(buffer: AudioBuffer, priority: number): void {
     const ctx = this.host.getContext();
     const source = ctx.createBufferSource();
@@ -177,6 +230,8 @@ export class VoiceManager {
       source.disconnect();
       if (this.playing?.source !== source) return;
       this.playing = null;
+      // A line waiting for this one goes straight on, with the music still ducked
+      if (this.sayHeld()) return;
       this.host.duckMusic(1, DUCK_RELEASE_MS);
     };
     this.playing = { source, priority };
@@ -189,6 +244,7 @@ export class VoiceManager {
    * restart and SFX mute so Edy never keeps talking over a frozen or fresh game.
    */
   stop(): void {
+    this.held = null;
     this.stopSource(true);
   }
 
@@ -205,6 +261,7 @@ export class VoiceManager {
   /** Stops playback for good and drops the decoded clips; a late preload result is discarded. */
   destroy(): void {
     this.destroyed = true;
+    this.held = null;
     this.stopSource(false);
     this.clips.clear();
   }

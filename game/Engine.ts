@@ -798,11 +798,12 @@ export class Engine {
   }
   /**
    * Edy's voice line for a moment only React can detect (the engine knows neither the saved
-   * best score nor the unlock thresholds). Plays through the same rules as engine events.
+   * best score nor the unlock thresholds). Plays through the same rules as engine events, except
+   * that it waits for a line still playing (usually the crash line at game over) instead of being dropped.
    * @param moment - "newBest" at game over with a personal best, "skinUnlocked" when a bike unlocks mid-run.
    */
   announce(moment: "newBest" | "skinUnlocked"): void {
-    this.sound.voice.say(moment);
+    this.sound.voice.say(moment, { wait: true });
   }
 
   /** Plays the in-run "bike unlocked" chime (respects the SFX mute). */

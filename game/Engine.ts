@@ -15,6 +15,9 @@ import {
   COMBO_FLASH_MULTIPLIER,
   COMBO_CONFETTI_MULTIPLIER,
   COMBO_CONFETTI_COUNT,
+  GRIND_MIN_MS,
+  GRIND_BASE,
+  GRIND_PER_SEC,
 } from "./constants";
 import type { ComboEndReason, GameEvent } from "./events";
 import { createChain, addLink, tickChain, endChain } from "./ComboChain";
@@ -34,10 +37,11 @@ import {
   createConfettiBurst, updateConfetti, drawConfetti,
   createComboFx, triggerComboFx, clearComboFx, updateComboFx,
   drawComboMeter, drawComboFlash, resolveDisplayFont,
+  getRearWheelContact, emitSparks, updateSparks, drawSparks,
 } from "./rendering";
-import type { Particle, ConfettiPiece } from "./rendering";
+import type { Particle, ConfettiPiece, Spark } from "./rendering";
 import type { ParticleOverlayConfig } from "./environments/types";
-import { spawnObstacle, createObstacle, nextSpawnGap } from "./Obstacle";
+import { spawnObstacle, createObstacle, nextSpawnGap, getGrindLabel } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
@@ -50,6 +54,12 @@ import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
 
 /** Milliseconds per 60fps frame; converts the capped `dt` into game time for the chain timers. */
 const FRAME_MS = 1000 / 60;
+
+/** An in-progress grind: the obstacle being ridden and how long (game time) it has been ridden. */
+interface GrindState {
+  obstacle: ObstacleInstance;
+  ms: number;
+}
 
 /**
  * Why the engine is paused. The loop runs only while no reason is held, so the
@@ -109,6 +119,12 @@ export class Engine {
   private confetti: ConfettiPiece[] = [];
   /** Canvas font stack for the combo meter, resolved on first use (needs the mounted DOM). */
   private displayFont: string | null = null;
+  /**
+   * The ride in progress along a rideable obstacle, if any. Lives here rather than on
+   * PlayerState so multiplayer ghost snapshots stay unchanged.
+   */
+  private grind: GrindState | null = null;
+  private sparks: Spark[] = [];
   private canvasW: number = 0;
   private canvasH: number = 0;
   private groundY: number = 0;
@@ -176,6 +192,7 @@ export class Engine {
     const wasPaused = this.isPaused();
     const hadUserPause = this.pauseReasons.delete("user");
     this.sound.stopSiren();
+    this.cancelGrind();
     this.sound.reset();
     this.ambulance = null;
     this.hasBeenResurrected = false;
@@ -221,6 +238,8 @@ export class Engine {
       if (this.player.jumpCount > prevCount) {
         this.sound.playJump(prevCount === 1);
       }
+      // Jumping off the top ends the grind right away rather than on the next frame
+      if (this.grind && !this.player.ridingObstacle) this.endGrind();
     }
   }
 
@@ -389,6 +408,7 @@ export class Engine {
     // Ramp interaction (before collision checks)
     processRampInteractions(this.player, this.obstacles, this.groundY);
     processRidingState(this.player);
+    this.updateGrind(dtMs, dt);
 
     // Collision detection
     for (const obs of this.obstacles) {
@@ -411,6 +431,7 @@ export class Engine {
           this.player.velocityY = 0;
           this.player.isOnGround = false;
           this.player.jumpCount = 0;
+          this.beginGrind(obs);
         }
       } else {
         if (checkCollision(this.player, obs)) {
@@ -430,6 +451,7 @@ export class Engine {
     this.emit({ type: "crash" });
     // A crash ends the chain without paying a cash-in; a revive starts a fresh one
     this.finishChain("crash");
+    this.cancelGrind();
     clearComboFx(this.comboFx);
     this.confetti = [];
     this.state = GameState.CRASHING;
@@ -533,7 +555,11 @@ export class Engine {
     }
   }
 
-  private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): void {
+  /**
+   * Pays a trick link through the chain.
+   * @returns Points actually paid (after the chain multiplier).
+   */
+  private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): number {
     const isSketchy = sketchy ?? false;
     const prevMultiplier = this.chain.multiplier;
     const { multiplier, paid } = addLink(this.chain, bonus);
@@ -548,7 +574,7 @@ export class Engine {
     // A sketchy landing still counts as a link, but it breaks the chain
     if (isSketchy) {
       this.finishChain("sketchy");
-      return;
+      return paid;
     }
     // Feedback only when the multiplier actually climbs into a tier
     const climbed = multiplier > prevMultiplier;
@@ -556,6 +582,55 @@ export class Engine {
     if (climbed && multiplier >= COMBO_CONFETTI_MULTIPLIER) {
       this.confetti.push(...createConfettiBurst(this.canvasW / 2, 70, COMBO_CONFETTI_COUNT));
     }
+    return paid;
+  }
+
+  /** Starts timing a ride along `obstacle` and its scrape sound; replaces (and pays out) any earlier one. */
+  private beginGrind(obstacle: ObstacleInstance): void {
+    if (this.grind) this.endGrind();
+    this.grind = { obstacle, ms: 0 };
+    this.sound.startGrind();
+  }
+
+  /**
+   * Per-frame grind bookkeeping, run right after the riding state is resolved: pays out
+   * a ride that just ended (rolled off the end), otherwise adds the frame to the ride,
+   * throws sparks from the rear wheel and keeps existing sparks flying.
+   */
+  private updateGrind(dtMs: number, dt: number): void {
+    if (this.grind) {
+      if (this.player.ridingObstacle !== this.grind.obstacle) {
+        this.endGrind();
+      } else {
+        this.grind.ms += dtMs;
+        const contact = getRearWheelContact(this.player, this.skin);
+        emitSparks(this.sparks, contact.x, contact.y);
+      }
+    }
+    updateSparks(this.sparks, dt);
+  }
+
+  /**
+   * Finishes the current ride (rolled off or jumped off): stops the scrape and, for a
+   * ride of at least GRIND_MIN_MS, awards a combo link named after the obstacle. Crashes
+   * and revives never come through here, so they pay nothing (see cancelGrind).
+   */
+  private endGrind(): void {
+    const grind = this.grind;
+    if (!grind) return;
+    this.grind = null;
+    this.sound.stopGrind();
+    if (grind.ms < GRIND_MIN_MS) return;
+    const base = Math.round(GRIND_BASE + (GRIND_PER_SEC * grind.ms) / 1000);
+    const points = this.awardTrickBonus(getGrindLabel(grind.obstacle.type), base);
+    this.emit({ type: "grindEnded", obstacle: grind.obstacle.type, points });
+  }
+
+  /** Drops the current ride without paying (crash, restart): no award, no sound, no sparks. */
+  private cancelGrind(): void {
+    this.grind = null;
+    this.sparks = [];
+    this.sound.stopGrind();
   }
 
   /**
@@ -621,6 +696,7 @@ export class Engine {
       drawCrashRider(ctx, this.crashState, this.skin);
     } else {
       drawPlayer(ctx, this.player, this.skin);
+      drawSparks(ctx, this.sparks);
     }
 
     if (this.ambulance) {
@@ -700,6 +776,7 @@ export class Engine {
       cancelAnimationFrame(this.rafId);
       if (this.state === GameState.RUNNING) {
         this.sound.pauseMusic();
+        this.sound.stopGrind();
       } else if (this.state === GameState.AMBULANCE) {
         this.sound.stopSiren();
       }
@@ -715,6 +792,7 @@ export class Engine {
       this.rafId = requestAnimationFrame(this.loop);
       if (this.state === GameState.RUNNING) {
         this.sound.resumeMusic();
+        if (this.grind) this.sound.startGrind();
       } else if (this.state === GameState.AMBULANCE && this.ambulance?.phase === AmbulancePhase.DRIVING_IN) {
         this.sound.playSiren();
       }
@@ -742,6 +820,8 @@ export class Engine {
 
   setSfxMuted(muted: boolean): void {
     this.sound.setSfxMuted(muted);
+    // Muting stops the scrape inside the sound manager; bring it back if unmuted mid-grind
+    if (!muted && this.grind && this.state === GameState.RUNNING && !this.isPaused()) this.sound.startGrind();
   }
 
   setSkin(skin: SkinDefinition): void {

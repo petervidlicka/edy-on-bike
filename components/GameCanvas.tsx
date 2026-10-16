@@ -9,6 +9,8 @@ import HUD from "./HUD";
 import GameOverScreen from "./GameOverScreen";
 import { PauseMenu } from "./PauseMenu";
 import { UnlockToast } from "./UnlockToast";
+import { useHapticFeedback } from "@/hooks/useHapticFeedback";
+import { haptic } from "@/lib/haptics";
 import { useUnlockToast } from "@/hooks/useUnlockToast";
 
 import { useCheatCode } from "@/hooks/useCheatCode";
@@ -39,15 +41,21 @@ export default function GameCanvas() {
   const [skinState, chooseSkin] = useSavedSkinState();
   const { bestScore, cheatUnlocked, selectedSkinId } = skinState;
 
+  const { onGameEvent, vibrationOn, toggleVibration } = useHapticFeedback();
+
   const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
     useGameEngine(canvasRef, {
       onGameOver: (finalScore) => {
         setGameState(GameState.GAME_OVER);
         // Remember the best from before this run so the unlock bar can animate from it
-        setPreviousBest(loadSkinState().bestScore);
+        const savedBest = loadSkinState().bestScore;
+        setPreviousBest(savedBest);
+        // Same rule as the game-over header's "New personal best!" line
+        if (finalScore > 0 && finalScore >= savedBest) haptic("success");
         recordBestScore(finalScore);
       },
       onStateChange: setGameState,
+      onGameEvent,
       onPauseChange: (_paused, reasons) => setUserPaused(reasons.includes("user")),
     });
 
@@ -122,6 +130,8 @@ export default function GameCanvas() {
           sfxMuted={sfxMuted}
           onToggleMusic={toggleMusic}
           onToggleSfx={toggleSfx}
+          vibrationOn={vibrationOn}
+          onToggleVibration={toggleVibration}
           onPause={() => engineRef.current?.pause("user")}
           onJump={() => engineRef.current?.jump()}
           onBackflip={() => engineRef.current?.backflip()}
@@ -140,6 +150,8 @@ export default function GameCanvas() {
           sfxMuted={sfxMuted}
           onToggleMusic={toggleMusic}
           onToggleSfx={toggleSfx}
+          vibrationOn={vibrationOn}
+          onToggleVibration={toggleVibration}
         />
       )}
 

@@ -3,12 +3,13 @@
  * the multiplayer race and the multiplayer backdrop. Owns the Engine instance and
  * the React state the HUDs read from it, so each screen only adds its own rules.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Engine } from "@/game/Engine";
 import type { EngineOptions, PauseReason } from "@/game/Engine";
 import type { GameEvent } from "@/game/events";
 import { GameState } from "@/game/types";
 import { INITIAL_SPEED } from "@/game/constants";
+import { useStoredFlag } from "./useStoredFlag";
 
 /** A landed trick to flash in the HUD (single-player and multiplayer share the popup). */
 export type TrickFeedbackData = { name: string; points: number; sketchy?: boolean; multiplier: number };
@@ -48,7 +49,7 @@ export interface GameEngineHandle {
 
 /**
  * Creates an Engine on the canvas at mount and destroys it on unmount, keeping
- * score, speed, trick feedback and mute state in React. The Engine is created
+ * score, speed, trick feedback and the (persisted) mute state in React. The Engine is created
  * exactly once; options are read at mount and callbacks always see the latest
  * options, so callers don't need to memoise them.
  * @param canvasRef - Canvas the Engine draws into.
@@ -66,8 +67,9 @@ export function useGameEngine(
   const engineRef = useRef<Engine | null>(null);
   const [score, setScore] = useState(0);
   const [speed, setSpeed] = useState(INITIAL_SPEED);
-  const [musicMuted, setMusicMuted] = useState(false);
-  const [sfxMuted, setSfxMuted] = useState(false);
+  // Persisted; the saved value arrives right after hydration and the effects below push it to the engine
+  const [musicMuted, toggleMusic] = useStoredFlag("edy-music-muted", false);
+  const [sfxMuted, toggleSfx] = useStoredFlag("edy-sfx-muted", false);
   const [trickFeedback, setTrickFeedback] = useState<TrickFeedbackData | null>(null);
 
   // Engine callbacks outlive the render that created them, so they read options from here.
@@ -126,9 +128,6 @@ export function useGameEngine(
   useEffect(() => {
     engineRef.current?.setSfxMuted(sfxMuted);
   }, [sfxMuted]);
-
-  const toggleMusic = useCallback(() => setMusicMuted((m) => !m), []);
-  const toggleSfx = useCallback(() => setSfxMuted((m) => !m), []);
 
   return { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx };
 }

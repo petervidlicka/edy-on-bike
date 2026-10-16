@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Engine } from "@/game/Engine";
 import { GameState } from "@/game/types";
 import { getNextUnlock } from "@/game/skins";
+import { haptic } from "@/lib/haptics";
 
 /** How long the toast stays on screen. */
 const TOAST_MS = 2500;
@@ -62,6 +63,7 @@ export function useUnlockToast(
     }
     if (names.length === 0) return;
     engineRef.current?.playUnlockChime();
+    haptic("success");
     // Showing a toast in response to the score is the point of this effect
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessage(`🔓 ${names.join(" & ")} unlocked!`);

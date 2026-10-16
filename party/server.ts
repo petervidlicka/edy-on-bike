@@ -412,20 +412,23 @@ export class MultiplayerServer extends Server {
     if (this.inactivityTimer) {
       clearTimeout(this.inactivityTimer);
     }
+    // Close every socket, not just joined players — a socket that connects and
+    // never sends "join" would otherwise stay open (and keep the room alive) forever.
     this.inactivityTimer = setTimeout(() => {
-      for (const conn of this.connections.values()) {
+      this.inactivityTimer = null;
+      for (const conn of this.getConnections()) {
         conn.close();
       }
     }, 5 * 60 * 1000);
   }
 
-  /** Room is empty: stop timers and reset so the code can be used for a fresh lobby. */
+  /**
+   * No joined players left: stop race timers and reset so the code can be used
+   * for a fresh lobby. The inactivity timer keeps running so sockets that never
+   * joined still get closed.
+   */
   private cleanup() {
     this.phase = "lobby";
-    if (this.inactivityTimer) {
-      clearTimeout(this.inactivityTimer);
-      this.inactivityTimer = null;
-    }
     if (this.countdownTimer) {
       clearTimeout(this.countdownTimer);
       this.countdownTimer = null;

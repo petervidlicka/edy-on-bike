@@ -51,10 +51,7 @@ export interface EnvUpdateResult {
  * Manages the active environment/biome and handles smooth transitions
  * between biomes based on elapsed time thresholds.
  *
- * During a transition:
- * - getCurrentPalette() returns an interpolated palette
- * - getTransitionProgress() returns 0..1
- * - isTransitioning() returns true
+ * During a transition getCurrentPalette() returns an interpolated palette.
  */
 export class EnvironmentManager {
   private currentEnv: EnvironmentDefinition;
@@ -175,16 +172,6 @@ export class EnvironmentManager {
       return { ...this.fromEnv.backgroundDrawers, ...this.toEnv.backgroundDrawers };
     }
     return this.currentEnv.backgroundDrawers;
-  }
-
-  /** Whether a biome transition is currently in progress. */
-  isTransitioning(): boolean {
-    return this.transitioning;
-  }
-
-  /** Current transition progress (0..1). 0 when not transitioning. */
-  getTransitionProgress(): number {
-    return this.transitioning ? this.transitionProgress : 0;
   }
 
   /** Force an immediate transition to the next biome (debug only). */

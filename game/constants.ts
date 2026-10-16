@@ -22,7 +22,6 @@ export const SUPERMAN_SPEED = 0.06; // progress per dt (~0.57s full cycle at 60f
 export const NO_HANDER_SPEED = 0.10;
 export const SUPERMAN_BONUS = 60;
 export const NO_HANDER_BONUS = 30;
-export const TRICK_COMPLETION_THRESHOLD = 0.9; // 90% = safe landing
 export const RAMP_HEIGHT_MULTIPLIER = 1.1;
 export const RAMP_GRAVITY_MULTIPLIER = 0.5;
 export const DOUBLE_CHAIN_BONUS = 100;

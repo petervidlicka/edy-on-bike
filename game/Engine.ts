@@ -550,12 +550,6 @@ export class Engine {
   }
 
 
-  getScore(): number {
-    return this.score;
-  }
-  getSpeed(): number {
-    return this.speed;
-  }
   getState(): GameState {
     return this.state;
   }

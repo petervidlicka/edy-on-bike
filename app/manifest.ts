@@ -1,5 +1,8 @@
 import type { MetadataRoute } from "next";
 
+// Static content — required for the Capacitor `output: "export"` build.
+export const dynamic = "force-static";
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Edy on Bike",

@@ -690,6 +690,12 @@ export function drawDubaiChocolate(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.strokeRect(x, y, w, h);
 }
 
+/**
+ * Vertical offsets (fraction of ad height) for the billboard's water sparkles.
+ * Fixed rather than Math.random() so the sparkles don't flicker every frame.
+ */
+const BILLBOARD_SPARKLE_OFFSETS = [0.02, 0.05, 0.01, 0.04, 0.06, 0.0, 0.03, 0.05];
+
 export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const frameColor = palette.obstacle.billboardFrame ?? "#a0a0a0";
   const postColor = palette.obstacle.billboardPost ?? "#5a5a5a";
@@ -747,7 +753,7 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.lineWidth = 0.5;
   for (let i = 0; i < 8; i++) {
     const sx = adX + adW * (0.05 + i * 0.12);
-    const sy = adY + adH * 0.6 + Math.random() * adH * 0.06;
+    const sy = adY + adH * (0.6 + BILLBOARD_SPARKLE_OFFSETS[i]);
     ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.lineTo(sx + 3, sy);

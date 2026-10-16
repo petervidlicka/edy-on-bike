@@ -157,7 +157,6 @@ export function useMultiplayerRoom() {
           raceFinishedRef.current = true;
           setRankings(msg.rankings);
           setPhase("finished");
-          adapterRef.current?.handleServerMessage(msg);
           break;
         case "error":
           if (!joined) {

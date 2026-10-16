@@ -433,10 +433,20 @@ function drawSkyscraper(
 
 // --- Palm tree (background) ---
 
+/** Frond directions (radians) radiating from the palm crown. */
+const FROND_ANGLES = [-2.2, -1.8, -1.2, -0.6, 0.2, 0.8, 1.4, 2.0];
+/**
+ * Per-frond length variation (fraction of tree width). Fixed rather than
+ * Math.random() so fronds don't flicker — this runs every frame.
+ */
+const FROND_LENGTH_JITTER = [0.12, 0.04, 0.18, 0.08, 0.15, 0.02, 0.1, 0.16];
+
 export function drawPalmTree(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  color: string, palette: EnvironmentPalette
+  color: string, palette: EnvironmentPalette,
+  /** Offsets into FROND_LENGTH_JITTER so palms differ from each other. */
+  variant = 0
 ) {
   const cx = x + w / 2;
   const trunkColor = palette.backgroundTreeTrunk;
@@ -469,9 +479,9 @@ export function drawPalmTree(
   ctx.strokeStyle = frondColor;
   ctx.lineWidth = 1.5;
   ctx.lineCap = "round";
-  const frondAngles = [-2.2, -1.8, -1.2, -0.6, 0.2, 0.8, 1.4, 2.0];
-  for (const angle of frondAngles) {
-    const len = w * 0.7 + Math.random() * w * 0.2;
+  for (let i = 0; i < FROND_ANGLES.length; i++) {
+    const angle = FROND_ANGLES[i];
+    const len = w * (0.7 + FROND_LENGTH_JITTER[(i + variant) % FROND_LENGTH_JITTER.length]);
     const endX = crownX + Math.cos(angle) * len;
     const endY = crownY + Math.sin(angle) * len * 0.6;
     const cpX = crownX + Math.cos(angle) * len * 0.5;
@@ -568,8 +578,8 @@ export const DUBAI_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
   skyscraper: (ctx, x, y, w, h, color, palette, roofColor, variant) => {
     drawSkyscraper(ctx, x, y, w, h, color, palette, roofColor, variant);
   },
-  palm_tree: (ctx, x, y, w, h, color, palette) => {
-    drawPalmTree(ctx, x, y, w, h, color, palette);
+  palm_tree: (ctx, x, y, w, h, color, palette, _roofColor, variant) => {
+    drawPalmTree(ctx, x, y, w, h, color, palette, variant);
   },
   bg_camel: (ctx, x, y, w, h, color, palette) => {
     drawBackgroundCamel(ctx, x, y, w, h, color, palette);

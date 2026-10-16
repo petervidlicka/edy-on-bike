@@ -24,7 +24,7 @@ Wrap the existing Next.js web game in Capacitor to publish on iOS App Store and 
 ## Stage 2: Capacitor Setup — DONE
 
 - [x] Installed `@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`, `@capacitor/android`
-- [x] Installed plugins: `@capacitor/splash-screen`, `@capacitor/status-bar`, `@capacitor/haptics`
+- [x] Installed plugins: `@capacitor/splash-screen`, `@capacitor/status-bar`
 - [x] Initialized Capacitor (`capacitor.config.ts`)
 - [x] Added iOS and Android native projects
 - [x] Configured splash screen (auto-hide, dark background) and status bar (dark overlay)
@@ -139,4 +139,4 @@ Implement independently after the app is live in stores.
 - **Shared leaderboard** — both web and native users share the same leaderboard via the Vercel API.
 - **Updating the app** — run `npm run build:mobile`, then submit new build to the stores. For minor updates, explore Capacitor live update plugins later.
 - **Dev testing** — use `npx cap run ios` / `npx cap run android` for quick on-device testing.
-- **CORS** — the leaderboard route allows the native apps' origins: `capacitor://localhost` on iOS and `https://localhost` on Android (Capacitor 6+ defaults `androidScheme` to `https`). If `server.androidScheme` is ever changed in `capacitor.config.ts`, update `ALLOWED_ORIGINS` in `app/api/leaderboard/route.ts` to match.
+- **CORS** — the leaderboard route allows the native apps' origins: `capacitor://localhost` on iOS and `https://localhost` on Android (Capacitor 6+ defaults `androidScheme` to `https`). If `server.androidScheme` is ever changed in `capacitor.config.ts`, update `ALLOWED_ORIGINS` in `app/api/leaderboard/route.web.ts` to match.

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SkinId } from "@/game/types";
 import SkinPicker from "./SkinPicker";
+import { UnlockProgress } from "./UnlockProgress";
 import { isMultiplayerEnabled } from "@/lib/multiplayerConfig";
 
 interface StartScreenProps {
@@ -59,6 +60,7 @@ export default function StartScreen({
         cheatUnlocked={cheatUnlocked}
         onSelectSkin={onSelectSkin}
       />
+      <UnlockProgress bestScore={bestScore} cheatUnlocked={cheatUnlocked} />
       <div
         style={{
           marginTop: "0.5rem",

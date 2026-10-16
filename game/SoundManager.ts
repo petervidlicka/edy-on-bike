@@ -400,6 +400,27 @@ export class SoundManager {
     shimmer.stop(now + 0.6);
   }
 
+  /** Bright two-note chime for an in-run bike unlock. */
+  playUnlock(): void {
+    if (this.sfxMuted) return;
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+    // G5 → C6 → E6 quick rising triad
+    [783.99, 1046.5, 1318.51].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const t = now + i * 0.09;
+      gain.gain.setValueAtTime(0.22, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.start(t);
+      osc.stop(t + 0.35);
+    });
+  }
+
   destroy(): void {
     this.stopSiren();
     this.stopMusic();

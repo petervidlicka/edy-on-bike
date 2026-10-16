@@ -575,6 +575,10 @@ export class Engine {
   getState(): GameState {
     return this.state;
   }
+  /** Plays the in-run "bike unlocked" chime (respects the SFX mute). */
+  playUnlockChime(): void {
+    this.sound.playUnlock();
+  }
   activateIddqd(): void {
     this.iddqdActive = true;
     this.floatingTexts.push({

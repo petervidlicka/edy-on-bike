@@ -27,6 +27,8 @@ export class SoundManager {
   // Grind scrape: looping band-passed noise that runs while the rider rides an obstacle.
   private grindSource: AudioBufferSourceNode | null = null;
   private grindGain: GainNode | null = null;
+  /** The scrape's noise, built once: refilling a second of samples on every grind stalls the frame. */
+  private grindNoise: AudioBuffer | null = null;
 
   // Dual-slot music system for crossfading between biome tracks
   private musicAudioA: HTMLAudioElement | null = null;
@@ -586,14 +588,16 @@ export class SoundManager {
     const now = ctx.currentTime;
 
     // One second of noise is enough to loop without an audible repeat once filtered
-    const bufferSize = ctx.sampleRate;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
+    if (!this.grindNoise) {
+      const bufferSize = ctx.sampleRate;
+      this.grindNoise = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = this.grindNoise.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
     }
     const source = ctx.createBufferSource();
-    source.buffer = buffer;
+    source.buffer = this.grindNoise;
     source.loop = true;
 
     const filter = ctx.createBiquadFilter();

@@ -58,6 +58,18 @@ export function PauseMenu({
     return () => clearTimeout(timer);
   }, [countdown, engineRef]);
 
+  // Leaving the tab mid-countdown backs out to the menu; otherwise the timer would finish in
+  // the background and the player would come back straight into the run.
+  const counting = countdown !== null;
+  useEffect(() => {
+    if (!counting) return;
+    const onVisibility = () => {
+      if (document.hidden) setCountdown(null);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [counting]);
+
   const startResume = useCallback(() => {
     setCountdown((c) => c ?? COUNTDOWN_START);
   }, []);

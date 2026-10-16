@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { glassBtn } from "./sharedStyles";
 import { loadPlayerName, savePlayerName } from "@/game/storage";
+import { LeaderboardError, submitScore } from "@/lib/leaderboardClient";
+
 interface LeaderboardFormProps {
   score: number;
   skinName: string;
@@ -15,6 +17,8 @@ export default function LeaderboardForm({
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  /** A submit reached the API and failed — offer a way past the form so an outage can't trap the player. */
+  const [submitFailed, setSubmitFailed] = useState(false);
 
   useEffect(() => {
     const saved = loadPlayerName();
@@ -23,26 +27,31 @@ export default function LeaderboardForm({
     }
   }, []);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
-
   const saveAndAdvance = useCallback(
     async (nameToSave: string) => {
       const trimmed = nameToSave.trim();
       setSubmitting(true);
       if (trimmed) {
         try {
-          await fetch(`${apiBase}/api/leaderboard`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: trimmed, score, skin: skinName }),
-          });
+          await submitScore({ name: trimmed, score, skin: skinName });
           savePlayerName(trimmed);
-        } catch { }
+        } catch (err) {
+          // Stay on the form so the player can retry, or skip via the button below
+          console.error("[leaderboard] Saving score failed", err);
+          setError(
+            err instanceof LeaderboardError
+              ? err.message
+              : "Couldn't save your score. Please try again.",
+          );
+          setSubmitFailed(true);
+          setSubmitting(false);
+          return;
+        }
       }
       setSubmitting(false);
       onSaved();
     },
-    [score, skinName, onSaved, apiBase],
+    [score, skinName, onSaved],
   );
 
   const handleSaveScore = async () => {
@@ -175,6 +184,21 @@ export default function LeaderboardForm({
       >
         or press Space to save &amp; continue
       </button>
+
+      {submitFailed && (
+        <button
+          onClick={onSaved}
+          style={{
+            ...glassBtn,
+            fontSize: "0.78rem",
+            padding: "0.4rem 1.25rem",
+            letterSpacing: "0.03em",
+            color: "#334155",
+          }}
+        >
+          Continue without saving
+        </button>
+      )}
     </>
   );
 }

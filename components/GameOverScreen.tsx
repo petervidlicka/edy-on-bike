@@ -3,24 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import LeaderboardForm from "./LeaderboardForm";
 import { LEADERBOARD_SIZE } from "@/lib/leaderboardConfig";
-
-interface LeaderboardEntry {
-  name: string;
-  score: number;
-  skin?: string;
-}
-
-// Rows come from the network; drop anything malformed rather than let one bad
-// entry throw during render and take down the whole game-over screen.
-function isLeaderboardEntry(value: unknown): value is LeaderboardEntry {
-  if (typeof value !== "object" || value === null) return false;
-  const row = value as Record<string, unknown>;
-  return (
-    typeof row.name === "string" &&
-    typeof row.score === "number" &&
-    (row.skin === undefined || typeof row.skin === "string")
-  );
-}
+import { fetchLeaderboard, LeaderboardError } from "@/lib/leaderboardClient";
+import type { LeaderboardEntry } from "@/lib/leaderboardClient";
 
 interface GameOverScreenProps {
   score: number;
@@ -36,22 +20,27 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
   const [step, setStep] = useState<1 | 2>(1);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
+  /** Shown in place of the table, so an outage doesn't read as "no scores yet". */
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
-
-  const fetchLeaderboard = useCallback(async () => {
+  const loadLeaderboard = useCallback(async () => {
     try {
-      const data: unknown = await fetch(`${apiBase}/api/leaderboard`).then((r) => r.json());
-      const { scores, totalPlayers } = (data ?? {}) as { scores?: unknown; totalPlayers?: unknown };
-      setLeaderboard(Array.isArray(scores) ? scores.filter(isLeaderboardEntry) : []);
-      setTotalPlayers(typeof totalPlayers === "number" ? totalPlayers : 0);
-    } catch { }
-  }, [apiBase]);
+      const data = await fetchLeaderboard();
+      setLeaderboard(data.scores);
+      setTotalPlayers(data.totalPlayers);
+      setLoadError(null);
+    } catch (err) {
+      console.error("[leaderboard] Loading scores failed", err);
+      setLoadError(
+        err instanceof LeaderboardError ? err.message : "Couldn't load the leaderboard. Please try again later.",
+      );
+    }
+  }, []);
 
   const handleSaved = useCallback(async () => {
-    await fetchLeaderboard();
+    await loadLeaderboard();
     setStep(2);
-  }, [fetchLeaderboard]);
+  }, [loadLeaderboard]);
 
   // Space key: step 2 → restart
   useEffect(() => {
@@ -136,7 +125,11 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
       {/* ── Step 2: global leaderboard + restart ── */}
       {step === 2 && (
         <>
-          {leaderboard.length > 0 ? (
+          {loadError ? (
+            <p style={{ color: "#b91c1c", fontSize: "0.85rem", fontWeight: 600, margin: "0.5rem 0" }}>
+              {loadError}
+            </p>
+          ) : leaderboard.length > 0 ? (
             <div
               style={{
                 background: "rgba(255,255,255,0.72)",

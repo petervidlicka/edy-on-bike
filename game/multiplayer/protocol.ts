@@ -1,8 +1,20 @@
 /**
- * Shared multiplayer data shapes and the client <-> server message protocol.
- * party/server.ts mirrors these (it's built separately and can't import them).
+ * The multiplayer wire protocol: message shapes and room limits shared by the
+ * Next.js client and the Cloudflare Worker in party/. Both sides import this one
+ * file so a protocol change can't drift between them.
+ *
+ * Keep it free of runtime imports (`import type` only): the Worker bundles it,
+ * and anything it pulled in at runtime would ship to Cloudflare too.
  */
-import type { TrickType } from "../types";
+import type { SkinId, TrickType } from "../types";
+
+// ── Room limits ──
+
+/** Most riders in one room; the server rejects joins beyond this. */
+export const MAX_PLAYERS = 4;
+
+/** Longest display name, enforced by the lobby input and re-checked by the server. */
+export const MAX_NAME_LENGTH = 16;
 
 // ── Ghost snapshot — minimal state sent at ~15 Hz per player ──
 
@@ -50,7 +62,7 @@ export type RoomPhase = "lobby" | "countdown" | "racing" | "finished";
 export interface PlayerInfo {
   id: string;
   name: string;
-  skinId: string;
+  skinId: SkinId;
   ready: boolean;
   alive: boolean;
   score: number;
@@ -61,7 +73,7 @@ export interface PlayerInfo {
 export interface RankingEntry {
   playerId: string;
   name: string;
-  skinId: string;
+  skinId: SkinId;
   score: number;
   rank: number;
 }
@@ -70,7 +82,7 @@ export interface RankingEntry {
 
 export type ClientMessage =
   /** `intent` lets the server reject joins to codes nobody is in, instead of silently creating a room. */
-  | { type: "join"; name: string; skinId: string; intent: "create" | "join" }
+  | { type: "join"; name: string; skinId: SkinId; intent: "create" | "join" }
   | { type: "ready" }
   | { type: "player_update"; snapshot: GhostSnapshot }
   | { type: "player_crashed"; score: number }

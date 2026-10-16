@@ -2,7 +2,7 @@
  * Smooths remote players: snapshots arrive at ~15 Hz with jitter and on another
  * page's clock, so they're mapped to local time and rendered slightly in the past.
  */
-import type { GhostSnapshot } from "./types";
+import type { GhostSnapshot } from "./protocol";
 
 /** ~650ms of history at 15 Hz — enough to bracket the render time despite jitter. */
 const MAX_SNAPSHOTS = 10;

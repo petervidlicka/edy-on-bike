@@ -5,12 +5,33 @@
  * into lobby/race/results state, and creates a MultiplayerAdapter per race.
  */
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { PlayerInfo, RankingEntry, RoomPhase, ServerMessage, ClientMessage } from "@/game/multiplayer/types";
+import type { PlayerInfo, RankingEntry, RoomPhase, ServerMessage, ClientMessage } from "@/game/multiplayer/protocol";
+import type { SkinId } from "@/game/types";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
 import { MULTIPLAYER_HOST, roomUrl } from "@/lib/multiplayerConfig";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
 
+/**
+ * Decodes one socket frame. A malformed frame (bad deploy, proxy noise) is
+ * logged and dropped rather than throwing inside onmessage and wedging the room.
+ */
+function parseServerMessage(data: unknown): ServerMessage | null {
+  if (typeof data !== "string") {
+    console.error("[Multiplayer] Ignoring non-text message from server");
+    return null;
+  }
+  try {
+    const parsed: unknown = JSON.parse(data);
+    if (typeof parsed === "object" && parsed !== null && "type" in parsed) {
+      return parsed as ServerMessage;
+    }
+    console.error("[Multiplayer] Ignoring server message without a type:", data);
+  } catch (err) {
+    console.error("[Multiplayer] Ignoring malformed server message:", err);
+  }
+  return null;
+}
 
 function generateRoomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 to avoid confusion
@@ -74,7 +95,7 @@ export function useMultiplayerRoom() {
   // server keeps this player "alive" and the race can never finish for everyone else.
   useEffect(() => () => releaseConnection(false), [releaseConnection]);
 
-  const connect = useCallback((code: string, name: string, skinId: string, intent: "create" | "join") => {
+  const connect = useCallback((code: string, name: string, skinId: SkinId, intent: "create" | "join") => {
     if (wsRef.current) return;
     if (!MULTIPLAYER_HOST) {
       // Build has no multiplayer server configured; entry points are hidden, but the URL still works
@@ -109,7 +130,8 @@ export function useMultiplayerRoom() {
     };
 
     ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data) as ServerMessage;
+      const msg = parseServerMessage(event.data);
+      if (!msg) return;
 
       switch (msg.type) {
         case "room_joined": {
@@ -194,7 +216,7 @@ export function useMultiplayerRoom() {
   }, [releaseConnection, resetRoomState]);
 
   const createRoom = useCallback(
-    (name: string, skinId: string) => {
+    (name: string, skinId: SkinId) => {
       const code = generateRoomCode();
       connect(code, name, skinId, "create");
     },
@@ -202,7 +224,7 @@ export function useMultiplayerRoom() {
   );
 
   const joinRoom = useCallback(
-    (code: string, name: string, skinId: string) => {
+    (code: string, name: string, skinId: SkinId) => {
       connect(code.toUpperCase(), name, skinId, "join");
     },
     [connect]

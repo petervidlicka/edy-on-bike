@@ -14,39 +14,27 @@ import {
   sanitizeSkinId,
   sanitizeSnapshot,
 } from "./validation";
+import { MAX_NAME_LENGTH, MAX_PLAYERS } from "../game/multiplayer/protocol";
+import type {
+  ClientMessage,
+  PlayerInfo,
+  RankingEntry,
+  RoomPhase,
+  ServerMessage,
+} from "../game/multiplayer/protocol";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-type RoomPhase = "lobby" | "countdown" | "racing" | "finished";
-
-interface PlayerInfo {
-  id: string;
-  name: string;
-  skinId: string;
-  ready: boolean;
-  alive: boolean;
-  score: number;
-}
-
-interface RankingEntry {
-  playerId: string;
-  name: string;
-  skinId: string;
-  score: number;
-  rank: number;
-}
-
 /**
- * Messages a client may send. Mirrors ClientMessage in game/multiplayer/types.ts,
- * but payload fields are `unknown`: they come off the wire and are validated here.
+ * A ClientMessage as it comes off the wire: the `type` tag is trusted for
+ * dispatch, every payload field is `unknown` until validation.ts has checked it.
  */
-type ClientMessage =
-  | { type: "join"; name: unknown; skinId: unknown; intent: unknown }
-  | { type: "ready" }
-  | { type: "player_update"; snapshot: unknown }
-  | { type: "player_crashed"; score: unknown }
-  | { type: "rematch" }
-  | { type: "leave" };
+type Untrusted<M> = M extends { type: infer T }
+  ? { type: T } & { [K in Exclude<keyof M, "type">]: unknown }
+  : never;
+
+type IncomingMessage = Untrusted<ClientMessage>;
+type Incoming<T extends IncomingMessage["type"]> = Extract<IncomingMessage, { type: T }>;
 
 /**
  * A racer who sends no updates for this long is treated as crashed. Covers hidden
@@ -91,11 +79,11 @@ export class MultiplayerServer extends Server {
   onMessage(sender: Connection, message: string | ArrayBuffer | ArrayBufferView) {
     if (typeof message !== "string" || message.length > MAX_MESSAGE_CHARS) return;
 
-    let data: ClientMessage;
+    let data: IncomingMessage;
     try {
       const parsed: unknown = JSON.parse(message);
       if (typeof parsed !== "object" || parsed === null) return;
-      data = parsed as ClientMessage;
+      data = parsed as IncomingMessage;
     } catch {
       return;
     }
@@ -157,12 +145,12 @@ export class MultiplayerServer extends Server {
 
   // ── Message handlers ─────────────────────────────────────────────────
 
-  private handleJoin(data: { type: "join"; name: unknown; skinId: unknown; intent: unknown }, sender: Connection) {
+  private handleJoin(data: Incoming<"join">, sender: Connection) {
     if (this.players.has(sender.id)) return; // duplicate join from the same socket
 
     const name = sanitizeName(data.name);
     if (!name) {
-      this.rejectJoin(sender, "Pick a name between 1 and 16 characters.");
+      this.rejectJoin(sender, `Pick a name between 1 and ${MAX_NAME_LENGTH} characters.`);
       return;
     }
 
@@ -178,8 +166,8 @@ export class MultiplayerServer extends Server {
       return;
     }
 
-    if (this.players.size >= 4) {
-      this.rejectJoin(sender, "That room is full (4 players max).");
+    if (this.players.size >= MAX_PLAYERS) {
+      this.rejectJoin(sender, `That room is full (${MAX_PLAYERS} players max).`);
       return;
     }
 
@@ -196,14 +184,14 @@ export class MultiplayerServer extends Server {
     this.connections.set(sender.id, sender);
 
     // Send room_joined to the joining player
-    sender.send(JSON.stringify({
+    this.send(sender, {
       type: "room_joined",
       roomCode: this.name,
       playerId: sender.id,
       players: Array.from(this.players.values()),
       phase: this.phase,
       seed: this.seed,
-    }));
+    });
 
     // Broadcast player_joined to everyone else
     this.sendToPlayers(
@@ -238,7 +226,7 @@ export class MultiplayerServer extends Server {
     this.sendToPlayers({ type: "room_reset", players: Array.from(this.players.values()) });
   }
 
-  private handlePlayerUpdate(data: { type: "player_update"; snapshot: unknown }, sender: Connection) {
+  private handlePlayerUpdate(data: Incoming<"player_update">, sender: Connection) {
     const player = this.players.get(sender.id);
     // Ignore racers already counted out (e.g. timed out, then their tab came back)
     if (!player || !player.alive || this.phase !== "racing") return;
@@ -262,7 +250,7 @@ export class MultiplayerServer extends Server {
     );
   }
 
-  private handlePlayerCrashed(data: { type: "player_crashed"; score: unknown }, sender: Connection) {
+  private handlePlayerCrashed(data: Incoming<"player_crashed">, sender: Connection) {
     const player = this.players.get(sender.id);
     // Already out (timed out / disconnected) — keep the score we recorded then
     if (!player || !player.alive || this.phase !== "racing") return;
@@ -388,11 +376,16 @@ export class MultiplayerServer extends Server {
 
   /** Tells a client why it can't join; the client shows the message and drops the socket. */
   private rejectJoin(sender: Connection, message: string) {
-    sender.send(JSON.stringify({ type: "error", message }));
+    this.send(sender, { type: "error", message });
+  }
+
+  /** JSON-encodes one message for one socket. */
+  private send(conn: Connection, msg: ServerMessage) {
+    conn.send(JSON.stringify(msg));
   }
 
   /** JSON-encodes and sends to every joined player (unlike Server#broadcast, which hits all sockets). */
-  private sendToPlayers(msg: Record<string, unknown>, excludeId?: string) {
+  private sendToPlayers(msg: ServerMessage, excludeId?: string) {
     const raw = JSON.stringify(msg);
     for (const [id, conn] of this.connections) {
       if (id !== excludeId) {

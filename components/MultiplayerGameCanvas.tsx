@@ -5,17 +5,16 @@
  * renders remote players as ghosts, and shows live standings, the countdown and
  * a waiting state once the local rider has crashed.
  */
-import { useRef, useEffect, useCallback, useState } from "react";
-import { Engine } from "@/game/Engine";
-import { GameState, SkinId } from "@/game/types";
+import { useRef, useEffect, useState } from "react";
 import { INITIAL_SPEED } from "@/game/constants";
 import { getSkinById } from "@/game/skins";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
 import { SeededRNG } from "@/game/multiplayer/SeededRNG";
-import { PlayerInfo } from "@/game/multiplayer/types";
+import { PlayerInfo } from "@/game/multiplayer/protocol";
 import { AudioControls, TrickFeedbackPopup, TrickDpad, btnStyle } from "./HUD";
-import type { TrickFeedbackData } from "./HUD";
 import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
+import { useGameEngine } from "@/hooks/useGameEngine";
+import { useEngineInput } from "@/hooks/useEngineInput";
 
 /** Scores stream in at ~15 Hz per player; a few standings refreshes per second is plenty. */
 const STANDINGS_REFRESH_MS = 250;
@@ -46,15 +45,18 @@ export default function MultiplayerGameCanvas({
   onLeave,
 }: MultiplayerGameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<Engine | null>(null);
-  const [score, setScore] = useState(0);
   /** Local rider is out but others may still be racing — show a waiting state with a way out. */
   const [crashed, setCrashed] = useState(false);
-  const [speed, setSpeed] = useState(INITIAL_SPEED);
-  const [musicMuted, setMusicMuted] = useState(false);
-  const [sfxMuted, setSfxMuted] = useState(false);
-  const [trickFeedback, setTrickFeedback] = useState<TrickFeedbackData | null>(null);
-  const trickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
+    useGameEngine(canvasRef, {
+      // Engine already calls adapter.sendCrashed() in its gameOver() method
+      onGameOver: () => setCrashed(true),
+      createEngineOptions: () => ({ rng: new SeededRNG(seed), multiplayer: adapter }),
+      onEngineCreated: (engine) => {
+        const localPlayer = players.find((p) => p.id === localPlayerId);
+        engine.setSkin(getSkinById(localPlayer?.skinId ?? "default"));
+      },
+    });
   const [countdown, setCountdown] = useState<3 | 2 | 1>(3);
   const [goVisible, setGoVisible] = useState(true);
   /** 3-2-1 counts locally; "GO!" and the engine start wait for the server's race_start. */
@@ -77,51 +79,6 @@ export default function MultiplayerGameCanvas({
     return () => clearTimeout(timer);
   }, [countdown, raceStarted]);
 
-  // Initialize engine
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const localPlayer = players.find((p) => p.id === localPlayerId);
-    const skinId = (localPlayer?.skinId ?? "default") as SkinId;
-
-    const engine = new Engine(canvas, {
-      onScoreUpdate: setScore,
-      onSpeedUpdate: setSpeed,
-      onGameOver: (finalScore) => {
-        setScore(finalScore);
-        setCrashed(true);
-        // Engine already calls adapter.sendCrashed() in its gameOver() method
-      },
-      onStateChange: (state) => {
-        if (state === GameState.RUNNING) {
-          setSpeed(INITIAL_SPEED);
-        }
-      },
-      onTrickLanded: (trickName, points, sketchy) => {
-        if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
-        setTrickFeedback({ name: trickName, points, sketchy });
-        trickTimeoutRef.current = setTimeout(() => setTrickFeedback(null), 2000);
-      },
-    }, { rng: new SeededRNG(seed), multiplayer: adapter });
-
-    engine.setSkin(getSkinById(skinId));
-    engineRef.current = engine;
-
-    const handleResize = () => {
-      engine.resize(window.innerWidth, window.innerHeight);
-    };
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      engine.destroy();
-      engineRef.current = null;
-      window.removeEventListener("resize", handleResize);
-      if (trickTimeoutRef.current) clearTimeout(trickTimeoutRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Start on the server's race_start rather than a local timer, so all clients begin together.
   // Declared after the engine effect so the engine exists if the race is already on at mount.
   useEffect(() => {
@@ -129,68 +86,9 @@ export default function MultiplayerGameCanvas({
     engineRef.current?.start();
     const timer = setTimeout(() => setGoVisible(false), GO_DISPLAY_MS);
     return () => clearTimeout(timer);
-  }, [raceStarted]);
+  }, [engineRef, raceStarted]);
 
-  // Keyboard input
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.code === "Space") {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      e.preventDefault();
-      const engine = engineRef.current;
-      if (!engine) return;
-      const state = engine.getState();
-      if (state === GameState.RUNNING) {
-        engine.jump();
-      }
-    }
-    if (
-      e.code === "ArrowDown" ||
-      e.code === "ArrowUp" ||
-      e.code === "ArrowLeft" ||
-      e.code === "ArrowRight"
-    ) {
-      e.preventDefault();
-      if (e.repeat) return;
-      if (e.code === "ArrowDown") engineRef.current?.backflip();
-      else if (e.code === "ArrowUp") engineRef.current?.frontflip();
-      else if (e.code === "ArrowLeft") engineRef.current?.superman();
-      else if (e.code === "ArrowRight") engineRef.current?.noHander();
-    }
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
-
-  // Touch input
-  const handleTouch = useCallback((e: TouchEvent) => {
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === "INPUT" || tag === "BUTTON") return;
-    e.preventDefault();
-    const engine = engineRef.current;
-    if (!engine) return;
-    const state = engine.getState();
-    if (state === GameState.RUNNING) {
-      engine.jump();
-    }
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.addEventListener("touchstart", handleTouch, { passive: false });
-    return () => canvas.removeEventListener("touchstart", handleTouch);
-  }, [handleTouch]);
-
-  useEffect(() => {
-    engineRef.current?.setMusicMuted(musicMuted);
-  }, [musicMuted]);
-
-  useEffect(() => {
-    engineRef.current?.setSfxMuted(sfxMuted);
-  }, [sfxMuted]);
+  useEngineInput(engineRef, canvasRef, { allowIdleStart: false });
 
   usePauseOnHidden(engineRef);
 
@@ -214,8 +112,8 @@ export default function MultiplayerGameCanvas({
       <AudioControls
         musicMuted={musicMuted}
         sfxMuted={sfxMuted}
-        onToggleMusic={() => setMusicMuted((m) => !m)}
-        onToggleSfx={() => setSfxMuted((m) => !m)}
+        onToggleMusic={toggleMusic}
+        onToggleSfx={toggleSfx}
       >
         <button
           onClick={onLeave}

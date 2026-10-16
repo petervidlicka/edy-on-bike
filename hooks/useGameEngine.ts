@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Engine } from "@/game/Engine";
-import type { EngineOptions } from "@/game/Engine";
+import type { EngineOptions, PauseReason } from "@/game/Engine";
 import { GameState } from "@/game/types";
 import { INITIAL_SPEED } from "@/game/constants";
 
@@ -21,6 +21,8 @@ export interface UseGameEngineOptions {
   onGameOver?: (finalScore: number) => void;
   /** Runs on every engine state change (speed is already reset when a run starts). */
   onStateChange?: (state: GameState) => void;
+  /** Runs whenever the engine's set of pause reasons changes. */
+  onPauseChange?: (paused: boolean, reasons: readonly PauseReason[]) => void;
   /** Builds the Engine's options, read once at mount (e.g. multiplayer's seeded RNG and adapter). */
   createEngineOptions?: () => EngineOptions;
   /** Runs once right after the Engine is constructed, before any frame is drawn. */
@@ -90,6 +92,7 @@ export function useGameEngine(
           if (state === GameState.RUNNING) setSpeed(INITIAL_SPEED);
           optionsRef.current.onStateChange?.(state);
         },
+        onPauseChange: (paused, reasons) => optionsRef.current.onPauseChange?.(paused, reasons),
         onTrickLanded: (name, points, sketchy) => {
           if (trickTimeout) clearTimeout(trickTimeout);
           setTrickFeedback({ name, points, sketchy });

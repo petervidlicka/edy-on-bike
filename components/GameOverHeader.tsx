@@ -23,10 +23,11 @@ export function GameOverHeader({ score, bestScore, previousBest, cheatUnlocked }
       <h2
         style={{
           color: "#27435E",
-          fontSize: "2.5rem",
+          fontSize: "clamp(1.8rem, 9vh, 2.5rem)",
+          lineHeight: 1.1,
           fontFamily: "var(--font-fredoka), sans-serif",
           fontWeight: 600,
-          margin: "0 0 0.5rem",
+          margin: "0 0 clamp(0rem, 1vh, 0.5rem)",
           letterSpacing: "0.08em",
           textShadow: "0 2px 6px rgba(255,255,255,0.3)",
         }}

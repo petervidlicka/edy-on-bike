@@ -76,7 +76,7 @@ export default function GameOverScreen({ score, bestScore, skinName, previousBes
         justifyContent: "center",
         pointerEvents: view === "form" ? "none" : "auto",
         cursor: view === "form" || locked ? undefined : "pointer",
-        gap: "0.4rem",
+        gap: "clamp(0.2rem, 1vh, 0.4rem)",
         fontFamily: "var(--font-nunito), Arial, sans-serif",
       }}
     >

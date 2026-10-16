@@ -93,6 +93,10 @@ export const CRASH_DURATION = 1.2; // seconds
 export const CRASH_GRAVITY = 0.45;
 export const CRASH_BOUNCE_DAMPING = 0.35;
 export const CRASH_SHAKE_INITIAL = 8; // pixels
+/** Share of crashes that play the classic tumble even when a more specific variant fits. */
+export const CRASH_CLASSIC_CHANCE = 0.25;
+/** Seconds into a crash after which a tap or Space may skip it (only when no ambulance is coming). */
+export const CRASH_SKIP_AFTER_S = 0.6;
 
 // Ambulance
 export const AMBULANCE_CHANCE = 0.25;

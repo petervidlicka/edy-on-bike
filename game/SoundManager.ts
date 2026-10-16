@@ -5,6 +5,7 @@ import {
   GRIND_SOUND_GAIN,
   GRIND_SOUND_Q,
 } from "./constants";
+import type { CrashVariantId } from "./crashes/types";
 
 export class SoundManager {
   // AudioContext is created lazily on first play to satisfy browser autoplay policy
@@ -28,6 +29,8 @@ export class SoundManager {
   private grindGain: GainNode | null = null;
   /** The scrape's noise, built once: refilling a second of samples on every grind stalls the frame. */
   private grindNoise: AudioBuffer | null = null;
+  /** Output of the crash sound that is playing, so it can be cut short (see stopCrashSounds). */
+  private crashBus: GainNode | null = null;
 
   // Dual-slot music system for crossfading between biome tracks
   private musicAudioA: HTMLAudioElement | null = null;
@@ -105,7 +108,10 @@ export class SoundManager {
   setSfxMuted(muted: boolean): void {
     this.sfxMuted = muted;
     // A looping sound would otherwise keep scraping after the player muted effects
-    if (muted) this.stopGrind();
+    if (muted) {
+      this.stopGrind();
+      this.stopCrashSounds();
+    }
   }
 
   // isDouble = true for the second (in-air) jump — higher pitch
@@ -133,20 +139,175 @@ export class SoundManager {
     osc.stop(now + 0.09);
   }
 
-  playCrash(): void {
+  /**
+   * The crash sound for a variant: the classic thud for the plain tumble, a wet splat for
+   * the faceplant, a wooden bonk plus rustling leaves for the tree, and springy boings
+   * timed to the bounces on the car roof. All respect the SFX mute.
+   * @param variant - The crash animation that is about to play.
+   */
+  playCrash(variant: CrashVariantId = "classic"): void {
     if (this.sfxMuted) return;
+    this.stopCrashSounds();
+    const ctx = this.getCtx();
+    // Everything goes through one bus so a skipped, paused or restarted crash can be silenced,
+    // including the boings and rustles scheduled up to 1.5 s ahead
+    const out = ctx.createGain();
+    out.connect(out);
+    this.crashBus = out;
+    switch (variant) {
+      case "faceplant": this.playSplat(out); break;
+      case "treeHang": this.playBonk(out); break;
+      case "carBonk": this.playBoing(out); break;
+      case "classic": this.playClassicCrash(out); break;
+    }
+  }
+
+  /** Quickly fades out whatever the current crash still has playing or scheduled; a no-op otherwise. */
+  stopCrashSounds(): void {
+    const bus = this.crashBus;
+    if (!bus || !this.ctx) return;
+    this.crashBus = null;
+    // A short fade rather than a hard cut, so it doesn't click; the scheduled nodes end silently
+    bus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
+  }
+
+  /** A buffer of white noise, `seconds` long. */
+  private noiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
+    const size = Math.ceil(ctx.sampleRate * seconds);
+    const buffer = ctx.createBuffer(1, size, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < size; i++) data[i] = Math.random() * 2 - 1;
+    return buffer;
+  }
+
+  /** One sine blip that falls (or rises) in pitch while it fades, the building block of the thumps. */
+  private sweep(ctx: AudioContext, out: AudioNode, type: OscillatorType, from: number, to: number, at: number, length: number, level: number): void {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(from, at);
+    osc.frequency.exponentialRampToValueAtTime(to, at + length);
+    gain.gain.setValueAtTime(level, at);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + length);
+    osc.connect(gain);
+    gain.connect(out);
+    osc.start(at);
+    osc.stop(at + length);
+  }
+
+  /** Faceplant: a dull wet smack of band-passed noise, a body thump and a short squelch. */
+  private playSplat(out: AudioNode): void {
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer(ctx, 0.25);
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 900;
+    band.Q.value = 0.8;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.7, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    noise.connect(band);
+    band.connect(noiseGain);
+    noiseGain.connect(out);
+    noise.start(now);
+
+    this.sweep(ctx, out, "sine", 170, 45, now, 0.22, 0.65);
+    // Squelch: a low saw sliding down through a muffling filter
+    const squelch = ctx.createOscillator();
+    const squelchFilter = ctx.createBiquadFilter();
+    const squelchGain = ctx.createGain();
+    squelch.type = "sawtooth";
+    squelch.frequency.setValueAtTime(260, now + 0.04);
+    squelch.frequency.exponentialRampToValueAtTime(95, now + 0.26);
+    squelchFilter.type = "lowpass";
+    squelchFilter.frequency.value = 700;
+    squelchGain.gain.setValueAtTime(0.22, now + 0.04);
+    squelchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+    squelch.connect(squelchFilter);
+    squelchFilter.connect(squelchGain);
+    squelchGain.connect(out);
+    squelch.start(now + 0.04);
+    squelch.stop(now + 0.26);
+  }
+
+  /** Tree hang: a hollow wooden bonk, then a short rustle of leaves shaken loose. */
+  private playBonk(out: AudioNode): void {
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+
+    this.sweep(ctx, out, "sine", 300, 140, now, 0.18, 0.65);
+    this.sweep(ctx, out, "triangle", 640, 330, now, 0.1, 0.25);
+
+    // Leaves: bright noise whose level flutters in quick random steps and dies away
+    const leaves = ctx.createBufferSource();
+    leaves.buffer = this.noiseBuffer(ctx, 0.8);
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 4800;
+    band.Q.value = 0.7;
+    const gain = ctx.createGain();
+    const rustleStart = now + 0.1;
+    gain.gain.setValueAtTime(0.001, now);
+    for (let i = 0; i < 16; i++) {
+      const fade = 1 - i / 16;
+      gain.gain.setValueAtTime((0.03 + Math.random() * 0.09) * fade + 0.002, rustleStart + i * 0.04);
+    }
+    gain.gain.setValueAtTime(0.001, rustleStart + 0.68);
+    leaves.connect(band);
+    band.connect(gain);
+    gain.connect(out);
+    leaves.start(now);
+  }
+
+  /** Car bonk: a dull knock on the car, then rising springy boings as the rider lands and rebounds. */
+  private playBoing(out: AudioNode): void {
+    const ctx = this.getCtx();
+    const now = ctx.currentTime;
+
+    this.sweep(ctx, out, "sine", 130, 55, now, 0.14, 0.6);
+    // Landings on the roof come at 0.42, 1.04 and 1.42 s (see carBonk.ts); each rebound is a rising sweep
+    const boings = [
+      { at: 0.4, from: 190, to: 640, rise: 0.34, level: 0.42 },
+      { at: 1.02, from: 230, to: 560, rise: 0.22, level: 0.3 },
+      { at: 1.4, from: 280, to: 480, rise: 0.12, level: 0.2 },
+    ];
+    for (const b of boings) {
+      const t = now + b.at;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      // Wobble the pitch with a fast vibrato so it twangs like a spring
+      const vibrato = ctx.createOscillator();
+      const vibratoDepth = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(b.from, t);
+      osc.frequency.exponentialRampToValueAtTime(b.to, t + b.rise);
+      vibrato.frequency.value = 26;
+      vibratoDepth.gain.setValueAtTime(b.from * 0.1, t);
+      vibratoDepth.gain.linearRampToValueAtTime(b.to * 0.04, t + b.rise);
+      vibrato.connect(vibratoDepth);
+      vibratoDepth.connect(osc.frequency);
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(b.level, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + b.rise + 0.18);
+      osc.connect(gain);
+      gain.connect(out);
+      osc.start(t);
+      vibrato.start(t);
+      osc.stop(t + b.rise + 0.2);
+      vibrato.stop(t + b.rise + 0.2);
+    }
+  }
+
+  private playClassicCrash(out: AudioNode): void {
     const ctx = this.getCtx();
     const now = ctx.currentTime;
 
     // Low-pass filtered noise — removes the hiss, keeps the dull scrape/rumble
-    const bufferSize = Math.ceil(ctx.sampleRate * 0.45);
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
     const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = this.noiseBuffer(ctx, 0.45);
     const lowpass = ctx.createBiquadFilter();
     lowpass.type = "lowpass";
     lowpass.frequency.value = 350;
@@ -155,7 +316,7 @@ export class SoundManager {
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
     noise.connect(lowpass);
     lowpass.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(out);
     noise.start(now);
 
     // Heavy impact thud — body hitting ground
@@ -167,7 +328,7 @@ export class SoundManager {
     thudGain.gain.setValueAtTime(0.7, now);
     thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
     thud.connect(thudGain);
-    thudGain.connect(ctx.destination);
+    thudGain.connect(out);
     thud.start(now);
     thud.stop(now + 0.3);
 
@@ -180,7 +341,7 @@ export class SoundManager {
     clangGain.gain.setValueAtTime(0.35, now + 0.03);
     clangGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
     clang.connect(clangGain);
-    clangGain.connect(ctx.destination);
+    clangGain.connect(out);
     clang.start(now + 0.03);
     clang.stop(now + 0.28);
   }
@@ -546,6 +707,7 @@ export class SoundManager {
   destroy(): void {
     this.stopSiren();
     this.stopGrind();
+    this.stopCrashSounds();
     this.stopMusic();
     if (this.musicAudioA) {
       this.musicAudioA.src = "";
@@ -562,6 +724,7 @@ export class SoundManager {
   /** Full reset: stop music and revert to the default suburban track. Call on game restart. */
   reset(): void {
     this.stopGrind();
+    this.stopCrashSounds();
     this.stopMusic();
     this.currentTrack = "/music.mp3";
     this.activeSlot = "A";

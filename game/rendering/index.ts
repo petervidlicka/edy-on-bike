@@ -2,7 +2,8 @@ export { drawBackground, SUBURBAN_BACKGROUND_DRAWERS, DUBAI_BACKGROUND_DRAWERS }
 export { drawPlayer, drawSkinPreview } from "./PlayerRenderer";
 export { drawObstacle } from "./obstacles";
 export { drawFloatingText } from "./FloatingTextRenderer";
-export { drawCrashBike, drawCrashRider } from "./CrashRenderer";
+export { drawCrashBike, drawRiderFigure, crashFadeAlpha, UPRIGHT_SHOULDER } from "./CrashRenderer";
+export type { RiderPose, Offset } from "./CrashRenderer";
 export { createParticles, updateParticles, drawParticles } from "./ParticleRenderer";
 export type { Particle } from "./ParticleRenderer";
 export { drawAmbulance, drawReviveFlash } from "./AmbulanceRenderer";

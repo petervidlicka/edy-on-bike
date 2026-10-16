@@ -38,9 +38,13 @@ export function useUnlockToast(
     savedRef.current = { bestScore, cheatUnlocked };
   });
 
-  // Compute the first target once per run start
+  // Compute the first target once per run start. RUNNING is also re-entered after an
+  // ambulance revive; recomputing there would re-announce bikes already passed this run.
+  const prevStateRef = useRef(gameState);
   useEffect(() => {
-    if (gameState !== GameState.RUNNING) return;
+    const prev = prevStateRef.current;
+    prevStateRef.current = gameState;
+    if (gameState !== GameState.RUNNING || prev === GameState.AMBULANCE) return;
     const next = getNextUnlock(savedRef.current.bestScore, savedRef.current.cheatUnlocked);
     targetScoreRef.current = next ? next.skin.unlockScore : null;
   }, [gameState]);

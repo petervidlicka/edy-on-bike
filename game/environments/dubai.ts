@@ -262,6 +262,8 @@ function generateDubaiElements(
         width: tw,
         height: th,
         color: palette.treeSilhouette,
+        // Picks this palm's frond-length pattern (stable while it scrolls)
+        variant: Math.floor(Math.random() * 8),
       });
       x += tw + 12 + Math.random() * 20;
       lastType = "palm_tree";

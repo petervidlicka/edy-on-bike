@@ -4,16 +4,22 @@ export class SoundManager {
   private musicMuted = false;
   private sfxMuted = false;
   private musicPlaying = false;
-  // Siren oscillators for ambulance
+  /** True while the game is paused — unmuting must not restart music then. */
+  private musicPaused = false;
+  // Siren nodes for ambulance: two detuned tones switched by one square-wave LFO
   private sirenOsc1: OscillatorNode | null = null;
   private sirenOsc2: OscillatorNode | null = null;
-  private sirenGain: GainNode | null = null;
+  private sirenLfo: OscillatorNode | null = null;
+  private sirenGain1: GainNode | null = null;
+  private sirenGain2: GainNode | null = null;
 
   // Dual-slot music system for crossfading between biome tracks
   private musicAudioA: HTMLAudioElement | null = null;
   private musicAudioB: HTMLAudioElement | null = null;
   private activeSlot: "A" | "B" = "A";
   private crossfadeTimer: ReturnType<typeof setInterval> | null = null;
+  /** Track being faded out by an in-progress crossfade. */
+  private crossfadeFrom: HTMLAudioElement | null = null;
   private currentTrack = "/music.mp3";
   /** Target volume when music is playing (not muted). */
   private readonly MUSIC_VOLUME = 0.45;
@@ -62,6 +68,15 @@ export class SoundManager {
     this.musicMuted = muted;
     if (this.musicAudioA) this.musicAudioA.muted = muted;
     if (this.musicAudioB) this.musicAudioB.muted = muted;
+    // A run that started muted never created/played its audio, and a biome
+    // change while muted only swapped currentTrack — so make sure the right
+    // track is actually playing once sound comes back.
+    if (!muted && this.musicPlaying && !this.musicPaused && !this.crossfadeTimer) {
+      const audio = this.ensureMusicAudio(this.activeSlot, this.currentTrack);
+      audio.muted = false;
+      audio.volume = this.MUSIC_VOLUME;
+      if (audio.paused) audio.play().catch(() => {});
+    }
   }
 
   setSfxMuted(muted: boolean): void {
@@ -148,6 +163,7 @@ export class SoundManager {
   startMusic(): void {
     if (this.musicPlaying) return;
     this.musicPlaying = true;
+    this.musicPaused = false;
     if (this.musicMuted) return;
     const audio = this.ensureMusicAudio(this.activeSlot, this.currentTrack);
     audio.currentTime = 0;
@@ -157,7 +173,9 @@ export class SoundManager {
 
   stopMusic(): void {
     this.musicPlaying = false;
+    this.musicPaused = false;
     this.cancelCrossfade();
+    this.crossfadeFrom = null;
     if (this.musicAudioA) {
       this.musicAudioA.pause();
       this.musicAudioA.currentTime = 0;
@@ -169,6 +187,10 @@ export class SoundManager {
   }
 
   pauseMusic(): void {
+    this.musicPaused = true;
+    // Finish any crossfade now so the outgoing track doesn't keep playing
+    // underneath the pause.
+    if (this.crossfadeTimer) this.completeCrossfade();
     const active = this.getActiveAudio();
     if (active && !active.paused) {
       active.pause();
@@ -176,6 +198,7 @@ export class SoundManager {
   }
 
   resumeMusic(): void {
+    this.musicPaused = false;
     if (this.musicPlaying && !this.musicMuted) {
       const active = this.getActiveAudio();
       if (active && active.paused) {
@@ -195,7 +218,7 @@ export class SoundManager {
       return;
     }
 
-    this.cancelCrossfade();
+    if (this.crossfadeTimer) this.completeCrossfade();
 
     const oldSlot = this.activeSlot;
     const newSlot = oldSlot === "A" ? "B" : "A";
@@ -210,6 +233,7 @@ export class SoundManager {
     const stepMs = 50;
     const steps = Math.ceil(durationMs / stepMs);
     let step = 0;
+    this.crossfadeFrom = oldAudio;
 
     this.crossfadeTimer = setInterval(() => {
       step++;
@@ -220,15 +244,7 @@ export class SoundManager {
       }
       newAudio.volume = this.MUSIC_VOLUME * t;
 
-      if (t >= 1) {
-        this.cancelCrossfade();
-        if (oldAudio) {
-          oldAudio.pause();
-          oldAudio.currentTime = 0;
-        }
-        this.activeSlot = newSlot;
-        this.currentTrack = track;
-      }
+      if (t >= 1) this.completeCrossfade();
     }, stepMs);
 
     // Set active slot immediately so pause/resume works on the new track
@@ -259,40 +275,48 @@ export class SoundManager {
 
   playSiren(): void {
     if (this.sfxMuted) return;
+    // Never stack two sirens (e.g. resume after a pause that didn't stop it)
+    this.stopSiren();
     const ctx = this.getCtx();
     const now = ctx.currentTime;
 
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.18, now);
-    gain.connect(ctx.destination);
-    this.sirenGain = gain;
+    // Two-tone wee-woo siren — alternating 600/800 Hz every 0.3s. A square-wave
+    // LFO (±1 → ±100 Hz) drives both oscillators' frequency, so the siren keeps
+    // alternating for as long as it runs instead of a fixed schedule.
+    const lfo = ctx.createOscillator();
+    lfo.type = "square";
+    lfo.frequency.value = 1 / 0.6;
+    const lfoDepth = ctx.createGain();
+    lfoDepth.gain.value = 100;
+    lfo.connect(lfoDepth);
 
-    // Two-tone wee-woo siren — alternating 600/800 Hz
+    const gain1 = ctx.createGain();
+    gain1.gain.setValueAtTime(0.18, now);
+    gain1.connect(ctx.destination);
     const osc1 = ctx.createOscillator();
     osc1.type = "sine";
-    osc1.frequency.setValueAtTime(600, now);
-    for (let i = 0; i < 30; i++) {
-      const t = now + i * 0.3;
-      osc1.frequency.setValueAtTime(i % 2 === 0 ? 600 : 800, t);
-    }
-    osc1.connect(gain);
-    osc1.start(now);
-    this.sirenOsc1 = osc1;
+    osc1.frequency.value = 700;
+    lfoDepth.connect(osc1.frequency);
+    osc1.connect(gain1);
 
     // Slight detuned second oscillator for richness
-    const osc2 = ctx.createOscillator();
-    osc2.type = "sine";
-    osc2.frequency.setValueAtTime(603, now);
-    for (let i = 0; i < 30; i++) {
-      const t = now + i * 0.3;
-      osc2.frequency.setValueAtTime(i % 2 === 0 ? 603 : 803, t);
-    }
     const gain2 = ctx.createGain();
     gain2.gain.setValueAtTime(0.08, now);
-    osc2.connect(gain2);
     gain2.connect(ctx.destination);
+    const osc2 = ctx.createOscillator();
+    osc2.type = "sine";
+    osc2.frequency.value = 703;
+    lfoDepth.connect(osc2.frequency);
+    osc2.connect(gain2);
+
+    lfo.start(now);
+    osc1.start(now);
     osc2.start(now);
+    this.sirenLfo = lfo;
+    this.sirenOsc1 = osc1;
     this.sirenOsc2 = osc2;
+    this.sirenGain1 = gain1;
+    this.sirenGain2 = gain2;
   }
 
   stopSiren(): void {
@@ -300,18 +324,20 @@ export class SoundManager {
     if (!ctx) return;
     const now = ctx.currentTime;
 
-    if (this.sirenGain) {
-      this.sirenGain.gain.linearRampToValueAtTime(0, now + 0.15);
+    // Fade both voices before stopping so the siren doesn't end with a click
+    for (const gain of [this.sirenGain1, this.sirenGain2]) {
+      if (!gain) continue;
+      gain.gain.setValueAtTime(gain.gain.value, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.15);
     }
-    if (this.sirenOsc1) {
-      this.sirenOsc1.stop(now + 0.2);
-      this.sirenOsc1 = null;
+    for (const osc of [this.sirenOsc1, this.sirenOsc2, this.sirenLfo]) {
+      osc?.stop(now + 0.2);
     }
-    if (this.sirenOsc2) {
-      this.sirenOsc2.stop(now + 0.2);
-      this.sirenOsc2 = null;
-    }
-    this.sirenGain = null;
+    this.sirenOsc1 = null;
+    this.sirenOsc2 = null;
+    this.sirenLfo = null;
+    this.sirenGain1 = null;
+    this.sirenGain2 = null;
   }
 
   playRevive(): void {
@@ -369,6 +395,18 @@ export class SoundManager {
     this.stopMusic();
     this.currentTrack = "/music.mp3";
     this.activeSlot = "A";
+  }
+
+  /** Jump an in-progress crossfade to its end: new track at full volume, old one stopped. */
+  private completeCrossfade(): void {
+    this.cancelCrossfade();
+    if (this.crossfadeFrom) {
+      this.crossfadeFrom.pause();
+      this.crossfadeFrom.currentTime = 0;
+      this.crossfadeFrom = null;
+    }
+    const active = this.getActiveAudio();
+    if (active) active.volume = this.MUSIC_VOLUME;
   }
 
   private cancelCrossfade(): void {

@@ -1,5 +1,5 @@
 import { AmbulanceState } from "../types";
-import { drawVehicle, roundedPath, type Pt, type VehicleColors } from "./vehicle";
+import { drawVehicle, roundedPath, type VehicleColors, type VehicleShape } from "./vehicle";
 
 /** The ambulance looks the same in every biome, so it carries its own glass, tyre and lamp colours. */
 const AMBULANCE_COLORS: VehicleColors = {
@@ -7,6 +7,18 @@ const AMBULANCE_COLORS: VehicleColors = {
   carWheel: "#2e2e2c",
   carTaillight: "#c44040",
   carHeadlight: "#e8d06a",
+};
+
+/** High-roof van silhouette; the cab and bonnet sit in the right-hand 30%. */
+const AMBULANCE_SHAPE: VehicleShape = {
+  outline: [[0.005, 0.86], [0.0, 0.14], [0.02, 0.09], [0.69, 0.09], [0.72, 0.17], [0.8, 0.18], [0.9, 0.46], [0.985, 0.54], [1.0, 0.68], [0.995, 0.86]],
+  windows: [[0.725, 0.45], [0.725, 0.22], [0.79, 0.22], [0.865, 0.45]],
+  pillars: [],
+  wheels: [0.16, 0.81],
+  wheelR: 8.5,
+  claddingFrom: 0.8,
+  tailLight: [0.0, 0.62, 0.02, 0.12],
+  headLight: [0.955, 0.56, 0.04, 0.07],
 };
 
 /**
@@ -17,26 +29,16 @@ const AMBULANCE_COLORS: VehicleColors = {
 export function drawAmbulance(ctx: CanvasRenderingContext2D, amb: AmbulanceState) {
   const { x, y, width: w, height: h } = amb;
 
-  const outline: Pt[] = [[0.005, 0.86], [0.0, 0.14], [0.02, 0.09], [0.69, 0.09], [0.72, 0.17], [0.8, 0.18], [0.9, 0.46], [0.985, 0.54], [1.0, 0.68], [0.995, 0.86]];
-  drawVehicle(ctx, x, y, w, h, AMBULANCE_COLORS, {
+  drawVehicle(ctx, x, y, w, h, AMBULANCE_COLORS, AMBULANCE_SHAPE, {
     body: "#f6f5f1",
     bodyDark: "#c9c6bd",
     cladding: "#8d8f92",
-    outline,
-    windows: [[0.725, 0.45], [0.725, 0.22], [0.79, 0.22], [0.865, 0.45]],
-    pillars: [],
-    wheels: [0.16, 0.81],
-    wheelR: 8.5,
-    claddingFrom: 0.8,
-    tailLight: [0.0, 0.62, 0.02, 0.12],
-    headLight: [0.955, 0.56, 0.04, 0.07],
   });
 
   ctx.save();
 
   // Battenburg chequer band, clipped to the body.
-  roundedPath(ctx, outline.map(([fx, fy]) => ({ x: x + w * fx, y: y + h * fy })), 3);
-  ctx.clip();
+  ctx.clip(roundedPath(AMBULANCE_SHAPE.outline.map(([fx, fy]) => ({ x: x + w * fx, y: y + h * fy })), 3));
   const bandTop = y + h * 0.5;
   const cell = h * 0.075;
   for (let row = 0; row < 2; row++) {

@@ -1,5 +1,5 @@
 import type { EnvironmentPalette } from "../../environments/types";
-import { drawVehicle } from "../vehicle";
+import { drawVehicle, type VehicleShape } from "../vehicle";
 
 // --- Dubai biome obstacle draw functions ---
 
@@ -173,21 +173,24 @@ export function drawSandTrap(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.stroke();
 }
 
+const LAND_CRUISER_SHAPE: VehicleShape = {
+  outline: [[0.01, 0.84], [0.0, 0.4], [0.02, 0.12], [0.06, 0.05], [0.57, 0.04], [0.69, 0.33], [0.96, 0.38], [1.0, 0.5], [0.995, 0.84]],
+  windows: [[0.04, 0.35], [0.07, 0.11], [0.55, 0.1], [0.65, 0.35]],
+  pillars: [0.24, 0.42],
+  wheels: [0.19, 0.8],
+  wheelR: 8.5,
+  claddingFrom: 0.72,
+  tailLight: [0.0, 0.36, 0.03, 0.18],
+  headLight: [0.94, 0.41, 0.05, 0.08],
+};
+
 /** Toyota Land Cruiser–style full-size 4x4: long bonnet, flat roof, chrome grille. */
 export function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  drawVehicle(ctx, x, y, w, h, palette.obstacle, {
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, LAND_CRUISER_SHAPE, {
     body: c.car,
     bodyDark: c.carRoof,
     cladding: "#6b6b6b",
-    outline: [[0.01, 0.84], [0.0, 0.4], [0.02, 0.12], [0.06, 0.05], [0.57, 0.04], [0.69, 0.33], [0.96, 0.38], [1.0, 0.5], [0.995, 0.84]],
-    windows: [[0.04, 0.35], [0.07, 0.11], [0.55, 0.1], [0.65, 0.35]],
-    pillars: [0.24, 0.42],
-    wheels: [0.19, 0.8],
-    wheelR: 8.5,
-    claddingFrom: 0.72,
-    tailLight: [0.0, 0.36, 0.03, 0.18],
-    headLight: [0.94, 0.41, 0.05, 0.08],
   });
   // Chrome grille bars and a roof rack.
   ctx.fillStyle = "#b9bcc0";
@@ -199,6 +202,16 @@ export function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: num
   ctx.fillStyle = "#3f3f3f";
   ctx.fillRect(x + w * 0.3, y + h * 0.8, w * 0.38, 1.6);
 }
+
+const PINK_G_CLASS_SHAPE: VehicleShape = {
+  outline: [[0.075, 0.84], [0.065, 0.06], [0.09, 0.02], [0.66, 0.02], [0.685, 0.05], [0.72, 0.37], [0.975, 0.4], [1.0, 0.46], [1.0, 0.84]],
+  windows: [[0.11, 0.37], [0.11, 0.09], [0.645, 0.09], [0.68, 0.37]],
+  pillars: [0.3, 0.48],
+  wheels: [0.25, 0.81],
+  wheelR: 8.5,
+  claddingFrom: 0.76,
+  tailLight: [0.07, 0.42, 0.025, 0.14],
+};
 
 /** Pink Mercedes G-Class–style off-roader: a pure box with upright glass, round lamps and a rear spare wheel. */
 export function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
@@ -219,18 +232,10 @@ export function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.arc(sx, sy, sr * 0.72, 0, Math.PI * 2);
   ctx.fill();
 
-  drawVehicle(ctx, x, y, w, h, palette.obstacle, {
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, PINK_G_CLASS_SHAPE, {
     body: pink,
     bodyDark: pinkDark,
     cladding: "#4a3d44",
-    outline: [[0.075, 0.84], [0.065, 0.06], [0.09, 0.02], [0.66, 0.02], [0.685, 0.05], [0.72, 0.37], [0.975, 0.4], [1.0, 0.46], [1.0, 0.84]],
-    windows: [[0.11, 0.37], [0.11, 0.09], [0.645, 0.09], [0.68, 0.37]],
-    pillars: [0.3, 0.48],
-    wheels: [0.25, 0.81],
-    wheelR: 8.5,
-    claddingFrom: 0.76,
-    tailLight: [0.07, 0.42, 0.025, 0.14],
-    headLight: [0.98, 0.44, 0.0, 0.0],
   });
 
   // Round headlamp, fender-top indicator, door hinges, belt trim.
@@ -628,6 +633,21 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.textBaseline = "alphabetic";
 }
 
+const LAMBORGHINI_HURACAN_SHAPE: VehicleShape = {
+  angularArches: true,
+  outline: [
+    [0.0, 0.74], [0.0, 0.27], [0.006, 0.21], [0.18, 0.15], [0.47, 0.05], [0.55, 0.07],
+    [0.74, 0.32], [0.86, 0.43], [0.985, 0.58], [1.0, 0.66], [0.985, 0.84],
+  ],
+  windows: [[0.3, 0.33], [0.42, 0.09], [0.555, 0.1], [0.72, 0.35]],
+  pillars: [],
+  wheels: [0.2, 0.78],
+  wheelR: 6.6,
+  claddingFrom: 0.8,
+  tailLight: [0.0, 0.29, 0.03, 0.05],
+  headLight: [0.9, 0.5, 0.085, 0.04],
+};
+
 /**
  * Lamborghini Huracán–style supercar, built from the real car's side-profile proportions
  * (4.52 m long, 2.62 m wheelbase, 1.165 m tall, ~1.0 m front / 0.9 m rear overhang):
@@ -639,23 +659,12 @@ export function drawLamborghiniHuracan(ctx: CanvasRenderingContext2D, x: number,
   const green = c.lamboGreen ?? "#86c232";
   const greenDark = c.lamboGreenDark ?? "#5e8f1f";
   const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
-  drawVehicle(ctx, x, y, w, h, { ...c, carWindow: c.lamboWindow ?? "#2a3a4a" }, {
+  drawVehicle(ctx, x, y, w, h, c, LAMBORGHINI_HURACAN_SHAPE, {
     body: green,
     bodyDark: greenDark,
     cladding: "#1c201c",
-    angularArches: true,
     rim: { color: "#232326", spokes: 5, caliper: "#e7c21b" },
-    outline: [
-      [0.0, 0.74], [0.0, 0.27], [0.006, 0.21], [0.18, 0.15], [0.47, 0.05], [0.55, 0.07],
-      [0.74, 0.32], [0.86, 0.43], [0.985, 0.58], [1.0, 0.66], [0.985, 0.84],
-    ],
-    windows: [[0.3, 0.33], [0.42, 0.09], [0.555, 0.1], [0.72, 0.35]],
-    pillars: [],
-    wheels: [0.2, 0.78],
-    wheelR: 6.6,
-    claddingFrom: 0.8,
-    tailLight: [0.0, 0.29, 0.03, 0.05],
-    headLight: [0.9, 0.5, 0.085, 0.04],
+    window: c.lamboWindow ?? "#2a3a4a",
   });
 
   ctx.save();
@@ -712,6 +721,18 @@ export function drawLamborghiniHuracan(ctx: CanvasRenderingContext2D, x: number,
   ctx.restore();
 }
 
+const FERRARI_458_SHAPE: VehicleShape = {
+  outline: [
+    [0.0, 0.76], [0.0, 0.28], [0.007, 0.22], [0.13, 0.17], [0.31, 0.09], [0.46, 0.025], [0.56, 0.05],
+    [0.72, 0.29], [0.8, 0.32], [0.9, 0.44], [0.98, 0.56], [1.0, 0.64], [0.985, 0.85],
+  ],
+  windows: [[0.36, 0.22], [0.46, 0.07], [0.555, 0.085], [0.69, 0.3], [0.5, 0.31]],
+  pillars: [],
+  wheels: [0.183, 0.769],
+  wheelR: 6.6,
+  claddingFrom: 0.82,
+};
+
 /**
  * Ferrari 458–style supercar, laid out from the real car's side-profile proportions
  * (4.53 m long, 2.65 m wheelbase, 1.21 m tall, ~1.05 m front / 0.83 m rear overhang):
@@ -723,22 +744,12 @@ export function drawFerrari458(ctx: CanvasRenderingContext2D, x: number, y: numb
   const red = c.ferrariRed ?? "#d11f1f";
   const redDark = c.ferrariRedDark ?? "#9a1414";
   const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
-  drawVehicle(ctx, x, y, w, h, { ...c, carWindow: "#22303c" }, {
+  drawVehicle(ctx, x, y, w, h, c, FERRARI_458_SHAPE, {
     body: red,
     bodyDark: redDark,
     cladding: "#1e1616",
     rim: { color: "#c3c6ca", spokes: 5, caliper: "#f2c200", thin: true },
-    outline: [
-      [0.0, 0.76], [0.0, 0.28], [0.007, 0.22], [0.13, 0.17], [0.31, 0.09], [0.46, 0.025], [0.56, 0.05],
-      [0.72, 0.29], [0.8, 0.32], [0.9, 0.44], [0.98, 0.56], [1.0, 0.64], [0.985, 0.85],
-    ],
-    windows: [[0.36, 0.22], [0.46, 0.07], [0.555, 0.085], [0.69, 0.3], [0.5, 0.31]],
-    pillars: [],
-    wheels: [0.183, 0.769],
-    wheelR: 6.6,
-    claddingFrom: 0.82,
-    tailLight: [0.0, 0.0, 0.0, 0.0],
-    headLight: [0.0, 0.0, 0.0, 0.0],
+    window: "#22303c",
   });
 
   ctx.save();
@@ -787,6 +798,17 @@ export function drawFerrari458(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.restore();
 }
 
+const CONVERTIBLE_SHAPE: VehicleShape = {
+  outline: [[0.0, 0.8], [0.0, 0.52], [0.04, 0.44], [0.6, 0.44], [0.86, 0.48], [0.97, 0.56], [1.0, 0.64], [0.99, 0.82]],
+  windows: [[0.6, 0.44], [0.53, 0.12], [0.555, 0.12], [0.63, 0.44]],
+  pillars: [],
+  wheels: [0.19, 0.8],
+  wheelR: 6.6,
+  claddingFrom: 0.84,
+  tailLight: [0.0, 0.5, 0.03, 0.08],
+  headLight: [0.93, 0.52, 0.06, 0.05],
+};
+
 /** Generic open-top roadster: long bonnet, short deck, raked screen and tan leather seats. */
 export function drawConvertible(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
@@ -804,18 +826,11 @@ export function drawConvertible(ctx: CanvasRenderingContext2D, x: number, y: num
   }
   ctx.restore();
 
-  drawVehicle(ctx, x, y, w, h, { ...c, carWindow: "rgba(150,200,225,0.55)" }, {
+  drawVehicle(ctx, x, y, w, h, c, CONVERTIBLE_SHAPE, {
     body,
     bodyDark,
     cladding: "#262a30",
-    outline: [[0.0, 0.8], [0.0, 0.52], [0.04, 0.44], [0.6, 0.44], [0.86, 0.48], [0.97, 0.56], [1.0, 0.64], [0.99, 0.82]],
-    windows: [[0.6, 0.44], [0.53, 0.12], [0.555, 0.12], [0.63, 0.44]],
-    pillars: [],
-    wheels: [0.19, 0.8],
-    wheelR: 6.6,
-    claddingFrom: 0.84,
-    tailLight: [0.0, 0.5, 0.03, 0.08],
-    headLight: [0.93, 0.52, 0.06, 0.05],
+    window: "rgba(150,200,225,0.55)",
   });
 
   ctx.save();
@@ -842,6 +857,20 @@ export function drawConvertible(ctx: CanvasRenderingContext2D, x: number, y: num
   ctx.restore();
 }
 
+const ROLLS_ROYCE_PHANTOM_SHAPE: VehicleShape = {
+  outline: [
+    [0.0, 0.79], [0.0, 0.42], [0.06, 0.39], [0.15, 0.36], [0.27, 0.04], [0.57, 0.025],
+    [0.69, 0.33], [0.945, 0.37], [1.0, 0.38], [1.0, 0.79],
+  ],
+  windows: [[0.23, 0.33], [0.29, 0.08], [0.56, 0.07], [0.655, 0.33]],
+  pillars: [0.42],
+  wheels: [0.217, 0.835],
+  wheelR: 7.6,
+  claddingFrom: 0.86,
+  tailLight: [0.0, 0.44, 0.018, 0.16],
+  headLight: [0.965, 0.42, 0.03, 0.07],
+};
+
 /**
  * Rolls-Royce Phantom–style limousine, from the real car's proportions (5.76 m long,
  * 3.55 m wheelbase, 1.65 m tall): long flat bonnet, upright Pantheon-style grille,
@@ -850,22 +879,12 @@ export function drawConvertible(ctx: CanvasRenderingContext2D, x: number, y: num
 export function drawRollsRoycePhantom(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
   const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
-  drawVehicle(ctx, x, y, w, h, { ...c, carWindow: "#2c3a46" }, {
+  drawVehicle(ctx, x, y, w, h, c, ROLLS_ROYCE_PHANTOM_SHAPE, {
     body: "#1b1c21",
     bodyDark: "#0f1013",
     lowerTone: ["#a7abb1", 0.4, 0.82],
     cladding: "#3a3c40",
-    outline: [
-      [0.0, 0.79], [0.0, 0.42], [0.06, 0.39], [0.15, 0.36], [0.27, 0.04], [0.57, 0.025],
-      [0.69, 0.33], [0.945, 0.37], [1.0, 0.38], [1.0, 0.79],
-    ],
-    windows: [[0.23, 0.33], [0.29, 0.08], [0.56, 0.07], [0.655, 0.33]],
-    pillars: [0.42],
-    wheels: [0.217, 0.835],
-    wheelR: 7.6,
-    claddingFrom: 0.86,
-    tailLight: [0.0, 0.44, 0.018, 0.16],
-    headLight: [0.965, 0.42, 0.03, 0.07],
+    window: "#2c3a46",
   });
 
   ctx.save();
@@ -892,6 +911,20 @@ export function drawRollsRoycePhantom(ctx: CanvasRenderingContext2D, x: number, 
   ctx.restore();
 }
 
+const PORSCHE_911_SHAPE: VehicleShape = {
+  outline: [
+    [0.005, 0.87], [0.0, 0.7], [0.001, 0.48], [0.025, 0.38], [0.08, 0.31], [0.138, 0.24],
+    [0.21, 0.15], [0.294, 0.071], [0.34, 0.04], [0.383, 0.017], [0.425, 0.004], [0.465, 0.0],
+    [0.505, 0.012], [0.54, 0.04], [0.6, 0.15], [0.69, 0.3], [0.758, 0.32], [0.853, 0.38],
+    [0.962, 0.49], [0.99, 0.6], [1.0, 0.68], [0.995, 0.9],
+  ],
+  windows: [[0.223, 0.27], [0.3, 0.15], [0.4, 0.08], [0.5, 0.08], [0.615, 0.335]],
+  pillars: [0.358],
+  wheels: [0.209, 0.782],
+  wheelR: 7.2,
+  claddingFrom: 0.86,
+};
+
 /**
  * Porsche 911 GT3 RS–style sports car. Every key point (wheel centres, roofline, glass,
  * door, intakes, wing) is measured from a side-view reference drawing and normalised to
@@ -915,24 +948,12 @@ export function drawPorsche911(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.stroke();
   ctx.restore();
 
-  drawVehicle(ctx, x, y, w, h, { ...c, carWindow: "#26343f" }, {
+  drawVehicle(ctx, x, y, w, h, c, PORSCHE_911_SHAPE, {
     body,
     bodyDark,
     cladding: "#22282c",
     rim: { color: "#2a2b2e", spokes: 5 },
-    outline: [
-      [0.005, 0.87], [0.0, 0.7], [0.001, 0.48], [0.025, 0.38], [0.08, 0.31], [0.138, 0.24],
-      [0.21, 0.15], [0.294, 0.071], [0.34, 0.04], [0.383, 0.017], [0.425, 0.004], [0.465, 0.0],
-      [0.505, 0.012], [0.54, 0.04], [0.6, 0.15], [0.69, 0.3], [0.758, 0.32], [0.853, 0.38],
-      [0.962, 0.49], [0.99, 0.6], [1.0, 0.68], [0.995, 0.9],
-    ],
-    windows: [[0.223, 0.27], [0.3, 0.15], [0.4, 0.08], [0.5, 0.08], [0.615, 0.335]],
-    pillars: [0.358],
-    wheels: [0.209, 0.782],
-    wheelR: 7.2,
-    claddingFrom: 0.86,
-    tailLight: [0.0, 0.0, 0.0, 0.0],
-    headLight: [0.0, 0.0, 0.0, 0.0],
+    window: "#26343f",
   });
 
   ctx.save();

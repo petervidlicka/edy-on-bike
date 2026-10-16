@@ -4,9 +4,12 @@ import { PlayerState, ObstacleInstance, ObstacleType } from "./types";
 const CONTAINER_RAMP_W = 75;
 const CONTAINER_RAMP_H = 36;
 
-// Inner padding makes hitboxes slightly smaller than the visual bounds,
-// so near-misses feel fair rather than frustrating.
-const HITBOX_PADDING = 8;
+/**
+ * Inner padding that makes hitboxes slightly smaller than the visual bounds, so
+ * near-misses feel fair rather than frustrating. Obstacle placement reads it to keep
+ * low obstacles hittable.
+ */
+export const HITBOX_PADDING = 8;
 
 // How many pixels from the obstacle top counts as "landing on top".
 // Must be larger than the max fall distance per frame (~18px at peak velocity).

@@ -1,6 +1,7 @@
 import { BackgroundLayer } from "../../types";
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import { getTotalLayerWidth } from "../../Background";
+import { decodePedestrianVariant, SKIN_TONES, HAIR_COLORS } from "../../environments/pedestrians";
 
 // --- Sky ---
 
@@ -100,32 +101,6 @@ export function drawBackground(
 
 // --- Pedestrians (shared across biomes) ---
 
-const SKIN_TONES = ["#f1c9a5", "#d9a87e", "#b07a52", "#7a5034"];
-const HAIR_COLORS = ["#5a3c24", "#2b2018", "#c98b3c", "#1c1612"];
-const TOPS = ["#e4572e", "#2e86ab", "#f2c14e", "#4caf7d", "#d1495b", "#8e6cbd", "#ff8c42", "#3bb3c3"];
-const BOTTOMS = ["#3d405b", "#4a6fa5", "#2f2f2f", "#8d6e63", "#5c6b73", "#b04a6a"];
-
-/** Pedestrian kinds; the element variant packs kind + 3 × skin-tone index. */
-export const PEDESTRIAN_KINDS = ["man", "woman", "child"] as const;
-
-/**
- * Picks a random pedestrian for a background layer: kind, skin tone and a colourful
- * outfit. Children are shorter, so the caller should use the returned height.
- *
- * @returns Fields to spread into a walking_person BackgroundElement.
- */
-export function pickPedestrian(rng: () => number = Math.random) {
-  const kind = Math.floor(rng() * 3);
-  const skin = Math.floor(rng() * SKIN_TONES.length);
-  return {
-    variant: kind + 3 * skin,
-    color: TOPS[Math.floor(rng() * TOPS.length)],
-    roofColor: BOTTOMS[Math.floor(rng() * BOTTOMS.length)],
-    width: kind === 2 ? 11 : 14,
-    height: kind === 2 ? 22 : 32,
-  };
-}
-
 /**
  * Side-view walking figure facing right, mid-stride. `color` is the top, `bottomColor`
  * the trousers or skirt; `variant` selects man / woman / child and the skin tone.
@@ -136,12 +111,11 @@ export function drawWalkingPerson(
   color: string, _palette: EnvironmentPalette,
   bottomColor = "#3d405b", variant = 0
 ) {
-  const kind = variant % 3;
-  const skinIdx = Math.floor(variant / 3) % SKIN_TONES.length;
-  const skin = SKIN_TONES[skinIdx];
-  const hair = HAIR_COLORS[skinIdx];
-  const isWoman = kind === 1;
-  const isChild = kind === 2;
+  const { kind, skinIndex } = decodePedestrianVariant(variant);
+  const skin = SKIN_TONES[skinIndex];
+  const hair = HAIR_COLORS[skinIndex];
+  const isWoman = kind === "woman";
+  const isChild = kind === "child";
 
   const cx = x + w * 0.5;
   const headR = h * (isChild ? 0.11 : 0.08);

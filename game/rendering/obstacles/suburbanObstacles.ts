@@ -1,5 +1,5 @@
 import type { EnvironmentPalette } from "../../environments/types";
-import { drawVehicle } from "../vehicle";
+import { drawVehicle, type VehicleShape } from "../vehicle";
 
 // --- Suburban biome obstacle draw functions ---
 
@@ -395,58 +395,67 @@ export function drawShoppingTrolley(ctx: CanvasRenderingContext2D, x: number, y:
 // --- Road vehicles ---
 // Shared side-view recipe lives in ../vehicle.ts.
 
+const CAR_SHAPE: VehicleShape = {
+  outline: [[0.02, 0.84], [0.0, 0.52], [0.04, 0.34], [0.2, 0.06], [0.56, 0.04], [0.73, 0.35], [0.96, 0.43], [1.0, 0.6], [0.99, 0.84]],
+  windows: [[0.1, 0.36], [0.23, 0.13], [0.54, 0.12], [0.67, 0.36]],
+  pillars: [0.4],
+  wheels: [0.2, 0.8],
+  wheelR: 7,
+  claddingFrom: 0.74,
+  tailLight: [0.005, 0.4, 0.04, 0.14],
+  headLight: [0.95, 0.47, 0.045, 0.1],
+};
+
 /** Small hatchback — the most common traffic obstacle. */
 export function drawCar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  drawVehicle(ctx, x, y, w, h, palette.obstacle, {
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, CAR_SHAPE, {
     body: c.car,
     bodyDark: c.carRoof,
-    outline: [[0.02, 0.84], [0.0, 0.52], [0.04, 0.34], [0.2, 0.06], [0.56, 0.04], [0.73, 0.35], [0.96, 0.43], [1.0, 0.6], [0.99, 0.84]],
-    windows: [[0.1, 0.36], [0.23, 0.13], [0.54, 0.12], [0.67, 0.36]],
-    pillars: [0.4],
-    wheels: [0.2, 0.8],
-    wheelR: 7,
-    claddingFrom: 0.74,
-    tailLight: [0.005, 0.4, 0.04, 0.14],
-    headLight: [0.95, 0.47, 0.045, 0.1],
   });
 }
+
+const SUV_SHAPE: VehicleShape = {
+  outline: [[0.01, 0.84], [0.0, 0.36], [0.03, 0.08], [0.09, 0.02], [0.61, 0.02], [0.75, 0.31], [0.97, 0.37], [1.0, 0.52], [0.99, 0.84]],
+  windows: [[0.05, 0.33], [0.08, 0.1], [0.59, 0.09], [0.7, 0.33]],
+  pillars: [0.27, 0.47],
+  wheels: [0.19, 0.81],
+  wheelR: 8.5,
+  claddingFrom: 0.68,
+  tailLight: [0.0, 0.34, 0.03, 0.16],
+  headLight: [0.955, 0.4, 0.04, 0.08],
+};
 
 /** Tall, boxy SUV — wider and higher than the hatchback. */
 export function drawSuv(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  drawVehicle(ctx, x, y, w, h, palette.obstacle, {
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, SUV_SHAPE, {
     body: c.suv ?? c.car,
     bodyDark: c.suvDark ?? c.carRoof,
-    outline: [[0.01, 0.84], [0.0, 0.36], [0.03, 0.08], [0.09, 0.02], [0.61, 0.02], [0.75, 0.31], [0.97, 0.37], [1.0, 0.52], [0.99, 0.84]],
-    windows: [[0.05, 0.33], [0.08, 0.1], [0.59, 0.09], [0.7, 0.33]],
-    pillars: [0.27, 0.47],
-    wheels: [0.19, 0.81],
-    wheelR: 8.5,
-    claddingFrom: 0.68,
-    tailLight: [0.0, 0.34, 0.03, 0.16],
-    headLight: [0.955, 0.4, 0.04, 0.08],
   });
   // Roof rails.
   ctx.fillStyle = c.suvDark ?? c.carRoof;
   ctx.fillRect(x + w * 0.12, y, w * 0.44, 1.4);
 }
 
+const DELIVERY_VAN_SHAPE: VehicleShape = {
+  outline: [[0.01, 0.86], [0.0, 0.08], [0.03, 0.01], [0.74, 0.01], [0.87, 0.36], [0.98, 0.45], [1.0, 0.6], [0.99, 0.86]],
+  windows: [[0.73, 0.36], [0.73, 0.08], [0.77, 0.08], [0.85, 0.36]],
+  pillars: [],
+  wheels: [0.17, 0.82],
+  wheelR: 8.5,
+  claddingFrom: 0.74,
+  tailLight: [0.0, 0.5, 0.025, 0.14],
+  headLight: [0.955, 0.48, 0.04, 0.08],
+};
+
 /** Delivery van — long cargo box, short nose, parcel logo on the side. */
 export function drawDeliveryVan(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
   const accent = c.vanAccent ?? c.trolleyAccent;
-  drawVehicle(ctx, x, y, w, h, palette.obstacle, {
+  drawVehicle(ctx, x, y, w, h, palette.obstacle, DELIVERY_VAN_SHAPE, {
     body: c.van ?? c.car,
     bodyDark: c.vanDark ?? c.carRoof,
-    outline: [[0.01, 0.86], [0.0, 0.08], [0.03, 0.01], [0.74, 0.01], [0.87, 0.36], [0.98, 0.45], [1.0, 0.6], [0.99, 0.86]],
-    windows: [[0.73, 0.36], [0.73, 0.08], [0.77, 0.08], [0.85, 0.36]],
-    pillars: [],
-    wheels: [0.17, 0.82],
-    wheelR: 8.5,
-    claddingFrom: 0.74,
-    tailLight: [0.0, 0.5, 0.025, 0.14],
-    headLight: [0.955, 0.48, 0.04, 0.08],
   });
 
   // Livery stripe, sliding-door seam and a simple parcel logo.

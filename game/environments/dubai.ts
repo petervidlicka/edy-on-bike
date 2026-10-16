@@ -1,5 +1,5 @@
 import { ObstacleType, type BackgroundElement } from "../types";
-import { pickPedestrian } from "../rendering/background/shared";
+import { pickPedestrian } from "./pedestrians";
 import { DUBAI_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
@@ -39,7 +39,6 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
   creature: "#c8a870",
   creatureLeg: "#a08858",
   creatureTail: "#b89868",
-  person: "#e8e0d8",
 
   // Player
   player: {

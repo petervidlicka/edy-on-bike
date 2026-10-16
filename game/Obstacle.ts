@@ -1,6 +1,13 @@
 import { ObstacleInstance, ObstacleType } from "./types";
 import { MIN_OBSTACLE_GAP, MIN_OBSTACLE_GAP_LATE } from "./constants";
+import { HITBOX_PADDING } from "./Collision";
 import type { EnvironmentDefinition, WeightedType } from "./environments/types";
+
+/** How far (px) non-ramp obstacles sit into the road so they look grounded. */
+const MAX_ROAD_SINK = 10;
+
+/** Minimum vertical hitbox overlap (px) between a grounded rider and an obstacle. */
+const MIN_HIT_BAND = 6;
 
 // Dimensions for each obstacle type
 export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: number }> = {
@@ -52,9 +59,11 @@ export function createObstacle(
   const spec = OBSTACLE_SPECS[type];
   // Ramps keep exact positioning (physics-dependent), everything else sits
   // slightly into the road so obstacles look grounded rather than floating.
-  // Offset is capped at (height - 17) to guarantee collision overlap remains.
+  // The sink is capped so a grounded rider's hitbox still overlaps the obstacle's
+  // by MIN_HIT_BAND px; otherwise low cars would only collide in a 1px sliver.
   const isRamp = type === ObstacleType.STRAIGHT_RAMP || type === ObstacleType.CURVED_RAMP || type === ObstacleType.CONTAINER_WITH_RAMP;
-  const yOffset = isRamp ? 0 : Math.max(0, Math.min(spec.height - 17, 10));
+  const maxSink = spec.height - 2 * HITBOX_PADDING - MIN_HIT_BAND;
+  const yOffset = isRamp ? 0 : Math.max(0, Math.min(maxSink, MAX_ROAD_SINK));
   return {
     type,
     x: canvasWidth + 60,

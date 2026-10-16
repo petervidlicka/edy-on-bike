@@ -1,5 +1,5 @@
 import { ObstacleType, type BackgroundElement } from "../types";
-import { pickPedestrian } from "../rendering/background/shared";
+import { pickPedestrian } from "./pedestrians";
 import { SUBURBAN_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
@@ -40,7 +40,6 @@ export const SUBURBAN_PALETTE: EnvironmentPalette = {
   creature: "#9a7a5a",
   creatureLeg: "#7a6048",
   creatureTail: "#c0a880",
-  person: "#5a5a6a",
 
   // Player
   player: {
@@ -227,7 +226,7 @@ function suburbanWeightedTypes(elapsedMs: number): WeightedType[] {
   // Stage 4 (40s): cars + other riders
   if (elapsedMs >= 40_000) {
     // Traffic: split the old single car weight across three vehicle sizes.
-    types.push({ type: ObstacleType.CAR, weight: 0.45 });
+    types.push({ type: ObstacleType.CAR, weight: 0.4 });
     types.push({ type: ObstacleType.SUV, weight: 0.35 });
     types.push({ type: ObstacleType.DELIVERY_VAN, weight: 0.25 });
     types.push({ type: ObstacleType.PERSON_ON_BIKE, weight: 1.0 });

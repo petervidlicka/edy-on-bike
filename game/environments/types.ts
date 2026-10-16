@@ -27,11 +27,10 @@ export interface EnvironmentPalette {
   treeHighlight: string;
   backgroundTreeTrunk: string;
 
-  // Background creatures & people
+  // Background creatures (pedestrian colours come from environments/pedestrians.ts)
   creature: string;
   creatureLeg: string;
   creatureTail: string;
-  person: string;
 
   // Player colors
   player: {

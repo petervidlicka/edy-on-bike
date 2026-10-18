@@ -2,6 +2,7 @@ import { INITIAL_SPEED } from "@/game/constants";
 import { formatMultiplier } from "@/game/ComboChain";
 import type { TrickFeedbackData } from "@/hooks/useGameEngine";
 import { useCanVibrate } from "@/hooks/useHapticFeedback";
+import { useGamepadConnected } from "@/hooks/useGamepad";
 
 /** Guards against browsers firing both onTouchStart and onClick. */
 let lastTouchTime = 0;
@@ -234,7 +235,10 @@ export function TrickFeedbackPopup({
   );
 }
 
-/** Touch D-pad for tricks (bottom right), shared by single-player and multiplayer. */
+/**
+ * Touch D-pad for tricks (bottom right), shared by single-player and multiplayer.
+ * Hidden while a gamepad is connected, since the controller's own D-pad does the job.
+ */
 export function TrickDpad({
   onBackflip,
   onFrontflip,
@@ -246,6 +250,9 @@ export function TrickDpad({
   onSuperman: () => void;
   onNoHander: () => void;
 }) {
+  const hasGamepad = useGamepadConnected();
+  if (hasGamepad) return null;
+
   return (
     <div
       style={{
@@ -320,6 +327,7 @@ export default function HUD({
   onNoHander,
 }: HUDProps) {
   const multiplier = (speed / INITIAL_SPEED).toFixed(1);
+  const hasGamepad = useGamepadConnected();
 
   return (
     <>
@@ -376,8 +384,8 @@ export default function HUD({
         )}
       </AudioControls>
 
-      {/* Jump button — bottom left */}
-      <button
+      {/* Jump button — bottom left; a connected gamepad's A button replaces it */}
+      {!hasGamepad && <button
         onTouchStart={(e) => { e.preventDefault(); lastTouchTime = Date.now(); onJump(); }}
         onClick={() => { if (Date.now() - lastTouchTime < 500) return; onJump(); }}
         title="Jump (tap or space)"
@@ -402,7 +410,7 @@ export default function HUD({
       >
         <ArrowSVG points="6 15 12 9 18 15" />
         <span style={{ fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
-      </button>
+      </button>}
 
       <TrickDpad
         onBackflip={onBackflip}

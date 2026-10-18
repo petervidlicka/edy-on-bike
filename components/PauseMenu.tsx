@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { Engine } from "@/game/Engine";
+import { useGamepadPress } from "@/hooks/useGamepad";
 import { useCanVibrate } from "@/hooks/useHapticFeedback";
 import { glassBtn } from "./sharedStyles";
 
@@ -26,8 +27,8 @@ interface PauseMenuProps {
 
 /**
  * Overlay shown while the player has paused. Mount it only while the engine holds
- * a "user" pause; it owns the keys that act on a paused game (Space resumes
- * without also jumping, Esc/P resume or cancel the countdown).
+ * a "user" pause; it owns the keys that act on a paused game (Space or gamepad A
+ * resumes without also jumping, Esc/P or gamepad Menu resume or cancel the countdown).
  * @param props - Engine ref plus audio state and toggles to mirror the HUD.
  * @example
  * {userPaused && <PauseMenu engineRef={engineRef} musicMuted={m} sfxMuted={s} onToggleMusic={tm} onToggleSfx={ts} vibrationOn={v} onToggleVibration={tv} />}
@@ -103,6 +104,20 @@ export function PauseMenu({
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [startResume]);
+
+  // Same split as the keys: A resumes, Menu toggles. Claimed so the engine doesn't also jump or re-pause.
+  useGamepadPress(
+    (e) => {
+      if (e.detail.button === "A") {
+        e.stopImmediatePropagation();
+        startResume();
+      } else if (e.detail.button === "Start") {
+        e.stopImmediatePropagation();
+        setCountdown((c) => (c === null ? COUNTDOWN_START : null));
+      }
+    },
+    { capture: true },
+  );
 
   return (
     <div

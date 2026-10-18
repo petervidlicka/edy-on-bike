@@ -3,6 +3,7 @@ import { SkinId } from "@/game/types";
 import SkinPicker from "./SkinPicker";
 import { UnlockProgress } from "./UnlockProgress";
 import { isMultiplayerEnabled } from "@/lib/multiplayerConfig";
+import { useGamepadConnected } from "@/hooks/useGamepad";
 
 interface StartScreenProps {
   bestScore: number;
@@ -17,6 +18,8 @@ export default function StartScreen({
   selectedSkinId,
   onSelectSkin,
 }: StartScreenProps) {
+  const hasGamepad = useGamepadConnected();
+
   return (
     <div
       style={{
@@ -79,8 +82,8 @@ export default function StartScreen({
           boxShadow: "0 2px 20px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
         }}
       >
-        PRESS SPACE TO START
-        <span
+        {hasGamepad ? "PRESS Ⓐ TO START" : "PRESS SPACE TO START"}
+        {!hasGamepad && <span
           style={{
             display: "block",
             fontSize: "0.75rem",
@@ -91,7 +94,7 @@ export default function StartScreen({
           }}
         >
           or tap on mobile
-        </span>
+        </span>}
       </div>
       {isMultiplayerEnabled && (
         <Link href="/multiplayer" style={{ textDecoration: "none", pointerEvents: "auto" }}>

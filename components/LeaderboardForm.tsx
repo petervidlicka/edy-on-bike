@@ -9,6 +9,7 @@ import { GameOverPrimaryButton } from "./GameOverPrimaryButton";
 import { GameOverLinkButton } from "./GameOverLinkButton";
 import { loadPlayerName, savePlayerName } from "@/game/storage";
 import { LeaderboardError, submitScore } from "@/lib/leaderboardClient";
+import { useGamepadPress } from "@/hooks/useGamepad";
 
 interface LeaderboardFormProps {
   score: number;
@@ -24,7 +25,7 @@ interface LeaderboardFormProps {
 }
 
 /**
- * Owns the Space/Enter keys while mounted (the summary and board views are not mounted then).
+ * Owns the Space/Enter keys and gamepad A (save) / B (skip) while mounted (the summary and board views are not mounted then).
  * @param props - Run details, lockout flag and the three ways out of the form.
  * @example
  * <LeaderboardForm score={900} skinName="Racer" locked={false} onSaved={showBoard} onSavedAndRestart={restart} onSkip={restart} />
@@ -111,6 +112,21 @@ export default function LeaderboardForm({
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [submit]);
+
+  // A acts like Enter, even while the name field is focused; B is "continue without saving"
+  useGamepadPress(
+    (e) => {
+      const { button } = e.detail;
+      if (button !== "A" && button !== "B" && button !== "Start") return;
+      e.stopImmediatePropagation();
+      if (button === "B") {
+        if (!locked) handleSkip();
+      } else if (!submitting) {
+        submit();
+      }
+    },
+    { capture: true },
+  );
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !submitting) {

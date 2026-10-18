@@ -1,9 +1,10 @@
 /**
- * Capture-phase Space/Enter/R handler for game-over views whose primary action is
- * "play again". Capture + stopImmediatePropagation keeps the press from also
- * reaching the engine's jump handler on the same event.
+ * Capture-phase Space/Enter/R (and gamepad A/Menu) handler for game-over views whose
+ * primary action is "play again". Capture + stopImmediatePropagation keeps the press
+ * from also reaching the engine's jump handler on the same event.
  */
 import { useEffect } from "react";
+import { useGamepadPress } from "@/hooks/useGamepad";
 
 /**
  * Mount in at most one game-over view at a time; two capture listeners would both fire.
@@ -29,4 +30,13 @@ export function useRestartKeys(onAction: () => void, locked: boolean): void {
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [onAction, locked]);
+
+  useGamepadPress(
+    (e) => {
+      if (e.detail.button !== "A" && e.detail.button !== "Start") return;
+      e.stopImmediatePropagation();
+      if (!locked) onAction();
+    },
+    { capture: true },
+  );
 }

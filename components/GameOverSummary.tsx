@@ -7,6 +7,7 @@
 import { GameOverPrimaryButton } from "./GameOverPrimaryButton";
 import { GameOverLinkButton } from "./GameOverLinkButton";
 import { useRestartKeys } from "@/hooks/useRestartKeys";
+import { useGamepadConnected } from "@/hooks/useGamepad";
 
 interface GameOverSummaryProps {
   locked: boolean;
@@ -28,6 +29,7 @@ interface GameOverSummaryProps {
  */
 export function GameOverSummary({ locked, offerSave, onRestart, onShowLeaderboard, onSaveScore }: GameOverSummaryProps) {
   useRestartKeys(onRestart, locked);
+  const hasGamepad = useGamepadConnected();
 
   return (
     <>
@@ -39,7 +41,7 @@ export function GameOverSummary({ locked, offerSave, onRestart, onShowLeaderboar
         <GameOverLinkButton onClick={onShowLeaderboard}>See leaderboard</GameOverLinkButton>
       </div>
       <p style={{ margin: 0, fontSize: "0.75rem", fontWeight: 600, color: "#64748b", letterSpacing: "0.04em" }}>
-        press Space or tap anywhere
+        {hasGamepad ? "press Ⓐ to play again" : "press Space or tap anywhere"}
       </p>
     </>
   );

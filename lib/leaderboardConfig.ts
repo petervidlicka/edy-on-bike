@@ -4,6 +4,16 @@
  * (Redis, fs) so client components can import it without bloating the bundle.
  */
 
+/** One row of the public leaderboard, as the API returns it and the game-over screen renders it. */
+export interface LeaderboardEntry {
+  name: string;
+  score: number;
+  skin?: string;
+}
+
+/** Longest display name the leaderboard stores. */
+export const MAX_LEADERBOARD_NAME_LENGTH = 20;
+
 /**
  * Number of entries the leaderboard API returns and the game-over screen shows.
  * Keeping one constant stops the API from sending rows the UI never renders.

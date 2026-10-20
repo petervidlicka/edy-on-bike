@@ -15,6 +15,7 @@ import {
   ScoreGuard,
   SnapshotClock,
   TokenBucket,
+  isPlayerNameAllowed,
   sanitizeExpectedPlayers,
   sanitizeName,
   sanitizeSkinId,
@@ -204,6 +205,10 @@ export class MultiplayerServer extends Server {
     const name = sanitizeName(data.name);
     if (!name) {
       this.rejectJoin(sender, `Pick a name between 1 and ${MAX_NAME_LENGTH} characters.`);
+      return;
+    }
+    if (!isPlayerNameAllowed(name)) {
+      this.rejectJoin(sender, "Please pick a different name.");
       return;
     }
 

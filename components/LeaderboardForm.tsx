@@ -12,6 +12,8 @@ import { useGamepadPress } from "@/hooks/useGamepad";
 import { color, input, text } from "./ui/tokens";
 
 interface LeaderboardFormProps {
+  /** The run's leaderboard ticket; null once resolved means the run was never registered. */
+  runTicket: Promise<string | null>;
   score: number;
   skinName: string;
   /** Input lockout: the primary action and Space/Enter are ignored while true. */
@@ -28,9 +30,10 @@ interface LeaderboardFormProps {
  * Owns the Space/Enter keys and gamepad A (save) / B (skip) while mounted (the summary and board views are not mounted then).
  * @param props - Run details, lockout flag and the three ways out of the form.
  * @example
- * <LeaderboardForm score={900} skinName="Racer" locked={false} onSaved={showBoard} onSavedAndRestart={restart} onSkip={restart} />
+ * <LeaderboardForm runTicket={ticket} score={900} skinName="Racer" locked={false} onSaved={showBoard} onSavedAndRestart={restart} onSkip={restart} />
  */
 export default function LeaderboardForm({
+  runTicket,
   score,
   skinName,
   locked,
@@ -59,7 +62,11 @@ export default function LeaderboardForm({
       setSubmitting(true);
       setError("");
       try {
-        await submitScore({ name: nameToSave, score, skin: skinName });
+        const runId = await runTicket;
+        if (!runId) {
+          throw new LeaderboardError("This run wasn't registered with the leaderboard (offline when it started?), so it can't be saved.");
+        }
+        await submitScore({ name: nameToSave, score, skin: skinName, runId });
         savePlayerName(nameToSave);
       } catch (err) {
         // Stay on the form so the player can retry, or hit Skip
@@ -73,7 +80,7 @@ export default function LeaderboardForm({
       if (thenRestart) onSavedAndRestart();
       else onSaved(nameToSave);
     },
-    [score, skinName, onSaved, onSavedAndRestart],
+    [runTicket, score, skinName, onSaved, onSavedAndRestart],
   );
 
   /** Saves whatever the current mode calls for; the shared path for button, Enter and Space. */

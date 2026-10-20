@@ -5,14 +5,9 @@
 import { Redis } from "@upstash/redis";
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 import { LEADERBOARD_SIZE } from "./leaderboardConfig";
-
-/** One row of the public leaderboard, as returned by the API. */
-export interface LeaderboardEntry {
-  name: string;
-  score: number;
-  skin?: string;
-}
+import type { LeaderboardEntry } from "./leaderboardConfig";
 
 /** Upstash REST credentials. */
 export interface RedisConfig {
@@ -22,6 +17,10 @@ export interface RedisConfig {
 
 const LEADERBOARD_KEY = "edy-on-bike:leaderboard";
 const SKIN_HASH_KEY = "edy-on-bike:leaderboard:skins";
+const RUN_KEY_PREFIX = "edy-on-bike:run:";
+
+/** How long a run ticket stays redeemable; longer than any real run, pauses included. */
+const RUN_TTL_SECONDS = 3 * 60 * 60;
 
 // --- Upstash Redis store ---
 
@@ -123,24 +122,20 @@ async function addScoreRedis(
 const DATA_FILE = path.join(process.cwd(), "data", "leaderboard.json");
 
 function readFileStore(): LeaderboardEntry[] {
+  if (!fs.existsSync(DATA_FILE)) return [];
   try {
-    const dir = path.dirname(DATA_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (!fs.existsSync(DATA_FILE)) return [];
     return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")) as LeaderboardEntry[];
-  } catch {
+  } catch (error) {
+    // A corrupt dev file shouldn't take the game-over screen down; start from an empty board
+    console.error(`[leaderboard] Ignoring unreadable ${DATA_FILE}`, error);
     return [];
   }
 }
 
+/** Throws on failure, so the API reports an error instead of claiming the score was saved. */
 function writeFileStore(entries: LeaderboardEntry[]): void {
-  try {
-    const dir = path.dirname(DATA_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(entries, null, 2), "utf-8");
-  } catch {
-    // non-fatal — fall through silently
-  }
+  fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+  fs.writeFileSync(DATA_FILE, JSON.stringify(entries, null, 2), "utf-8");
 }
 
 function getTopScoresFile(limit: number): LeaderboardEntry[] {
@@ -192,6 +187,45 @@ export async function getTotalPlayers(): Promise<number> {
     return Number(await redis.zcard(LEADERBOARD_KEY));
   }
   return readFileStore().length;
+}
+
+// --- Run tickets ---
+
+/** In-memory tickets for local dev without Redis (single process, so a Map is enough). */
+const memoryRuns = new Map<string, number>();
+
+/**
+ * Registers a run that just started. The ticket must accompany its score, so a score can
+ * only be submitted once and is checked against how long the run actually lasted.
+ * @returns The ticket id to send back with the score.
+ */
+export async function createRun(): Promise<string> {
+  const id = randomUUID();
+  const redis = getRedis();
+  if (redis) {
+    await redis.set(`${RUN_KEY_PREFIX}${id}`, String(Date.now()), { ex: RUN_TTL_SECONDS });
+  } else {
+    const cutoff = Date.now() - RUN_TTL_SECONDS * 1000;
+    for (const [runId, startedAt] of memoryRuns) if (startedAt < cutoff) memoryRuns.delete(runId);
+    memoryRuns.set(id, Date.now());
+  }
+  return id;
+}
+
+/**
+ * Redeems a run ticket (single use).
+ * @returns When the run started (ms since epoch), or null for an unknown, expired or used ticket.
+ */
+export async function consumeRun(id: string): Promise<number | null> {
+  const redis = getRedis();
+  if (redis) {
+    const startedAt = await redis.getdel<string>(`${RUN_KEY_PREFIX}${id}`);
+    const ms = Number(startedAt);
+    return startedAt !== null && Number.isFinite(ms) ? ms : null;
+  }
+  const startedAt = memoryRuns.get(id);
+  memoryRuns.delete(id);
+  return startedAt !== undefined && Date.now() - startedAt < RUN_TTL_SECONDS * 1000 ? startedAt : null;
 }
 
 /**

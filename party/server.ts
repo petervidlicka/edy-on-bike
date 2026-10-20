@@ -10,6 +10,7 @@ import {
   MAX_MESSAGE_CHARS,
   MIN_UPDATE_INTERVAL_MS,
   ScoreGuard,
+  sanitizeExpectedPlayers,
   sanitizeName,
   sanitizeSkinId,
   sanitizeSnapshot,
@@ -45,6 +46,11 @@ const STALE_PLAYER_MS = 10_000;
 /** Lobby → race. Clients count 3-2-1 locally and start on race_start, not on their own timer. */
 const COUNTDOWN_MS = 3_000;
 const STALE_CHECK_INTERVAL_MS = 2_000;
+/**
+ * Quick play: how long a matchmade room waits for all matched riders to connect. After
+ * that it races with whoever made it (2+), or sends the lone rider back to the queue.
+ */
+const QUICK_GATHER_MS = 5_000;
 
 // ── Server ─────────────────────────────────────────────────────────────
 
@@ -68,6 +74,12 @@ export class MultiplayerServer extends Server {
   lastUpdateAt: Map<string, number> = new Map();
   /** Server-only: plausibility guard for each racer's client-reported score. */
   scoreGuards: Map<string, ScoreGuard> = new Map();
+  /** Matchmade room (first joiner came with intent "quick"). */
+  quickPlay = false;
+  /** Quick play: riders the matchmaker put in this room. */
+  expectedPlayers = 0;
+  /** Quick play: waiting for matched riders to connect; holds the auto-start. */
+  gatherTimer: ReturnType<typeof setTimeout> | null = null;
 
   onConnect() {
     // Don't add as player yet — wait for "join" message.
@@ -161,6 +173,18 @@ export class MultiplayerServer extends Server {
       return;
     }
 
+    const quickIntent = data.intent === "quick";
+    if (this.players.size === 0) {
+      this.quickPlay = quickIntent;
+      if (quickIntent) {
+        this.expectedPlayers = sanitizeExpectedPlayers(data.expected);
+        this.gatherTimer = setTimeout(() => this.onGatherTimeout(), QUICK_GATHER_MS);
+      }
+    } else if (quickIntent !== this.quickPlay) {
+      this.rejectJoin(sender, "That room isn't available. Try again.");
+      return;
+    }
+
     if (this.phase !== "lobby") {
       this.rejectJoin(sender, "That race has already started. Ask for a new room code.");
       return;
@@ -175,7 +199,8 @@ export class MultiplayerServer extends Server {
       id: sender.id,
       name,
       skinId: sanitizeSkinId(data.skinId),
-      ready: false,
+      // Matchmade riders already chose to race; only the first race skips READY
+      ready: this.gatherTimer !== null,
       alive: true,
       score: 0,
     };
@@ -191,6 +216,7 @@ export class MultiplayerServer extends Server {
       players: Array.from(this.players.values()),
       phase: this.phase,
       seed: this.seed,
+      quickPlay: this.quickPlay,
     });
 
     // Broadcast player_joined to everyone else
@@ -198,6 +224,26 @@ export class MultiplayerServer extends Server {
       { type: "player_joined", player: playerInfo },
       sender.id,
     );
+
+    if (this.gatherTimer && this.players.size >= this.expectedPlayers) {
+      this.stopGathering();
+      this.maybeStartCountdown();
+    }
+  }
+
+  /** Not every matched rider connected in time: race with whoever did, or re-queue a lone rider. */
+  private onGatherTimeout() {
+    this.gatherTimer = null;
+    if (this.players.size >= 2) {
+      this.maybeStartCountdown();
+      return;
+    }
+    this.sendToPlayers({ type: "match_failed" });
+  }
+
+  private stopGathering() {
+    if (this.gatherTimer) clearTimeout(this.gatherTimer);
+    this.gatherTimer = null;
   }
 
   private handleReady(sender: Connection) {
@@ -291,6 +337,7 @@ export class MultiplayerServer extends Server {
 
   /** Starts the race once at least 2 players are in the lobby and all are ready. */
   private maybeStartCountdown() {
+    if (this.gatherTimer) return; // quick play: still waiting for matched riders to connect
     if (this.phase === "lobby" && this.players.size >= 2 && this.allPlayersReady()) {
       this.startCountdown();
     }
@@ -422,6 +469,9 @@ export class MultiplayerServer extends Server {
    */
   private cleanup() {
     this.phase = "lobby";
+    this.quickPlay = false;
+    this.expectedPlayers = 0;
+    this.stopGathering();
     if (this.countdownTimer) {
       clearTimeout(this.countdownTimer);
       this.countdownTimer = null;

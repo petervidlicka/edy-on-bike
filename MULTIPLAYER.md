@@ -1,6 +1,6 @@
 # Multiplayer Setup Guide
 
-Multiplayer runs on a small **Cloudflare Worker** in `party/` ([PartyServer](https://www.npmjs.com/package/partyserver) on Durable Objects — one instance per room code), separately from the Next.js app on Vercel.
+Multiplayer runs on a small **Cloudflare Worker** in `party/` ([PartyServer](https://www.npmjs.com/package/partyserver) on Durable Objects — one instance per room code, plus one global quick-play matchmaker), separately from the Next.js app on Vercel.
 
 ## Prerequisites
 
@@ -35,14 +35,28 @@ Open `http://localhost:3000/multiplayer` in your browser to play.
 
 ## How It Works
 
+### Quick Play (default)
+
+1. **Quick Play** — enter your name, pick a skin, click "QUICK PLAY". You join a single global queue (`party/matchmaker.ts`).
+2. **Matching** — the first rider in the queue starts a 15-second wait. When it ends, everyone queued (2–4 riders) is sent to a fresh room with a code like `Q7KX2M`; a 4th rider matches immediately.
+3. **Nobody around** — if the wait ends with only you, you're offered Keep waiting / Ride solo / Back. You stay queued; the next rider to arrive gets a 5-second wait for others, then you race.
+4. **Race** — matchmade rooms skip READY: the countdown starts once every matched rider has connected (or after 5 seconds with whoever made it; a lone rider is quietly re-queued).
+5. **Play Again** searches again rather than reusing the room — strangers rarely all stay for a rematch.
+
+### Rooms with friends
+
 1. **Create a room** — enter your name, pick a skin, click "CREATE ROOM". You get a 4-character room code.
 2. **Share the code** — other players go to `/multiplayer`, enter the code, and click "JOIN".
 3. **Ready up** — each player clicks "READY". The race starts when all players (minimum 2) are ready.
-4. **Race** — everyone sees the same obstacles (seeded RNG, independent of screen size). Other players appear as semi-transparent ghosts.
+4. **Race** — everyone sees the same obstacles (seeded RNG, independent of screen size). Other players appear as semi-transparent ghosts, each in its own lane so bikes don't overlap.
 5. **Crash** — when you crash, your ghost fades out for everyone else. The race ends when every player has crashed, left, or gone silent for 10 seconds (e.g. a hidden tab). Rankings are displayed.
 6. **Play Again** — returns you to the same room's lobby; the next race starts once everyone still in the room is ready again.
 
-Clients connect to `wss://<host>/parties/race/<ROOM CODE>` (the path comes from the `Race` Durable Object binding in `party/wrangler.jsonc`).
+### Trick boost
+
+Landing a trick pushes your rider forward across the screen (bigger tricks and combos push further), so the rider on a roll visibly pulls ahead. It caps at 48% of the screen width, holds for 10 seconds after your last trick, then eases back to the start position. It only moves your screen position — world speed is unchanged, so the course stays fair; the cost is less warning before obstacles. Tuning lives in `game/multiplayer/TrickBoost.ts`, ghost lanes in `GhostPlayerRenderer.ts`.
+
+Clients connect to `wss://<host>/parties/race/<ROOM CODE>` for rooms and `wss://<host>/parties/matchmaker/global` for quick play (paths come from the `Race` and `Matchmaker` Durable Object bindings in `party/wrangler.jsonc`).
 
 ## Environment Variables
 

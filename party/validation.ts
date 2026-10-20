@@ -3,7 +3,7 @@
  * they send is re-checked here before it is stored, ranked or relayed to others.
  */
 import type { SkinId, TrickType } from "../game/types";
-import { MAX_NAME_LENGTH } from "../game/multiplayer/protocol";
+import { MAX_NAME_LENGTH, MAX_PLAYERS } from "../game/multiplayer/protocol";
 import type { GhostSnapshot } from "../game/multiplayer/protocol";
 
 /** Largest client message we accept. Real snapshots are ~250 chars of JSON. */
@@ -55,6 +55,16 @@ export function sanitizeName(raw: unknown): string | null {
   return name;
 }
 
+/**
+ * Quick-play match size claimed by a joining client. Only gates how long the room
+ * waits before auto-starting, so out-of-range values are clamped rather than rejected.
+ * @returns An integer between 2 and MAX_PLAYERS.
+ */
+export function sanitizeExpectedPlayers(raw: unknown): number {
+  const n = typeof raw === "number" && Number.isFinite(raw) ? Math.round(raw) : MAX_PLAYERS;
+  return Math.min(MAX_PLAYERS, Math.max(2, n));
+}
+
 /** @returns A known skin id, or "default" for anything unrecognised. */
 export function sanitizeSkinId(raw: unknown): SkinId {
   return typeof raw === "string" && SKIN_IDS.has(raw) ? (raw as SkinId) : "default";
@@ -77,10 +87,15 @@ export function sanitizeSnapshot(raw: unknown): GhostSnapshot | null {
   if (typeof src.at !== "string" || !TRICK_TYPES.has(src.at)) return null;
 
   const n = (key: (typeof NUMERIC_FIELDS)[number]) => src[key] as number;
-  return {
+  const snapshot: GhostSnapshot = {
     t: n("t"), h: n("h"), og: src.og, wr: n("wr"), bt: n("bt"), rl: n("rl"),
     rc: n("rc"), lt: n("lt"), ba: n("ba"), fd: n("fd"), at: src.at as TrickType, tp: n("tp"), s: n("s"),
   };
+  // Optional (older clients don't send it); clamped to the screen so a ghost can't be pushed off it
+  if (typeof src.x === "number" && Number.isFinite(src.x)) {
+    snapshot.x = Math.min(1, Math.max(0, src.x));
+  }
+  return snapshot;
 }
 
 /**

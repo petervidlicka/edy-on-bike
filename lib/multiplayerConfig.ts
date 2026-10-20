@@ -28,6 +28,18 @@ const LOCAL_HOST =
  * @example roomUrl("192.168.0.5:8787", "AB12") // "ws://192.168.0.5:8787/parties/race/AB12"
  */
 export function roomUrl(host: string, roomCode: string): string {
-  const protocol = LOCAL_HOST.test(host) ? "ws" : "wss";
-  return `${protocol}://${host}/parties/race/${roomCode}`;
+  return `${socketProtocol(host)}://${host}/parties/race/${roomCode}`;
+}
+
+/**
+ * WebSocket URL of the quick-play matchmaker — one global queue, matching the
+ * Worker's "Matchmaker" Durable Object binding.
+ * @example matchmakerUrl("localhost:8787") // "ws://localhost:8787/parties/matchmaker/global"
+ */
+export function matchmakerUrl(host: string): string {
+  return `${socketProtocol(host)}://${host}/parties/matchmaker/global`;
+}
+
+function socketProtocol(host: string): "ws" | "wss" {
+  return LOCAL_HOST.test(host) ? "ws" : "wss";
 }

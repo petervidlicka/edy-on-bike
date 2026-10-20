@@ -10,6 +10,7 @@ import {
   SKETCHY_TOLERANCE,
   AMBULANCE_CHANCE,
   CRASH_DURATION,
+  PLAYER_X_RATIO,
 } from "./constants";
 import {
   FloatingText,
@@ -33,6 +34,7 @@ import { initCrashPhysics, updateCrashPhysics, createAmbulanceState, updateAmbul
 import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
 import type { GhostSnapshot } from "./multiplayer/protocol";
 import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
+import { TrickBoost } from "./multiplayer/TrickBoost";
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
@@ -97,13 +99,18 @@ export class Engine {
   private particleConfig: ParticleOverlayConfig | null = null;
   private rng: { random(): number } = { random: Math.random };
   private multiplayer: MultiplayerAdapter | null = null;
+  /** Multiplayer only: landed tricks push the rider forward so the leader stands out from the ghosts. */
+  private boost: TrickBoost | null = null;
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks, options?: EngineOptions) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
     this.callbacks = callbacks;
     if (options?.rng) this.rng = options.rng;
-    if (options?.multiplayer) this.multiplayer = options.multiplayer;
+    if (options?.multiplayer) {
+      this.multiplayer = options.multiplayer;
+      this.boost = new TrickBoost();
+    }
     this.loop = this.loop.bind(this);
     this.resize(window.innerWidth, window.innerHeight);
     this.rafId = requestAnimationFrame(this.loop);
@@ -152,6 +159,7 @@ export class Engine {
     this.envManager.reset();
     this.particles = [];
     this.particleConfig = null;
+    this.boost?.reset();
     this.player = createPlayer(this.groundY, this.canvasW);
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
@@ -278,6 +286,10 @@ export class Engine {
     const prevBackflipAngle = this.player.backflipAngle;
     const prevFlipDirection = this.player.flipDirection;
     updatePlayer(this.player, dt, this.groundY, this.speed);
+    if (this.boost) {
+      this.boost.update(rawDt);
+      this.player.x = this.canvasW * (PLAYER_X_RATIO + this.boost.offset);
+    }
     updateLayers(this.layers, this.speed, dt);
     if (this.particleConfig && this.particles.length > 0) {
       updateParticles(this.particles, this.particleConfig, dt, this.canvasW, this.canvasH);
@@ -470,6 +482,7 @@ export class Engine {
     this.score += bonus;
     this.distance = this.score * SCORE_PER_PX;
     this.callbacks.onScoreUpdate(this.score);
+    this.boost?.onTrick(bonus, sketchy ?? false);
     this.sound.playBackflipSuccess();
     this.floatingTexts.push(createTrickFloatingText(label, bonus, this.player.x, this.player.y, this.player.width, sketchy ?? false));
     this.callbacks.onTrickLanded?.(label, bonus, sketchy);
@@ -548,6 +561,7 @@ export class Engine {
       at: p.activeTrick,
       tp: p.trickProgress,
       s: this.score,
+      x: p.x / this.canvasW,
     };
   }
 

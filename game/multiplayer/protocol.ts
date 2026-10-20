@@ -16,6 +16,26 @@ export const MAX_PLAYERS = 4;
 /** Longest display name, enforced by the lobby input and re-checked by the server. */
 export const MAX_NAME_LENGTH = 16;
 
+// ── Quick play (matchmaking) ──
+
+/**
+ * How long the first rider in the quick-play queue waits for others before the
+ * matchmaker either starts the race (2+ riders) or asks them whether to keep waiting.
+ */
+export const QUICK_PLAY_WAIT_MS = 15_000;
+
+/**
+ * Once a lone rider has outlasted the wait, the next arrival only holds the match
+ * this long for a third or fourth rider — the first one has waited long enough.
+ */
+export const QUICK_PLAY_GRACE_MS = 5_000;
+
+/**
+ * Quick-play room codes start with this and are longer than the 4-character codes
+ * players type, so matchmade rooms can never collide with a friend's room.
+ */
+export const QUICK_PLAY_CODE_PREFIX = "Q";
+
 // ── Ghost snapshot — minimal state sent at ~15 Hz per player ──
 
 export interface GhostSnapshot {
@@ -51,6 +71,11 @@ export interface GhostSnapshot {
   tp: number;
   /** Current score */
   s: number;
+  /**
+   * Rider's x as a fraction of the sender's canvas width (moves with the trick boost).
+   * Optional so older clients without the boost still relay; receivers fall back to PLAYER_X_RATIO.
+   */
+  x?: number;
 }
 
 // ── Room phases ──
@@ -81,8 +106,12 @@ export interface RankingEntry {
 // ── Client → Server messages ──
 
 export type ClientMessage =
-  /** `intent` lets the server reject joins to codes nobody is in, instead of silently creating a room. */
-  | { type: "join"; name: string; skinId: SkinId; intent: "create" | "join" }
+  /**
+   * `intent` lets the server reject joins to codes nobody is in, instead of silently creating a room.
+   * "quick" joins a matchmade room: everyone is ready on arrival and the race starts once
+   * `expected` riders (the size of the match) have connected.
+   */
+  | { type: "join"; name: string; skinId: SkinId; intent: "create" | "join" | "quick"; expected?: number }
   | { type: "ready" }
   | { type: "player_update"; snapshot: GhostSnapshot }
   | { type: "player_crashed"; score: number }
@@ -100,6 +129,8 @@ export type ServerMessage =
       players: PlayerInfo[];
       phase: RoomPhase;
       seed: number;
+      /** Matchmade room: no code to share, and the first race starts without READY. */
+      quickPlay: boolean;
     }
   | { type: "player_joined"; player: PlayerInfo }
   | { type: "player_left"; playerId: string }
@@ -125,4 +156,19 @@ export type ServerMessage =
     }
   /** Room went back to the lobby for a rematch; everyone is un-ready with scores cleared. */
   | { type: "room_reset"; players: PlayerInfo[] }
+  /** Quick-play room: not enough of the matched riders connected, so the client re-queues. */
+  | { type: "match_failed" }
   | { type: "error"; message: string };
+
+// ── Matchmaker (quick play) — a separate socket from the room ──
+
+/** Client → matchmaker. Connecting alone doesn't queue, so idle sockets never get matched. */
+export type MatchmakerClientMessage = { type: "queue" };
+
+export type MatchmakerServerMessage =
+  /** Sent whenever the queue changes. `msLeft` is null while nobody's wait is counting down. */
+  | { type: "queue_status"; waiting: number; msLeft: number | null }
+  /** The wait ran out with nobody else around; the rider stays queued until they leave. */
+  | { type: "queue_lonely" }
+  /** Join this room now; `expected` is how many riders were matched into it. */
+  | { type: "matched"; roomCode: string; expected: number };

@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * Multiplayer lobby: create/join a room by code, pick a skin (same unlocks as
- * single-player), then wait for everyone to ready up.
+ * Multiplayer lobby: quick play (matchmaking) or create/join a room by code, pick a
+ * skin (same unlocks as single-player), then wait for everyone to ready up.
  */
 import { useState, useCallback } from "react";
 import { MAX_NAME_LENGTH } from "@/game/multiplayer/protocol";
 import type { PlayerInfo } from "@/game/multiplayer/protocol";
 import { SkinId } from "@/game/types";
 import SkinPicker from "@/components/SkinPicker";
+import { QuickPlayWaiting } from "@/components/QuickPlayWaiting";
+import type { QuickPlayQueue } from "@/hooks/useMultiplayerRoom";
 import { useSavedSkinState } from "@/hooks/useSavedSkinState";
 import { useSavedPlayerName } from "@/hooks/useSavedPlayerName";
 import { savePlayerName } from "@/game/storage";
@@ -21,6 +23,12 @@ interface MultiplayerLobbyProps {
   error?: string | null;
   /** Waiting for the server to accept a create/join — buttons stay disabled until it answers. */
   connecting?: boolean;
+  /** Matchmade room — there's no code worth sharing. */
+  quickPlay?: boolean;
+  /** Set while searching for a quick-play match. */
+  queue?: QuickPlayQueue | null;
+  onQuickPlay: (name: string, skinId: SkinId) => void;
+  onCancelQuickPlay: () => void;
   onCreateRoom: (name: string, skinId: SkinId) => void;
   onJoinRoom: (code: string, name: string, skinId: SkinId) => void;
   onReady: () => void;
@@ -60,6 +68,12 @@ const inputStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
+/** Quick play is the default way in, so it stands out from the friend-room buttons. */
+const quickPlayBtn: React.CSSProperties = {
+  background: "rgba(134,197,92,0.55)",
+  border: "1.5px solid rgba(255,255,255,0.75)",
+};
+
 /** Pinned top-left so leaving multiplayer never depends on scrolling. */
 const backBtn: React.CSSProperties = {
   ...glassBtn,
@@ -82,6 +96,10 @@ export default function MultiplayerLobby({
   players,
   error,
   connecting = false,
+  quickPlay = false,
+  queue = null,
+  onQuickPlay,
+  onCancelQuickPlay,
   onCreateRoom,
   onJoinRoom,
   onReady,
@@ -105,6 +123,12 @@ export default function MultiplayerLobby({
   const canStart = !!name.trim() && !connecting;
   const canJoin = canStart && joinCode.length === 4;
 
+  const handleQuickPlay = useCallback(() => {
+    if (!name.trim()) return;
+    savePlayerName(name.trim());
+    onQuickPlay(name.trim(), selectedSkinId);
+  }, [name, selectedSkinId, onQuickPlay]);
+
   const handleCreate = useCallback(() => {
     if (!name.trim()) return;
     savePlayerName(name.trim());
@@ -117,8 +141,20 @@ export default function MultiplayerLobby({
     onJoinRoom(joinCode.toUpperCase(), name.trim(), selectedSkinId);
   }, [name, joinCode, selectedSkinId, onJoinRoom]);
 
+  if (queue && !roomCode) {
+    return (
+      <QuickPlayWaiting
+        queue={queue}
+        buttonStyle={glassBtn}
+        onRideSolo={onLeave}
+        onCancel={onCancelQuickPlay}
+      />
+    );
+  }
+
   // --- Lobby view (has room code) ---
   if (roomCode) {
+    const everyoneReady = players.length >= 2 && players.every((p) => p.ready);
     return (
       <div
         style={{
@@ -145,9 +181,10 @@ export default function MultiplayerLobby({
             textShadow: "0 2px 6px rgba(255,255,255,0.4)",
           }}
         >
-          Multiplayer Lobby
+          {quickPlay ? "Quick Play" : "Multiplayer Lobby"}
         </h2>
 
+        {!quickPlay && (
         <div
           style={{
             display: "flex",
@@ -178,6 +215,7 @@ export default function MultiplayerLobby({
             {roomCode}
           </span>
         </div>
+        )}
 
         {/* Player list */}
         <div
@@ -234,7 +272,9 @@ export default function MultiplayerLobby({
         >
           {players.length < 2
             ? "Waiting for players..."
-            : "Ready up!"}
+            : everyoneReady
+              ? "Starting…"
+              : "Ready up!"}
         </span>
 
         <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
@@ -317,6 +357,18 @@ export default function MultiplayerLobby({
           justifyContent: "center",
         }}
       >
+        <button
+          onClick={handleQuickPlay}
+          disabled={!canStart}
+          style={{
+            ...glassBtn,
+            ...quickPlayBtn,
+            opacity: canStart ? 1 : 0.5,
+            cursor: canStart ? "pointer" : "default",
+          }}
+        >
+          QUICK PLAY
+        </button>
         <button
           onClick={handleCreate}
           disabled={!canStart}

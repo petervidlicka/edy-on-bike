@@ -70,3 +70,8 @@ body {
     transform: rotate(0deg);
   }
 }
+
+/* Quick-play waiting spinner (components/QuickPlayWaiting.tsx) */
+@keyframes quickplay-spin {
+  to { transform: rotate(360deg); }
+}

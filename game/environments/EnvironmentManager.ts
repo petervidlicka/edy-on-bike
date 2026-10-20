@@ -33,6 +33,8 @@ const BIOME_DURATION_MS = 60_000;
  */
 const LATER_LAP_STAGE_MS = 30_000;
 
+const NO_PASSES: readonly SkylinePass[] = [];
+
 /** Duration of a biome transition in 60fps dt units (~4 seconds). */
 const TRANSITION_DURATION = 240; // 4s at 60fps
 /** Duration of the music crossfade in milliseconds. */
@@ -61,6 +63,10 @@ export class EnvironmentManager {
   private currentEnv: EnvironmentDefinition;
   /** Biomes entered so far this run, counting every lap (index into the cycle modulo its length). */
   private currentBiomeIndex = 0;
+  /** Run time at which the next biome is due; pushed back when a biome is forced early. */
+  private nextBiomeAtMs = BIOME_DURATION_MS;
+  /** Steady-state skyline passes per drawer, so a frame outside a transition allocates nothing. */
+  private steadyPasses = new Map<SkylineDrawFn, readonly SkylinePass[]>();
 
   // Transition state
   private fromEnv: EnvironmentDefinition | null = null;
@@ -87,11 +93,9 @@ export class EnvironmentManager {
 
     // Check if we should start a new transition
     if (!this.transitioning) {
-      const dueIndex = Math.floor(elapsedMs / BIOME_DURATION_MS);
-      if (dueIndex > this.currentBiomeIndex) {
-        this.currentBiomeIndex++;
-        const nextEnv = BIOME_CYCLE[this.currentBiomeIndex % BIOME_CYCLE.length];
-        this.startTransition(nextEnv);
+      if (elapsedMs >= this.nextBiomeAtMs) {
+        this.nextBiomeAtMs += BIOME_DURATION_MS;
+        const nextEnv = this.advanceBiome();
         result.biomeStarted = nextEnv.id;
 
         // Signal Engine to append new biome buildings to the existing layer
@@ -127,6 +131,7 @@ export class EnvironmentManager {
   reset(): void {
     this.currentEnv = SUBURBAN_ENVIRONMENT;
     this.currentBiomeIndex = 0;
+    this.nextBiomeAtMs = BIOME_DURATION_MS;
     this.fromEnv = null;
     this.toEnv = null;
     this.transitionProgress = 0;
@@ -180,12 +185,12 @@ export class EnvironmentManager {
    * Far scenery bands to draw this frame. Across a transition the outgoing biome's
    * band fades out while the incoming one fades in.
    */
-  getSkylines(): SkylinePass[] {
+  getSkylines(): readonly SkylinePass[] {
     return this.fadedPasses((env) => env.skyline);
   }
 
   /** Road overlays (e.g. wet-road neon reflections), faded across a transition like skylines. */
-  getRoadOverlays(): SkylinePass[] {
+  getRoadOverlays(): readonly SkylinePass[] {
     return this.fadedPasses((env) => env.roadOverlay);
   }
 
@@ -194,12 +199,16 @@ export class EnvironmentManager {
     return this.getCurrentEnvironment().riderGear;
   }
 
-  /** Force an immediate transition to the next biome (debug only). */
+  /**
+   * Force an immediate transition to the next biome (debug only). A transition already
+   * under way is finished first so no biome is skipped, and the forced biome gets a full
+   * BIOME_DURATION_MS before the next one is due.
+   */
   forceNextBiome(): EnvUpdateResult {
     const result: EnvUpdateResult = {};
-    this.currentBiomeIndex++;
-    const nextEnv = BIOME_CYCLE[this.currentBiomeIndex % BIOME_CYCLE.length];
-    this.startTransition(nextEnv);
+    if (this.transitioning) this.completeTransition();
+    this.nextBiomeAtMs = this.lastElapsedMs + BIOME_DURATION_MS;
+    const nextEnv = this.advanceBiome();
     result.biomeStarted = nextEnv.id;
     if (nextEnv.musicTrack !== this.fromEnv?.musicTrack) {
       result.musicCrossfade = {
@@ -212,8 +221,19 @@ export class EnvironmentManager {
 
   // ── Internal ──
 
-  /** One pass per biome that has the picked drawer: outgoing fades out, incoming fades in. */
-  private fadedPasses(pick: (env: EnvironmentDefinition) => SkylineDrawFn | undefined): SkylinePass[] {
+  /** Moves on to the next biome in the cycle and starts the transition into it. */
+  private advanceBiome(): EnvironmentDefinition {
+    this.currentBiomeIndex++;
+    const nextEnv = BIOME_CYCLE[this.currentBiomeIndex % BIOME_CYCLE.length];
+    this.startTransition(nextEnv);
+    return nextEnv;
+  }
+
+  /**
+   * One pass per biome that has the picked drawer: outgoing fades out, incoming fades in.
+   * Outside a transition the same cached array is returned every frame.
+   */
+  private fadedPasses(pick: (env: EnvironmentDefinition) => SkylineDrawFn | undefined): readonly SkylinePass[] {
     if (this.transitioning && this.fromEnv && this.toEnv) {
       const t = easeInOutCubic(Math.min(1, this.transitionProgress));
       const passes: SkylinePass[] = [];
@@ -224,7 +244,13 @@ export class EnvironmentManager {
       return passes;
     }
     const current = pick(this.currentEnv);
-    return current ? [{ draw: current, alpha: 1 }] : [];
+    if (!current) return NO_PASSES;
+    let passes = this.steadyPasses.get(current);
+    if (!passes) {
+      passes = [{ draw: current, alpha: 1 }];
+      this.steadyPasses.set(current, passes);
+    }
+    return passes;
   }
 
   private startTransition(toEnv: EnvironmentDefinition): void {

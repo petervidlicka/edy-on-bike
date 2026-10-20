@@ -1,5 +1,5 @@
 import { ObstacleInstance, ObstacleMotion, ObstacleType } from "./types";
-import { MIN_OBSTACLE_GAP, MIN_OBSTACLE_GAP_LATE, INITIAL_SPEED, PLAYER_X_RATIO } from "./constants";
+import { MIN_OBSTACLE_GAP, MIN_OBSTACLE_GAP_LATE, PLAYER_X_RATIO } from "./constants";
 import { HITBOX_PADDING } from "./Collision";
 import type { EnvironmentDefinition, WeightedType } from "./environments/types";
 
@@ -70,33 +70,38 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
 };
 
 /**
- * Obstacles that travel on their own, by world speed (px per frame; + moves with the
- * rider, − comes towards it). Racers, snow scooters and umbrella cyclists come at the
- * rider; freeriders, boarders and delivery scooters cruise the same way so they arrive late.
+ * Obstacles that travel on their own, as how far they end up from where a static obstacle
+ * would be by the time they reach the rider (px; + moves with the rider and arrives late,
+ * − comes towards it and arrives early). Racers, snow scooters and umbrella cyclists come
+ * at the rider; freeriders, boarders and delivery scooters cruise the same way. Each mover's own speed is `speed · offset / MOTION_RANGE`,
+ * so it scales with the world speed.
  */
-const MOTION_VX: Partial<Record<ObstacleType, number>> = {
-  [ObstacleType.FREERIDE_SKIER]: 1.2,
-  [ObstacleType.SNOWBOARDER]: 0.9,
-  [ObstacleType.RACE_SKIER]: -2.2,
-  [ObstacleType.SNOW_SCOOTER]: -1.4,
-  [ObstacleType.DELIVERY_SCOOTER]: 1.0,
-  [ObstacleType.UMBRELLA_CYCLIST]: -1.3,
+const MOTION_OFFSET: Partial<Record<ObstacleType, number>> = {
+  [ObstacleType.FREERIDE_SKIER]: 500,
+  [ObstacleType.SNOWBOARDER]: 400,
+  [ObstacleType.RACE_SKIER]: -720,
+  [ObstacleType.SNOW_SCOOTER]: -560,
+  [ObstacleType.DELIVERY_SCOOTER]: 480,
+  [ObstacleType.UMBRELLA_CYCLIST]: -620,
 };
 
-/** Upper bound on a mover's travel, which also bounds the spawn padding it needs. */
-const MAX_MOTION_TRAVEL = 420;
+/**
+ * Distance ahead of the rider within which movers travel. Beyond it they sit still, which
+ * is off screen on any display up to ~3000px wide at normal zoom. Being a constant, not
+ * the screen width, it gives every multiplayer client the same course.
+ */
+const MOTION_RANGE = 2400;
 
 /**
- * How far a mover travels: just enough to keep moving until it reaches the rider, so it
- * never visibly stops on screen. Past that it scrolls like a static obstacle.
- * @param vx - The mover's world speed.
- * @param approach - Distance from the spawn point to the rider (px).
- * @param speed - World scroll speed at spawn.
+ * Where a mover is drawn and collides: its static position plus a shift that grows
+ * linearly from 0 at MOTION_RANGE to `offset` at the rider, so it moves steadily the whole
+ * time it is on screen.
+ * @param motion - The mover's motion.
+ * @param riderX - The rider's x.
  */
-function motionTravel(vx: number, approach: number, speed: number): number {
-  // Oncoming: it also covers its own head start (see createObstacle), which works out to vx·approach/speed
-  const travel = vx > 0 ? (vx * approach) / Math.max(1, speed - vx) : (-vx * approach) / speed;
-  return Math.min(MAX_MOTION_TRAVEL, Math.round(travel));
+function movedX(motion: ObstacleMotion, riderX: number): number {
+  const ahead = Math.min(MOTION_RANGE, motion.staticX - riderX);
+  return motion.staticX + motion.offset * (1 - ahead / MOTION_RANGE);
 }
 
 const RIDEABLE_TYPES = new Set<ObstacleType>([
@@ -152,14 +157,12 @@ function weightedRandom(types: WeightedType[], rng: () => number = Math.random):
 /**
  * Builds an obstacle of `type` just beyond `spawnEdge` (the right edge of the widest
  * view), sitting on the road.
- * @param speed - World scroll speed at spawn; sizes how far a moving obstacle travels.
- * @param riderX - The rider's x; a mover keeps moving until it gets there.
+ * @param riderX - The rider's x, which a mover's position is measured from.
  */
 export function createObstacle(
   type: ObstacleType,
   spawnEdge: number,
   groundY: number,
-  speed: number = INITIAL_SPEED,
   riderX: number = spawnEdge * PLAYER_X_RATIO
 ): ObstacleInstance {
   const spec = OBSTACLE_SPECS[type];
@@ -171,18 +174,16 @@ export function createObstacle(
   const maxSink = spec.height - 2 * HITBOX_PADDING - MIN_HIT_BAND;
   const yOffset = isRamp ? 0 : Math.max(0, Math.min(maxSink, MAX_ROAD_SINK));
   const spawnX = spawnEdge + 60;
-  const vx = MOTION_VX[type];
-  const motion: ObstacleMotion | undefined = vx === undefined ? undefined : {
-    vx,
-    travelled: 0,
-    maxTravel: motionTravel(vx, spawnX - riderX, speed),
+  const offset = MOTION_OFFSET[type];
+  // Oncoming movers start further out by their full offset, so they never close in on the
+  // obstacle ahead of them more than a static one spawned at the usual point would
+  const motion: ObstacleMotion | undefined = offset === undefined ? undefined : {
+    offset,
+    staticX: spawnX + Math.max(0, -offset),
   };
-  // Oncoming movers start further out by their full travel, so they close in on the
-  // obstacle ahead of them no more than a static one spawned at the usual point would.
-  const spawnPad = motion && motion.vx < 0 ? motion.maxTravel : 0;
   return {
     type,
-    x: spawnX + spawnPad,
+    x: motion ? movedX(motion, riderX) : spawnX,
     y: groundY - spec.height + yOffset,
     width: spec.width,
     height: spec.height,
@@ -193,32 +194,36 @@ export function createObstacle(
 }
 
 /**
- * Moves an obstacle one frame: the world scroll, plus its own travel while it has any
- * left. Travel depends only on frame time, never on randomness, so multiplayer clients
- * seeded alike still agree on the course.
+ * Moves an obstacle one frame with the world scroll; a mover also gets its own shift.
+ * The shift depends only on distance to the rider, never on frame time or screen width,
+ * so multiplayer clients seeded alike still agree on the course.
  * @param obstacle - Mutated in place.
  * @param speed - Current world scroll speed (px per frame).
  * @param dt - Frame time in 60fps units.
+ * @param riderX - The rider's x.
  */
-export function moveObstacle(obstacle: ObstacleInstance, speed: number, dt: number): void {
-  obstacle.x -= speed * dt;
+export function moveObstacle(obstacle: ObstacleInstance, speed: number, dt: number, riderX: number): void {
   const motion = obstacle.motion;
-  if (!motion || motion.travelled >= motion.maxTravel) return;
-  const step = Math.min(Math.abs(motion.vx) * dt, motion.maxTravel - motion.travelled);
-  motion.travelled += step;
-  obstacle.x += Math.sign(motion.vx) * step;
+  if (!motion) {
+    obstacle.x -= speed * dt;
+    return;
+  }
+  motion.staticX -= speed * dt;
+  obstacle.x = movedX(motion, riderX);
 }
 
 /**
  * Extra distance to leave before the next spawn, so a mover never closes in on the
  * obstacle behind it. One that travels with the rider drifts back towards it; an
- * oncoming one starts further out (see createObstacle) and may not have used up that
- * head start when the next obstacle appears. Either way its travel bounds the overlap.
+ * oncoming one starts further out (see createObstacle) by its offset.
  * @param obstacle - The obstacle just spawned.
  * @returns Pixels to add to the next spawn gap (0 for static obstacles).
  */
 export function spawnGapPadding(obstacle: ObstacleInstance): number {
-  return obstacle.motion?.maxTravel ?? 0;
+  const offset = obstacle.motion?.offset ?? 0;
+  // A mover that goes the rider's way keeps drifting back until the rider actually
+  // catches it, slightly past the static arrival point: offset·R/(R − offset) in total
+  return offset > 0 ? Math.ceil((offset * MOTION_RANGE) / (MOTION_RANGE - offset)) : -offset;
 }
 
 export function spawnObstacle(
@@ -226,12 +231,11 @@ export function spawnObstacle(
   groundY: number,
   elapsedMs: number,
   envDef: EnvironmentDefinition,
-  speed: number,
   riderX: number,
   rng: () => number = Math.random
 ): ObstacleInstance {
   const type = weightedRandom(envDef.obstaclePool.getWeightedTypes(elapsedMs), rng);
-  return createObstacle(type, spawnEdge, groundY, speed, riderX);
+  return createObstacle(type, spawnEdge, groundY, riderX);
 }
 
 // Returns the pixel distance to wait before spawning the next obstacle.

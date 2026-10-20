@@ -163,8 +163,8 @@ export type SkylineDrawFn = (
 
 /** A skyline to draw this frame and how opaque, so it can fade in and out across a transition. */
 export interface SkylinePass {
-  draw: SkylineDrawFn;
-  alpha: number;
+  readonly draw: SkylineDrawFn;
+  readonly alpha: number;
 }
 
 // ── Background element drawing ──

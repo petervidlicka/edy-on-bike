@@ -150,17 +150,15 @@ export interface ObstacleInstance {
 }
 
 /**
- * Self-propulsion of a moving obstacle. Its travel is capped so it can only shift a
- * bounded distance from where a static obstacle would be; spawn gaps are padded by
- * that cap, so moving obstacles never bunch up into an unjumpable pair.
+ * Self-propulsion of a moving obstacle. Its shift from a static obstacle's position is a
+ * function of distance to the rider, bounded by `offset`; spawn gaps are padded by that
+ * bound, so moving obstacles never bunch up into an unjumpable pair.
  */
 export interface ObstacleMotion {
-  /** World speed in px per 60fps frame: positive moves with the rider (approaches slower), negative comes towards the rider. */
-  vx: number;
-  /** Distance travelled so far (px, always positive). */
-  travelled: number;
-  /** Travel stops here; the obstacle then scrolls like a static one. */
-  maxTravel: number;
+  /** Shift by the time it reaches the rider (px): positive moves with the rider (arrives late), negative comes towards it (arrives early). */
+  offset: number;
+  /** Where the obstacle would be if it were static; scrolls with the world. */
+  staticX: number;
 }
 
 export interface BackgroundLayer {

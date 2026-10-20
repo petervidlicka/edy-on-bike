@@ -298,8 +298,7 @@ export const AUSTRIA_ENVIRONMENT: EnvironmentDefinition = {
   obstaclePool: {
     getWeightedTypes: austriaWeightedTypes,
   },
-  // Placeholder until an Alpine track is added (e.g. /music-austria.mp3)
-  musicTrack: "/music.mp3",
+  musicTrack: "/music-austria.mp3",
   particleOverlay: {
     type: "snow",
     density: 0.9,

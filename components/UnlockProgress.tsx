@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { SkinDefinition } from "@/game/types";
 import { SKINS, getNextUnlock } from "@/game/skins";
 import { drawSkinPreview } from "@/game/rendering";
+import { color, font, radius } from "./ui/tokens";
 
 interface UnlockProgressProps {
   /** Score the bar ends at (the saved best). */
@@ -121,20 +122,18 @@ export function UnlockProgress({ bestScore, cheatUnlocked, animateFrom }: Unlock
     gap: "0.6rem",
     padding: "0.3rem 0.8rem",
     minWidth: "min(80vw, 320px)",
-    background: "rgba(255,255,255,0.22)",
-    backdropFilter: "blur(24px) saturate(200%)",
-    WebkitBackdropFilter: "blur(24px) saturate(200%)",
-    border: celebrating ? "1.5px solid rgba(234,179,8,0.8)" : "1.5px solid rgba(255,255,255,0.55)",
-    borderRadius: "14px",
-    boxShadow: "0 2px 16px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8)",
-    fontFamily: "var(--font-nunito), Arial, sans-serif",
+    boxSizing: "border-box",
+    background: "rgba(255,255,255,0.6)",
+    border: celebrating ? `1.5px solid ${color.gold}` : "1px solid rgba(30,41,59,0.12)",
+    borderRadius: radius.md,
+    fontFamily: font.ui,
     transition: "border-color 0.2s",
   } as const;
 
   if (!stage.skin) {
     return (
-      <div style={{ ...glass, justifyContent: "center", color: "#92400e", fontSize: "0.85rem", fontWeight: 800 }}>
-        All bikes unlocked! 🏆
+      <div style={{ ...glass, justifyContent: "center", color: color.warnInk, fontSize: "0.85rem", fontWeight: 800 }}>
+        All bikes unlocked!
       </div>
     );
   }
@@ -149,9 +148,9 @@ export function UnlockProgress({ bestScore, cheatUnlocked, animateFrom }: Unlock
         <MiniBike skin={stage.skin} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, color: celebrating ? "#92400e" : "#1e293b", fontSize: "0.78rem", fontWeight: 700, lineHeight: 1.2 }}>
+        <p style={{ margin: 0, color: celebrating ? color.warnInk : color.ink, fontSize: "0.78rem", fontWeight: 700, lineHeight: 1.2 }}>
           {celebrating
-            ? `🔓 ${stage.skin.name} unlocked!`
+            ? `${stage.skin.name} unlocked!`
             : remaining > 0
               ? `${remaining} more point${remaining === 1 ? "" : "s"} to unlock ${stage.skin.name}`
               : `${stage.skin.name} unlocked!`}
@@ -163,7 +162,7 @@ export function UnlockProgress({ bestScore, cheatUnlocked, animateFrom }: Unlock
               height: "100%",
               width: `${pct}%`,
               borderRadius: 3,
-              background: celebrating ? "#eab308" : "#3b82f6",
+              background: celebrating ? color.gold : color.navy,
               transition: filled ? `width ${FILL_MS}ms ease-out` : "none",
             }}
           />

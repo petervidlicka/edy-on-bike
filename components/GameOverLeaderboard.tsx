@@ -6,6 +6,8 @@ import { LEADERBOARD_SIZE } from "@/lib/leaderboardConfig";
 import type { GameOverLeaderboard as BoardData } from "@/hooks/useGameOverLeaderboard";
 import { GameOverPrimaryButton } from "./GameOverPrimaryButton";
 import { useRestartKeys } from "@/hooks/useRestartKeys";
+import { ScreenTitle } from "./ui/ScreenTitle";
+import { color, font, formatScore, text } from "./ui/tokens";
 
 interface GameOverLeaderboardProps {
   board: BoardData;
@@ -28,86 +30,57 @@ export function GameOverLeaderboard({ board, saved, locked, onRestart }: GameOve
 
   return (
     <>
+      <ScreenTitle>Top Scores</ScreenTitle>
       {board.status === "error" ? (
-        <p style={{ color: "#b91c1c", fontSize: "0.85rem", fontWeight: 600, margin: "0.5rem 0" }}>{board.error}</p>
+        <p role="alert" style={{ ...text.body, color: color.danger, fontSize: "0.875rem" }}>{board.error}</p>
       ) : board.status === "loading" ? (
-        <p style={{ color: "#475569", fontSize: "0.85rem", margin: "0.5rem 0" }}>Loading scores…</p>
+        <p style={{ ...text.body, color: color.muted, fontSize: "0.875rem" }}>Loading scores…</p>
       ) : rows.length > 0 ? (
-        <div
-          style={{
-            background: "rgba(255,255,255,0.72)",
-            borderRadius: "10px",
-            padding: "0.65rem 1.1rem",
-            minWidth: "260px",
-            maxWidth: "360px",
-            marginTop: "0.25rem",
-            pointerEvents: "auto",
-          }}
-        >
-          <h3
-            style={{
-              margin: "0 0 0.4rem",
-              fontSize: "0.82rem",
-              fontWeight: 700,
-              color: "#1e293b",
-              textAlign: "center",
-              letterSpacing: "0.07em",
-              textTransform: "uppercase",
-            }}
-          >
-            Top Scores
-          </h3>
-          <ol
-            style={{
-              margin: 0,
-              padding: "0 0 0 1.3rem",
-              fontSize: "0.8rem",
-              color: "#334155",
-              lineHeight: 1.65,
-              fontFamily: "var(--font-space-mono), monospace",
-            }}
-          >
-            {rows.map((entry, i) => (
-              <li
-                key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  gap: "0.4rem",
-                  ...(i === savedIndex
-                    ? { background: "rgba(234,179,8,0.28)", borderRadius: "6px", margin: "0 -0.4rem", padding: "0 0.4rem" }
-                    : null),
-                }}
-              >
-                <span style={{ fontWeight: 600, flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
-                {entry.skin && (
-                  <span style={{ fontSize: "0.65rem", color: "#64748b", whiteSpace: "nowrap" }}>{entry.skin}</span>
-                )}
-                <span style={{ fontWeight: 400, whiteSpace: "nowrap" }}>{String(entry.score).padStart(5, "0")}</span>
-              </li>
-            ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "min(320px, 80vw)" }}>
+          <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 4 }}>
+            {rows.map((entry, i) => {
+              const mine = i === savedIndex;
+              return (
+                <li
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "4px 12px",
+                    borderRadius: "12px",
+                    color: mine ? color.white : color.ink,
+                    background: mine ? color.navy : "rgba(255,255,255,0.6)",
+                  }}
+                >
+                  <span style={{ width: 20, fontFamily: font.mono, fontSize: "0.8rem", fontWeight: 700 }}>{i + 1}</span>
+                  <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontSize: "0.875rem", fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {entry.name}
+                    </span>
+                    {entry.skin && (
+                      <span style={{ fontSize: "0.7rem", fontWeight: 600, color: mine ? "rgba(255,255,255,0.85)" : color.muted }}>
+                        {entry.skin}
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ fontFamily: font.mono, fontSize: "0.875rem", fontWeight: 700 }}>{formatScore(entry.score)}</span>
+                </li>
+              );
+            })}
           </ol>
           {board.totalPlayers > 0 && (
-            <p
-              style={{
-                margin: "0.45rem 0 0",
-                fontSize: "0.72rem",
-                color: "#64748b",
-                textAlign: "center",
-                fontWeight: 600,
-                fontFamily: "var(--font-nunito), Arial, sans-serif",
-              }}
-            >
+            <p style={{ ...text.label, textAlign: "center", textTransform: "none", letterSpacing: "0.02em" }}>
               {board.totalPlayers} total player{board.totalPlayers !== 1 ? "s" : ""}
             </p>
           )}
         </div>
       ) : (
-        <p style={{ color: "#475569", fontSize: "0.85rem", margin: "0.5rem 0" }}>No scores yet — be the first!</p>
+        <p style={{ ...text.body, color: color.muted, fontSize: "0.875rem" }}>No scores yet. Be the first!</p>
       )}
 
       <GameOverPrimaryButton onClick={onRestart} disabled={locked}>
-        ▶ Play again
+        Play again
       </GameOverPrimaryButton>
     </>
   );

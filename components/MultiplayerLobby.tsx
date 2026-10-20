@@ -4,7 +4,7 @@
  * Multiplayer lobby: create/join a room by code, pick a skin (same unlocks as
  * single-player), then wait for everyone to ready up.
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { MAX_NAME_LENGTH } from "@/game/multiplayer/protocol";
 import type { PlayerInfo } from "@/game/multiplayer/protocol";
 import { SkinId } from "@/game/types";
@@ -12,6 +12,12 @@ import SkinPicker from "@/components/SkinPicker";
 import { useSavedSkinState } from "@/hooks/useSavedSkinState";
 import { useSavedPlayerName } from "@/hooks/useSavedPlayerName";
 import { savePlayerName } from "@/game/storage";
+import { getSkinById } from "@/game/skins";
+import { SkinPreview } from "./SkinPreview";
+import { GlassPanel } from "./ui/GlassPanel";
+import { ScreenTitle } from "./ui/ScreenTitle";
+import { GlassButton } from "./ui/GlassButton";
+import { badge, color, font, input, radius, text } from "./ui/tokens";
 
 interface MultiplayerLobbyProps {
   roomCode: string | null;
@@ -27,42 +33,16 @@ interface MultiplayerLobbyProps {
   onLeave: () => void;
 }
 
-const glassBtn: React.CSSProperties = {
-  background: "rgba(255,255,255,0.22)",
-  backdropFilter: "blur(24px) saturate(200%)",
-  WebkitBackdropFilter: "blur(24px) saturate(200%)",
-  border: "1.5px solid rgba(255,255,255,0.55)",
-  borderRadius: "18px",
-  padding: "0.65rem 2.25rem",
-  boxShadow:
-    "0 2px 20px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
-  color: "#1e293b",
-  fontSize: "1rem",
-  fontWeight: 700,
-  letterSpacing: "0.06em",
-  textAlign: "center",
-  cursor: "pointer",
-  fontFamily: "var(--font-nunito), Arial, sans-serif",
-};
+/** How long "Copied" / "Can't copy" shows before the button reads "Copy code" again. */
+const COPY_FEEDBACK_MS = 2000;
 
-const inputStyle: React.CSSProperties = {
-  padding: "0.6rem 1rem",
-  fontSize: "1rem",
-  borderRadius: "12px",
-  border: "1.5px solid rgba(255,255,255,0.55)",
-  background: "rgba(255,255,255,0.35)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  outline: "none",
-  fontFamily: "var(--font-nunito), Arial, sans-serif",
-  fontWeight: 600,
-  color: "#1e293b",
-  textAlign: "center",
-};
+/** Lays out a labelled field: caps label above its control. */
+const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
+
 
 /**
- * Shows create/join until the server confirms a room, then the room's player
- * list with READY/LEAVE.
+ * Shows create/join until the server confirms a room, then the room's rider
+ * list with Ready / Leave.
  */
 export default function MultiplayerLobby({
   roomCode,
@@ -85,7 +65,7 @@ export default function MultiplayerLobby({
   const [skinState, handleSelectSkin] = useSavedSkinState();
   const selectedSkinId: SkinId = skinState.selectedSkinId;
   const [joinCode, setJoinCode] = useState("");
-  const [showJoinInput, setShowJoinInput] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   const localPlayer = players.find((p) => p.id === localPlayerId);
   const isReady = localPlayer?.ready ?? false;
@@ -93,300 +73,207 @@ export default function MultiplayerLobby({
   const canStart = !!name.trim() && !connecting;
   const canJoin = canStart && joinCode.length === 4;
 
+  // Same guards as the buttons' disabled state, so Enter can't send a second request mid-connect
   const handleCreate = useCallback(() => {
-    if (!name.trim()) return;
+    if (!canStart) return;
     savePlayerName(name.trim());
     onCreateRoom(name.trim(), selectedSkinId);
-  }, [name, selectedSkinId, onCreateRoom]);
+  }, [canStart, name, selectedSkinId, onCreateRoom]);
 
   const handleJoin = useCallback(() => {
-    if (!name.trim() || joinCode.length !== 4) return;
+    if (!canJoin) return;
     savePlayerName(name.trim());
     onJoinRoom(joinCode.toUpperCase(), name.trim(), selectedSkinId);
-  }, [name, joinCode, selectedSkinId, onJoinRoom]);
+  }, [canJoin, name, joinCode, selectedSkinId, onJoinRoom]);
 
-  // --- Lobby view (has room code) ---
+  // The label flips back after a moment, so a second copy (or a retry) reads as a fresh action
+  useEffect(() => {
+    if (copyStatus === "idle") return;
+    const id = setTimeout(() => setCopyStatus("idle"), COPY_FEEDBACK_MS);
+    return () => clearTimeout(id);
+  }, [copyStatus]);
+
+  const handleCopy = useCallback(() => {
+    if (!roomCode) return;
+    // No clipboard API outside secure contexts (e.g. testing over a LAN IP) — say so rather than do nothing
+    if (!navigator.clipboard) {
+      setCopyStatus("failed");
+      return;
+    }
+    navigator.clipboard.writeText(roomCode).then(
+      () => setCopyStatus("copied"),
+      (err: unknown) => {
+        console.warn("[lobby] Copying the room code failed", err);
+        setCopyStatus("failed");
+      },
+    );
+  }, [roomCode]);
+
+  const overlay: React.CSSProperties = {
+    position: "fixed",
+    inset: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontFamily: font.ui,
+    padding: "8px",
+  };
+
+  // --- Room view (has room code) ---
   if (roomCode) {
+    const readyCount = players.filter((p) => p.ready).length;
     return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "1rem",
-          fontFamily: "var(--font-nunito), Arial, sans-serif",
-          padding: "1rem",
-        }}
-      >
-        <h2
-          style={{
-            color: "#27435E",
-            fontSize: "1.8rem",
-            fontFamily: "var(--font-fredoka), sans-serif",
-            fontWeight: 600,
-            margin: 0,
-            letterSpacing: "0.04em",
-            textShadow: "0 2px 6px rgba(255,255,255,0.4)",
-          }}
-        >
-          Multiplayer Lobby
-        </h2>
+      <div style={overlay}>
+        <GlassPanel style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", justifyContent: "center", gap: "clamp(16px, 4vw, 32px)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 240 }}>
+            <ScreenTitle>Race Room</ScreenTitle>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "12px 16px", borderRadius: radius.md, background: "rgba(255,255,255,0.7)" }}>
+              <span style={text.label}>Room code</span>
+              <span style={{ ...text.numberXl, letterSpacing: "0.15em" }}>{roomCode}</span>
+              <GlassButton variant="quiet" onClick={handleCopy} style={{ alignSelf: "flex-start", padding: "0 4px" }}>
+                <CopyIcon />
+                {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Can't copy" : "Copy code"}
+              </GlassButton>
+            </div>
+            <p style={{ ...text.body, fontSize: "0.875rem" }}>
+              {players.length < 2
+                ? "Share the code with friends to race them."
+                : "The race starts when everyone is ready."}
+            </p>
+          </div>
 
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "0.25rem",
-          }}
-        >
-          <span
-            style={{
-              color: "#334155",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-            }}
-          >
-            Share this code!
-          </span>
-          <span
-            style={{
-              fontFamily: "monospace",
-              fontSize: "2.8rem",
-              fontWeight: 800,
-              color: "#27435E",
-              letterSpacing: "0.2em",
-              textShadow: "0 2px 8px rgba(0,0,0,0.08)",
-            }}
-          >
-            {roomCode}
-          </span>
-        </div>
-
-        {/* Player list */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.4rem",
-            width: "100%",
-            maxWidth: "320px",
-          }}
-        >
-          {players.map((p) => (
-            <div
-              key={p.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "0.5rem 1rem",
-                borderRadius: "12px",
-                background: "rgba(255,255,255,0.22)",
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-                border: "1px solid rgba(255,255,255,0.4)",
-              }}
-            >
-              <span
-                style={{
-                  color: "#334155",
-                  fontWeight: 600,
-                  fontSize: "0.95rem",
-                }}
-              >
-                {p.name}
-              </span>
-              <span
-                style={{
-                  fontSize: "1.1rem",
-                  color: p.ready ? "#22c55e" : "#94a3b8",
-                }}
-              >
-                {p.ready ? "\u2713" : "\u2014"}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "min(320px, 80vw)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={text.label}>Riders</span>
+              <span style={text.label}>
+                <span style={{ fontFamily: font.mono }}>{readyCount}/{players.length}</span> ready
               </span>
             </div>
-          ))}
-        </div>
-
-        <span
-          style={{
-            color: "#64748b",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-          }}
-        >
-          {players.length < 2
-            ? "Waiting for players..."
-            : "Ready up!"}
-        </span>
-
-        <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
-          <button
-            onClick={onReady}
-            disabled={isReady}
-            style={{
-              ...glassBtn,
-              opacity: isReady ? 0.6 : 1,
-              cursor: isReady ? "default" : "pointer",
-            }}
-          >
-            {isReady ? "WAITING..." : "READY"}
-          </button>
-          <button onClick={onLeave} style={glassBtn}>
-            LEAVE
-          </button>
-        </div>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
+              {players.map((p) => (
+                <li
+                  key={p.id}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 12px", borderRadius: "12px", background: "rgba(255,255,255,0.7)" }}
+                >
+                  <SkinPreview skin={getSkinById(p.skinId)} style={{ width: 36, height: 40 }} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: "0.95rem", fontWeight: 800, color: color.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {p.name}
+                    {p.id === localPlayerId && <span style={{ fontWeight: 600, color: color.muted }}> (you)</span>}
+                  </span>
+                  <span
+                    style={{
+                      ...badge,
+                      color: p.ready ? color.success : color.muted,
+                      background: p.ready ? color.successBg : "rgba(30,41,59,0.06)",
+                    }}
+                  >
+                    {p.ready ? "Ready" : "Not ready"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto", paddingTop: 4 }}>
+              <GlassButton variant="quiet" onClick={onLeave}>Leave</GlassButton>
+              <GlassButton variant={isReady ? "secondary" : "primary"} onClick={onReady} disabled={isReady}>
+                {isReady ? "Waiting…" : "I'm ready"}
+              </GlassButton>
+            </div>
+          </div>
+        </GlassPanel>
       </div>
     );
   }
 
   // --- Create / Join view ---
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "0.75rem",
-        fontFamily: "var(--font-nunito), Arial, sans-serif",
-        padding: "1rem",
-      }}
-    >
-      <h2
-        style={{
-          color: "#27435E",
-          fontSize: "2.2rem",
-          fontFamily: "var(--font-fredoka), sans-serif",
-          fontWeight: 600,
-          margin: 0,
-          letterSpacing: "0.04em",
-          textShadow: "0 2px 6px rgba(255,255,255,0.4)",
-        }}
-      >
-        Multiplayer
-      </h2>
-
-      <input
-        type="text"
-        placeholder="Your name"
-        value={name}
-        onChange={(e) => setTypedName(e.target.value)}
-        maxLength={MAX_NAME_LENGTH}
-        style={inputStyle}
-      />
-
-      <SkinPicker
-        selectedSkinId={selectedSkinId}
-        bestScore={skinState.bestScore}
-        cheatUnlocked={skinState.cheatUnlocked}
-        onSelectSkin={handleSelectSkin}
-      />
-
-      <div
-        style={{
-          display: "flex",
-          gap: "0.75rem",
-          marginTop: "0.5rem",
-          flexWrap: "wrap",
-          justifyContent: "center",
-        }}
-      >
-        <button
-          onClick={handleCreate}
-          disabled={!canStart}
-          style={{
-            ...glassBtn,
-            opacity: canStart ? 1 : 0.5,
-            cursor: canStart ? "pointer" : "default",
-          }}
-        >
-          CREATE ROOM
-        </button>
-        <button
-          onClick={() => setShowJoinInput(true)}
-          disabled={!canStart}
-          style={{
-            ...glassBtn,
-            opacity: canStart ? 1 : 0.5,
-            cursor: canStart ? "pointer" : "default",
-          }}
-        >
-          JOIN ROOM
-        </button>
-      </div>
-
-      {connecting && (
-        <span style={{ color: "#64748b", fontSize: "0.85rem", fontWeight: 600 }}>
-          Connecting…
-        </span>
-      )}
-
-      {!connecting && error && (
-        <div
-          style={{
-            color: "#dc2626",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-            background: "rgba(220,38,38,0.1)",
-            border: "1px solid rgba(220,38,38,0.3)",
-            borderRadius: "12px",
-            padding: "0.6rem 1.2rem",
-            maxWidth: "340px",
-            textAlign: "center",
-          }}
-        >
-          {error}
+    <div style={overlay}>
+      <GlassPanel style={{ alignItems: "stretch", width: "min(760px, 100%)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <ScreenTitle>Multiplayer</ScreenTitle>
+          <GlassButton variant="quiet" onClick={onLeave}>Back</GlassButton>
         </div>
-      )}
 
-      {showJoinInput && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "0.5rem",
-            marginTop: "0.25rem",
-          }}
-        >
-          <input
-            type="text"
-            placeholder="4-char code"
-            value={joinCode}
-            onChange={(e) =>
-              setJoinCode(e.target.value.toUpperCase().slice(0, 4))
-            }
-            maxLength={4}
-            style={{
-              ...inputStyle,
-              fontFamily: "monospace",
-              fontSize: "1.4rem",
-              letterSpacing: "0.2em",
-              width: "8rem",
-            }}
+        <div style={fieldStyle}>
+          <span style={text.label}>Rider</span>
+          <SkinPicker
+            selectedSkinId={selectedSkinId}
+            bestScore={skinState.bestScore}
+            cheatUnlocked={skinState.cheatUnlocked}
+            onSelectSkin={handleSelectSkin}
           />
-          <button
-            onClick={handleJoin}
-            disabled={!canJoin}
-            style={{
-              ...glassBtn,
-              opacity: canJoin ? 1 : 0.5,
-              cursor: canJoin ? "pointer" : "default",
-              fontSize: "0.9rem",
-              padding: "0.5rem 1.5rem",
-            }}
-          >
-            JOIN
-          </button>
         </div>
-      )}
+
+        {/* Name, then the two ways in, read left to right; wraps to a column on narrow screens */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-end" }}>
+          <div style={{ ...fieldStyle, flex: "1 1 180px" }}>
+            <label htmlFor="mp-name" style={text.label}>Your name</label>
+            <input
+              id="mp-name"
+              type="text"
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setTypedName(e.target.value)}
+              maxLength={MAX_NAME_LENGTH}
+              style={input}
+            />
+          </div>
+          <div style={{ ...fieldStyle, flex: "1 1 150px" }}>
+            <span style={text.label}>Host a race</span>
+            <GlassButton variant="primary" onClick={handleCreate} disabled={!canStart}>
+              Create room
+            </GlassButton>
+          </div>
+          <div style={{ ...fieldStyle, flex: "1 1 200px" }}>
+            <label htmlFor="mp-code" style={text.label}>Join with a code</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                id="mp-code"
+                type="text"
+                placeholder="ABCD"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleJoin();
+                }}
+                maxLength={4}
+                autoCapitalize="characters"
+                autoComplete="off"
+                style={{
+                  ...input,
+                  flex: 1,
+                  width: 0,
+                  padding: "0 8px",
+                  fontFamily: font.mono,
+                  fontSize: "1.25rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.2em",
+                  textAlign: "center",
+                }}
+              />
+              <GlassButton variant="secondary" onClick={handleJoin} disabled={!canJoin} style={{ padding: "0 18px" }}>
+                Join
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+
+        {connecting && <p style={{ ...text.body, fontSize: "0.875rem", color: color.muted }}>Connecting…</p>}
+
+        {!connecting && error && (
+          <p role="alert" style={{ ...text.body, fontSize: "0.875rem", fontWeight: 700, color: color.danger }}>
+            {error}
+          </p>
+        )}
+      </GlassPanel>
     </div>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
   );
 }

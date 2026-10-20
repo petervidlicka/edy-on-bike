@@ -70,3 +70,17 @@ body {
     transform: rotate(0deg);
   }
 }
+
+/* Keyboard hints ("Space") on buttons are noise on touch screens */
+@media (pointer: coarse) {
+  .kbd-hint {
+    display: none;
+  }
+}
+
+/* Visible keyboard focus for the UI kit's buttons (inline styles can't express :focus-visible) */
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #27435e;
+  outline-offset: 2px;
+}

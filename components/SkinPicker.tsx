@@ -1,9 +1,14 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+/**
+ * Horizontal bike picker (start screen and multiplayer lobby). Locked bikes show the best
+ * score that unlocks them; only unlocked ones can be selected.
+ */
+import { useCallback } from "react";
 import { SkinId, SkinDefinition } from "@/game/types";
 import { SKINS, isSkinUnlocked } from "@/game/skins";
-import { drawSkinPreview } from "@/game/rendering";
+import { SkinPreview, SKIN_PREVIEW_H, SKIN_PREVIEW_W } from "./SkinPreview";
+import { color, font, radius } from "./ui/tokens";
 
 interface SkinPickerProps {
   selectedSkinId: SkinId;
@@ -11,9 +16,6 @@ interface SkinPickerProps {
   cheatUnlocked: boolean;
   onSelectSkin: (id: SkinId) => void;
 }
-
-const PREVIEW_W = 72;
-const PREVIEW_H = 79;
 
 function SkinCard({
   skin,
@@ -26,16 +28,6 @@ function SkinCard({
   isUnlocked: boolean;
   onSelect: () => void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    drawSkinPreview(ctx, skin, PREVIEW_W, PREVIEW_H);
-  }, [skin]);
-
   const handleClick = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
       e.stopPropagation();
@@ -45,49 +37,51 @@ function SkinCard({
   );
 
   return (
-    <div
+    <button
+      type="button"
       onClick={handleClick}
       onTouchEnd={handleClick}
+      aria-pressed={isSelected}
+      aria-disabled={!isUnlocked}
+      title={isUnlocked ? skin.name : `${skin.name}: reach a best of ${skin.unlockScore} to unlock`}
       style={{
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: "0.3rem",
-        padding: "0.6rem",
-        borderRadius: "14px",
-        border: isSelected
-          ? "2px solid rgba(255,255,255,0.9)"
-          : "1.5px solid rgba(255,255,255,0.55)",
+        gap: "0.25rem",
+        flexShrink: 0,
+        width: "104px",
+        padding: "0.4rem 0.5rem",
+        borderRadius: radius.md,
+        border: isSelected ? `2px solid ${color.navy}` : "1px solid rgba(30,41,59,0.12)",
         background: isSelected
-          ? "rgba(255,255,255,0.35)"
-          : "rgba(255,255,255,0.22)",
-        backdropFilter: "blur(24px) saturate(200%)",
-        WebkitBackdropFilter: "blur(24px) saturate(200%)",
-        boxShadow: isSelected
-          ? "0 2px 20px rgba(0,0,0,0.15), inset 0 1.5px 0 rgba(255,255,255,0.8)"
-          : "0 2px 16px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
-        opacity: isUnlocked ? 1 : 0.45,
+          ? "rgba(255,255,255,0.92)"
+          : isUnlocked
+            ? "rgba(255,255,255,0.6)"
+            : "rgba(255,255,255,0.35)",
+        boxShadow: isSelected ? "0 4px 14px rgba(39,67,94,0.25)" : "none",
         cursor: isUnlocked ? "pointer" : "default",
-        minWidth: "96px",
+        fontFamily: font.ui,
         transition: "border-color 0.15s, background 0.15s, box-shadow 0.15s",
         pointerEvents: "auto",
       }}
     >
-      <canvas
-        ref={canvasRef}
-        width={PREVIEW_W}
-        height={PREVIEW_H}
+      <SkinPreview
+        skin={skin}
         style={{
-          width: PREVIEW_W,
-          height: PREVIEW_H,
-          imageRendering: "pixelated",
+          // Shrinks on short landscape phones so the whole start screen fits without scrolling
+          height: `clamp(44px, 11vh, ${SKIN_PREVIEW_H}px)`,
+          aspectRatio: `${SKIN_PREVIEW_W} / ${SKIN_PREVIEW_H}`,
+          // Dim only the art, so the name and unlock score keep full contrast
+          opacity: isUnlocked ? 1 : 0.35,
+          filter: isUnlocked ? "none" : "grayscale(1)",
         }}
       />
       <span
         style={{
-          fontSize: "0.78rem",
+          fontSize: "0.8rem",
           fontWeight: 700,
-          color: "#1e293b",
+          color: color.ink,
           textAlign: "center",
           lineHeight: 1.2,
         }}
@@ -97,15 +91,28 @@ function SkinCard({
       {!isUnlocked && (
         <span
           style={{
-            fontSize: "0.66rem",
-            fontWeight: 600,
-            color: "#64748b",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.25rem",
+            fontSize: "0.7rem",
+            fontWeight: 700,
+            color: color.muted,
           }}
         >
-          Score {skin.unlockScore}
+          <LockIcon />
+          Best <span style={{ fontFamily: font.mono }}>{skin.unlockScore}</span>
         </span>
       )}
-    </div>
+    </button>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
   );
 }
 
@@ -129,10 +136,10 @@ export default function SkinPicker({
       onTouchEnd={handleContainerEvent}
       style={{
         display: "flex",
-        gap: "0.6rem",
+        gap: "0.5rem",
         overflowX: "auto",
-        padding: "0.6rem 0.3rem",
-        maxWidth: "min(90vw, 672px)",
+        padding: "0.25rem",
+        maxWidth: "min(calc(100vw - 72px), 672px)",
         pointerEvents: "auto",
         WebkitOverflowScrolling: "touch",
       }}

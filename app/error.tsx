@@ -6,7 +6,13 @@
  * "Application error" page.
  */
 import { useEffect } from "react";
-import { glassBtn } from "@/components/sharedStyles";
+import { GlassPanel } from "@/components/ui/GlassPanel";
+import { ScreenTitle } from "@/components/ui/ScreenTitle";
+import { GlassButton } from "@/components/ui/GlassButton";
+import { font, text } from "@/components/ui/tokens";
+
+/** Suburban sky, so the panel reads the same as in-game when the canvas is gone. */
+const SKY_GRADIENT = "linear-gradient(#b8c6d4, #d4dce4)";
 
 /** Props Next.js passes to an App Router error boundary. */
 interface GameErrorProps {
@@ -33,34 +39,21 @@ export default function GameError({ error, reset }: GameErrorProps) {
         position: "fixed",
         inset: 0,
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: "0.75rem",
         padding: "1rem",
         textAlign: "center",
-        background: "#18181b",
-        color: "#f4f4f5",
-        fontFamily: "var(--font-nunito), Arial, sans-serif",
+        background: SKY_GRADIENT,
+        fontFamily: font.ui,
       }}
     >
-      <h2
-        style={{
-          margin: 0,
-          fontSize: "2rem",
-          fontFamily: "var(--font-fredoka), sans-serif",
-          fontWeight: 600,
-          letterSpacing: "0.06em",
-        }}
-      >
-        Oops, Edy fell off!
-      </h2>
-      <p style={{ margin: 0, fontSize: "0.95rem", color: "#d4d4d8" }}>
-        Something went wrong. Tap below to get back on the bike.
-      </p>
-      <button type="button" onClick={reset} style={{ ...glassBtn, color: "#f4f4f5" }}>
-        Try again
-      </button>
+      <GlassPanel>
+        <ScreenTitle>Oops, Edy Fell Off!</ScreenTitle>
+        <p style={text.body}>Something went wrong. Tap below to get back on the bike.</p>
+        <GlassButton variant="primary" onClick={reset}>
+          Try again
+        </GlassButton>
+      </GlassPanel>
     </div>
   );
 }

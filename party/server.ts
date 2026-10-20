@@ -80,6 +80,11 @@ export class MultiplayerServer extends Server {
   expectedPlayers = 0;
   /** Quick play: waiting for matched riders to connect; holds the auto-start. */
   gatherTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Quick play: the gather is over (everyone arrived, the wait ran out, or the room emptied).
+   * A matchmade code hosts one match, so this is never reset: later quick joins re-queue.
+   */
+  quickGatherEnded = false;
 
   onConnect() {
     // Don't add as player yet — wait for "join" message.
@@ -174,6 +179,13 @@ export class MultiplayerServer extends Server {
     }
 
     const quickIntent = data.intent === "quick";
+    if (quickIntent && this.quickGatherEnded) {
+      // A matched rider who arrived too late (the race went ahead, or the match fell through
+      // and the lone rider is leaving): send them back to the queue instead of a dead end
+      this.send(sender, { type: "match_failed" });
+      return;
+    }
+
     if (this.players.size === 0) {
       this.quickPlay = quickIntent;
       if (quickIntent) {
@@ -234,6 +246,7 @@ export class MultiplayerServer extends Server {
   /** Not every matched rider connected in time: race with whoever did, or re-queue a lone rider. */
   private onGatherTimeout() {
     this.gatherTimer = null;
+    this.quickGatherEnded = true;
     if (this.players.size >= 2) {
       this.maybeStartCountdown();
       return;
@@ -241,9 +254,12 @@ export class MultiplayerServer extends Server {
     this.sendToPlayers({ type: "match_failed" });
   }
 
+  /** Ends a running quick-play gather for good (see quickGatherEnded). */
   private stopGathering() {
-    if (this.gatherTimer) clearTimeout(this.gatherTimer);
+    if (!this.gatherTimer) return;
+    clearTimeout(this.gatherTimer);
     this.gatherTimer = null;
+    this.quickGatherEnded = true;
   }
 
   private handleReady(sender: Connection) {

@@ -40,7 +40,7 @@ Open `http://localhost:3000/multiplayer` in your browser to play.
 1. **Quick Play** — enter your name, pick a skin, click "QUICK PLAY". You join a single global queue (`party/matchmaker.ts`).
 2. **Matching** — the first rider in the queue starts a 15-second wait. When it ends, everyone queued (2–4 riders) is sent to a fresh room with a code like `Q7KX2M`; a 4th rider matches immediately.
 3. **Nobody around** — if the wait ends with only you, you're offered Keep waiting / Ride solo / Back. You stay queued; the next rider to arrive gets a 5-second wait for others, then you race.
-4. **Race** — matchmade rooms skip READY: the countdown starts once every matched rider has connected (or after 5 seconds with whoever made it; a lone rider is quietly re-queued).
+4. **Race** — matchmade rooms skip READY: the countdown starts once every matched rider has connected (or after 5 seconds with whoever made it; a lone rider, or a matched rider who connects after that, is quietly re-queued).
 5. **Play Again** searches again rather than reusing the room — strangers rarely all stay for a rematch.
 
 ### Rooms with friends

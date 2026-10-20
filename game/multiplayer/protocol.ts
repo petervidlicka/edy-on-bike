@@ -156,7 +156,7 @@ export type ServerMessage =
     }
   /** Room went back to the lobby for a rematch; everyone is un-ready with scores cleared. */
   | { type: "room_reset"; players: PlayerInfo[] }
-  /** Quick-play room: not enough of the matched riders connected, so the client re-queues. */
+  /** Quick-play room: the match fell through or went ahead without this rider, so the client re-queues. */
   | { type: "match_failed" }
   | { type: "error"; message: string };
 

@@ -3,20 +3,43 @@
 /**
  * React side of a multiplayer room: owns the WebSocket, turns server messages
  * into lobby/race/results state, and creates a MultiplayerAdapter per race.
+ * Quick play adds a second, short-lived socket to the matchmaker, which hands
+ * back a room code to join.
  */
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { PlayerInfo, RankingEntry, RoomPhase, ServerMessage, ClientMessage } from "@/game/multiplayer/protocol";
+import type {
+  PlayerInfo, RankingEntry, RoomPhase, ServerMessage, ClientMessage,
+  MatchmakerClientMessage, MatchmakerServerMessage,
+} from "@/game/multiplayer/protocol";
 import type { SkinId } from "@/game/types";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
-import { MULTIPLAYER_HOST, roomUrl } from "@/lib/multiplayerConfig";
+import { MULTIPLAYER_HOST, matchmakerUrl, roomUrl } from "@/lib/multiplayerConfig";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
+
+/** Where a quick-play search stands, for the waiting screen. */
+export interface QuickPlayQueue {
+  /** Riders in the queue, including this one. */
+  waiting: number;
+  /** Local Date.now() when the current wait ends, or null while nothing is counting down. */
+  deadlineAt: number | null;
+  /** The wait ran out with nobody else around — time to offer alternatives. */
+  lonely: boolean;
+  /** A room was assigned; joining it now. */
+  matched: boolean;
+}
+
+/** Last name/skin used for quick play, so a failed match or Play Again can re-queue without asking. */
+interface QuickPlayParams {
+  name: string;
+  skinId: SkinId;
+}
 
 /**
  * Decodes one socket frame. A malformed frame (bad deploy, proxy noise) is
  * logged and dropped rather than throwing inside onmessage and wedging the room.
  */
-function parseServerMessage(data: unknown): ServerMessage | null {
+function parseServerMessage<M extends { type: string } = ServerMessage>(data: unknown): M | null {
   if (typeof data !== "string") {
     console.error("[Multiplayer] Ignoring non-text message from server");
     return null;
@@ -24,7 +47,7 @@ function parseServerMessage(data: unknown): ServerMessage | null {
   try {
     const parsed: unknown = JSON.parse(data);
     if (typeof parsed === "object" && parsed !== null && "type" in parsed) {
-      return parsed as ServerMessage;
+      return parsed as M;
     }
     console.error("[Multiplayer] Ignoring server message without a type:", data);
   } catch (err) {
@@ -58,8 +81,15 @@ export function useMultiplayerRoom() {
   const [rankings, setRankings] = useState<RankingEntry[]>([]);
   const [adapter, setAdapter] = useState<MultiplayerAdapter | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [quickPlay, setQuickPlay] = useState(false);
+  const [queue, setQueue] = useState<QuickPlayQueue | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  /** Matchmaker socket while searching; cleared before an intentional close, like wsRef. */
+  const matchmakerRef = useRef<WebSocket | null>(null);
+  const quickParamsRef = useRef<QuickPlayParams | null>(null);
+  /** startQuickPlay, reachable from connect()'s handlers without a circular useCallback dependency. */
+  const requeueRef = useRef<() => void>(() => {});
   const adapterRef = useRef<MultiplayerAdapter | null>(null);
   /** Set once results arrive, so the server's later idle close doesn't read as a dropped race. */
   const raceFinishedRef = useRef(false);
@@ -79,8 +109,16 @@ export function useMultiplayerRoom() {
     adapterRef.current = null;
   }, []);
 
+  const closeMatchmaker = useCallback(() => {
+    const mm = matchmakerRef.current;
+    matchmakerRef.current = null;
+    mm?.close();
+  }, []);
+
   const resetRoomState = useCallback(() => {
     raceFinishedRef.current = false;
+    setQuickPlay(false);
+    setQueue(null);
     setAdapter(null);
     setConnectionState("disconnected");
     setRoomCode(null);
@@ -93,9 +131,12 @@ export function useMultiplayerRoom() {
 
   // Leaving the page (back button, route change) must close the socket — otherwise the
   // server keeps this player "alive" and the race can never finish for everyone else.
-  useEffect(() => () => releaseConnection(false), [releaseConnection]);
+  useEffect(() => () => {
+    releaseConnection(false);
+    closeMatchmaker();
+  }, [releaseConnection, closeMatchmaker]);
 
-  const connect = useCallback((code: string, name: string, skinId: SkinId, intent: "create" | "join") => {
+  const connect = useCallback((code: string, name: string, skinId: SkinId, intent: "create" | "join" | "quick", expected?: number) => {
     if (wsRef.current) return;
     if (!MULTIPLAYER_HOST) {
       // Build has no multiplayer server configured; entry points are hidden, but the URL still works
@@ -125,7 +166,7 @@ export function useMultiplayerRoom() {
     ws.onopen = () => {
       opened = true;
       setConnectionState("connected");
-      const joinMsg: ClientMessage = { type: "join", name, skinId, intent };
+      const joinMsg: ClientMessage = { type: "join", name, skinId, intent, expected };
       ws.send(JSON.stringify(joinMsg));
     };
 
@@ -142,9 +183,17 @@ export function useMultiplayerRoom() {
           setPhase(msg.phase);
           setSeed(msg.seed);
           setRoomCode(msg.roomCode);
+          setQuickPlay(msg.quickPlay);
+          setQueue(null);
           startAdapter(msg.players);
           break;
         }
+        case "match_failed":
+          // A matched rider never showed up — quietly go back to searching
+          releaseConnection(false);
+          resetRoomState();
+          requeueRef.current();
+          break;
         case "room_reset":
           // Someone chose Play Again. Players still on results stay there (phase
           // "finished" locally) until they click Play Again themselves.
@@ -230,6 +279,81 @@ export function useMultiplayerRoom() {
     [connect]
   );
 
+  /**
+   * Joins the quick-play queue. The matchmaker answers with a room code once 2–4 riders
+   * are grouped (see QUICK_PLAY_WAIT_MS), and the race in that room starts on its own.
+   */
+  const startQuickPlay = useCallback((name: string, skinId: SkinId) => {
+    if (wsRef.current || matchmakerRef.current) return;
+    if (!MULTIPLAYER_HOST) {
+      setError("Multiplayer isn't available right now.");
+      return;
+    }
+    quickParamsRef.current = { name, skinId };
+    setError(null);
+    setQueue({ waiting: 1, deadlineAt: null, lonely: false, matched: false });
+
+    const mm = new WebSocket(matchmakerUrl(MULTIPLAYER_HOST));
+    matchmakerRef.current = mm;
+    let opened = false;
+
+    mm.onopen = () => {
+      opened = true;
+      const msg: MatchmakerClientMessage = { type: "queue" };
+      mm.send(JSON.stringify(msg));
+    };
+
+    mm.onmessage = (event) => {
+      const msg = parseServerMessage<MatchmakerServerMessage>(event.data);
+      if (!msg) return;
+      switch (msg.type) {
+        case "queue_status":
+          setQueue((prev) => prev && {
+            ...prev,
+            waiting: msg.waiting,
+            deadlineAt: msg.msLeft === null ? null : Date.now() + msg.msLeft,
+          });
+          break;
+        case "queue_lonely":
+          setQueue((prev) => prev && { ...prev, lonely: true });
+          break;
+        case "matched":
+          closeMatchmaker();
+          setQueue((prev) => prev && { ...prev, matched: true, deadlineAt: null });
+          connect(msg.roomCode, name, skinId, "quick", msg.expected);
+          break;
+      }
+    };
+
+    mm.onclose = () => {
+      if (matchmakerRef.current !== mm) return; // cancelled or matched
+      matchmakerRef.current = null;
+      setQueue(null);
+      setError(
+        opened
+          ? "Lost connection while finding riders. Try Quick Play again."
+          : "Couldn't reach the multiplayer server. Check your connection and try again."
+      );
+    };
+
+    mm.onerror = () => {
+      console.error(`[Multiplayer] WebSocket error connecting to the matchmaker on ${MULTIPLAYER_HOST}`);
+    };
+  }, [connect, closeMatchmaker]);
+
+  useEffect(() => {
+    requeueRef.current = () => {
+      const params = quickParamsRef.current;
+      if (params) startQuickPlay(params.name, params.skinId);
+    };
+  }, [startQuickPlay]);
+
+  /** Leaves the quick-play queue (back to create/join). */
+  const cancelQuickPlay = useCallback(() => {
+    closeMatchmaker();
+    setQueue(null);
+  }, [closeMatchmaker]);
+
   const setReady = useCallback(() => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -240,12 +364,21 @@ export function useMultiplayerRoom() {
 
   const disconnect = useCallback(() => {
     releaseConnection(true);
+    closeMatchmaker();
     resetRoomState();
     setError(null);
-  }, [releaseConnection, resetRoomState]);
+  }, [releaseConnection, closeMatchmaker, resetRoomState]);
 
-  /** Back to this room's lobby for another race with the same group. */
+  /**
+   * Friend rooms go back to the same lobby for another race with the same group.
+   * Quick-play rooms search again instead — strangers rarely all stay for a rematch.
+   */
   const playAgain = useCallback(() => {
+    if (quickPlay) {
+      disconnect();
+      requeueRef.current();
+      return;
+    }
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       // Room was idled out while on the results screen — start fresh instead
@@ -257,7 +390,7 @@ export function useMultiplayerRoom() {
     raceFinishedRef.current = false;
     setRankings([]);
     setPhase("lobby");
-  }, [disconnect]);
+  }, [disconnect, quickPlay]);
 
   return {
     connectionState,
@@ -269,8 +402,12 @@ export function useMultiplayerRoom() {
     rankings,
     adapter,
     error,
+    quickPlay,
+    queue,
     createRoom,
     joinRoom,
+    startQuickPlay,
+    cancelQuickPlay,
     setReady,
     playAgain,
     disconnect,

@@ -8,6 +8,7 @@
  * sign is drawn once into an offscreen canvas and reused (see getNeonSign).
  */
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
+import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
 
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
@@ -123,22 +124,24 @@ function aviationLight(ctx: CanvasRenderingContext2D, x: number, y: number, seed
  * Night sky behind the street: twinkling stars and a moon fixed in the sky, Mt Fuji far
  * off, and a distant skyline of lit windows; the last two scroll at slow parallax.
  */
-export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, canvasW: number, groundY: number, offset: number) {
+export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, offset: number) {
   const t = performance.now() / 1000;
+  const viewW = view.right - view.left;
+  const skyTop = Math.min(0, view.top);
 
-  // Stars in the upper sky.
+  // Stars in the upper sky, spread over the whole view (it widens when the camera zooms out).
   ctx.fillStyle = "#ffffff";
-  const starCount = Math.floor(canvasW / 9);
+  const starCount = Math.floor(viewW / 9);
   for (let i = 0; i < starCount; i++) {
-    const sx = hash01(i, 1) * canvasW;
-    const sy = hash01(i, 2) * groundY * 0.45;
+    const sx = view.left + hash01(i, 1) * viewW;
+    const sy = skyTop + hash01(i, 2) * (groundY * 0.45 - skyTop);
     ctx.globalAlpha = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * (1 + hash01(i, 3) * 2) + i));
     ctx.fillRect(sx, sy, hash01(i, 4) < 0.15 ? 1.6 : 1, hash01(i, 4) < 0.15 ? 1.6 : 1);
   }
   ctx.globalAlpha = 1;
 
   // Moon with a soft halo.
-  const mx = canvasW * 0.82;
+  const mx = view.left + viewW * 0.82;
   const my = groundY * 0.18;
   glow(ctx, mx, my, groundY * 0.16, "#fff4d8", 0.35);
   ctx.fillStyle = "#fbf2d8";
@@ -154,11 +157,12 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, canvasW: number
   const baseY = groundY - 16;
 
   // Mt Fuji: one broad cone with a snowcap, repeating far apart.
-  const fujiSpan = canvasW * 2.2;
+  const fujiSpan = groundY * 4;
   const fujiOffset = (offset * 0.3) % fujiSpan;
-  for (const shift of [0, fujiSpan]) {
-    const fx = canvasW * 0.35 - fujiOffset + shift;
-    if (fx + canvasW * 0.4 < 0 || fx - canvasW * 0.4 > canvasW) continue;
+  const firstFuji = Math.floor(view.left / fujiSpan) - 1;
+  for (let k = firstFuji; k * fujiSpan < view.right + fujiSpan; k++) {
+    const fx = groundY * 0.8 - fujiOffset + k * fujiSpan;
+    if (fx + groundY * 0.7 < view.left || fx - groundY * 0.7 > view.right) continue;
     const half = groundY * 0.62;
     const peakY = baseY - groundY * 0.42;
     ctx.fillStyle = "#2a2a52";
@@ -186,8 +190,8 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, canvasW: number
   // Distant skyline: blocky silhouettes with a scatter of lit windows.
   const blockW = 26;
   const off = offset * 0.55;
-  const first = Math.floor(off / blockW) - 1;
-  const last = Math.ceil((off + canvasW) / blockW) + 1;
+  const first = Math.floor((off + view.left) / blockW) - 1;
+  const last = Math.ceil((off + view.right) / blockW) + 1;
   for (let i = first; i <= last; i++) {
     const bx = i * blockW - off;
     const bh = groundY * (0.12 + hash01(i, 7) * 0.2);
@@ -209,12 +213,12 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, canvasW: number
  * Neon smears and streetlight shine on the wet road. Positions come from hash01 of a
  * cell index, scrolled at the building layer's pace so they read as reflections of it.
  */
-export function drawNeonReflections(ctx: CanvasRenderingContext2D, canvasW: number, groundY: number, offset: number) {
+export function drawNeonReflections(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, offset: number) {
   const cell = 46;
   // Road offset accumulates at 0.6 of world speed; buildings scroll at 0.4
   const off = offset * (0.4 / 0.6);
-  const first = Math.floor(off / cell) - 1;
-  const last = Math.ceil((off + canvasW) / cell) + 1;
+  const first = Math.floor((off + view.left) / cell) - 1;
+  const last = Math.ceil((off + view.right) / cell) + 1;
   for (let i = first; i <= last; i++) {
     const r = hash01(i, 21);
     if (r > 0.7) continue;
@@ -232,7 +236,7 @@ export function drawNeonReflections(ctx: CanvasRenderingContext2D, canvasW: numb
   ctx.globalAlpha = 0.18;
   ctx.fillStyle = "#ffffff";
   const sheen = offset % 90;
-  for (let sx = -sheen; sx < canvasW; sx += 90) ctx.fillRect(sx, groundY + 15, 26, 1);
+  for (let sx = Math.floor(view.left / 90) * 90 - sheen; sx < view.right; sx += 90) ctx.fillRect(sx, groundY + 15, 26, 1);
   ctx.globalAlpha = 1;
 }
 

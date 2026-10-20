@@ -1,4 +1,5 @@
 import type { BackgroundElement, ObstacleType } from "../types";
+import type { ViewBounds } from "../Camera";
 
 // ── Biome identifiers ──
 
@@ -149,11 +150,12 @@ export type RiderGear = "winter" | "hachimaki";
 
 /**
  * Draws a far scenery band (mountain range, distant skyline) between the sky and the
- * building layer. `offset` is the cloud layer's scroll, so it moves at cloud parallax.
+ * building layer, covering `view` (wider than the canvas while the big-air camera is
+ * zoomed out). `offset` is the cloud layer's scroll, so it moves at cloud parallax.
  */
 export type SkylineDrawFn = (
   ctx: CanvasRenderingContext2D,
-  canvasW: number,
+  view: ViewBounds,
   groundY: number,
   offset: number,
   palette: EnvironmentPalette

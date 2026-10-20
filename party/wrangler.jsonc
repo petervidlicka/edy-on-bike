@@ -10,11 +10,14 @@
     "bindings": [
       // One Durable Object per room code. routePartykitRequest kebab-cases the binding
       // name into the URL, so clients connect to /parties/race/<ROOM CODE>.
-      { "name": "Race", "class_name": "MultiplayerServer" }
+      { "name": "Race", "class_name": "MultiplayerServer" },
+      // Single quick-play queue: clients connect to /parties/matchmaker/global.
+      { "name": "Matchmaker", "class_name": "Matchmaker" }
     ]
   },
   "migrations": [
     // Add a new entry (never edit this one) when renaming, adding or removing a class.
-    { "tag": "v1", "new_sqlite_classes": ["MultiplayerServer"] }
+    { "tag": "v1", "new_sqlite_classes": ["MultiplayerServer"] },
+    { "tag": "v2", "new_sqlite_classes": ["Matchmaker"] }
   ]
 }

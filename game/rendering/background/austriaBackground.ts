@@ -4,6 +4,7 @@
  * après-ski bar, snowy spruces, red deer and Austrian flags.
  */
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
+import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
 import { drawRedDeer } from "../obstacles/austriaObstacles";
 
@@ -24,7 +25,7 @@ function hash01(n: number): number {
  */
 function drawRidge(
   ctx: CanvasRenderingContext2D,
-  canvasW: number,
+  view: ViewBounds,
   baseY: number,
   offset: number,
   spacing: number,
@@ -34,8 +35,8 @@ function drawRidge(
   rock: string,
   capLine: number
 ) {
-  const first = Math.floor(offset / spacing) - 1;
-  const last = Math.ceil((offset + canvasW) / spacing) + 1;
+  const first = Math.floor((offset + view.left) / spacing) - 1;
+  const last = Math.ceil((offset + view.right) / spacing) + 1;
   const peaks: Array<[number, number]> = [];
   for (let i = first; i <= last; i++) {
     // Alternate summits and saddles; nudge x so peaks don't sit on a grid
@@ -101,13 +102,13 @@ function drawRidge(
  */
 export function drawAlpineRange(
   ctx: CanvasRenderingContext2D,
-  canvasW: number,
+  view: ViewBounds,
   groundY: number,
   offset: number
 ) {
   const baseY = groundY - 16;
-  drawRidge(ctx, canvasW, baseY, offset * 0.6, 110, groundY * 0.3, groundY * 0.52, 11, "#a9bfd6", groundY * 0.36);
-  drawRidge(ctx, canvasW, baseY, offset * 1.2, 80, groundY * 0.16, groundY * 0.32, 47, "#7f9cbb", groundY * 0.24);
+  drawRidge(ctx, view, baseY, offset * 0.6, 110, groundY * 0.3, groundY * 0.52, 11, "#a9bfd6", groundY * 0.36);
+  drawRidge(ctx, view, baseY, offset * 1.2, 80, groundY * 0.16, groundY * 0.32, 47, "#7f9cbb", groundY * 0.24);
 }
 
 // --- Chalet hotels ---

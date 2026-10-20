@@ -24,6 +24,17 @@ const GHOST_FADE_START_MS = 300;
 const GHOST_FADE_DURATION_MS = 700;
 
 /**
+ * Resting lane per remote slot, as an offset from the ghost's own x (fraction of canvas
+ * width), so riders never sit on top of each other. The first opponent rides just behind
+ * the local rider — the 1v1 case keeps your own bike clear — and further ones fan out ahead.
+ * Sized to the remote players a room can hold.
+ */
+const GHOST_LANE_OFFSETS = [-0.08, 0.08, 0.16] as const;
+
+/** Keeps a ghost's lane + boost from pushing it off the left edge. */
+const MIN_GHOST_X_RATIO = 0.02;
+
+/**
  * Canvas `ctx.font` can't resolve CSS variables, and next/font hashes the
  * Nunito family name, so read the resolved family off <body> once and cache
  * the two label fonts.
@@ -55,7 +66,12 @@ export function drawGhostPlayer(
   const fade = 1 - Math.min(1, Math.max(0, (ghost.staleMs - GHOST_FADE_START_MS) / GHOST_FADE_DURATION_MS));
   if (fade <= 0) return;
 
-  const playerX = Math.floor(canvasW * PLAYER_X_RATIO);
+  // Ghost's own x (moves with their trick boost) plus its resting lane on this screen
+  const lane = GHOST_LANE_OFFSETS[ghost.slot % GHOST_LANE_OFFSETS.length];
+  const playerX = Math.min(
+    canvasW - PLAYER_WIDTH,
+    Math.max(canvasW * MIN_GHOST_X_RATIO, canvasW * ((snap.x ?? PLAYER_X_RATIO) + lane)),
+  );
   // Snapshots carry height above ground; rebuild y against *this* viewport's ground line
   const y = groundY - snap.h;
 

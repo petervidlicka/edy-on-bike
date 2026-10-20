@@ -1,7 +1,8 @@
 /**
  * Night Tokyo obstacle draw functions. Each draws into its spec box (x, y, w, h) from
  * OBSTACLE_SPECS, standing on the box's bottom edge. Vehicles use the shared vehicle
- * recipe so they match the other biomes' traffic. Movers face the way they travel: the
+ * recipe so they match the other biomes' traffic; they're authored facing right and
+ * mirrored at draw time as oncoming traffic. Movers face the way they travel: the
  * delivery scooter rides right (with Edy), the umbrella cyclist comes left.
  */
 import type { EnvironmentPalette } from "../../environments/types";
@@ -38,6 +39,18 @@ function headlightBeam(ctx: CanvasRenderingContext2D, fromX: number, fromY: numb
   ctx.lineTo(fromX, fromY + 2);
   ctx.closePath();
   ctx.fill();
+}
+
+/**
+ * Fills text centred on (cx, cy) flipped back left-to-right. Taxis are drawn mirrored as
+ * oncoming traffic (see ONCOMING_VEHICLES), so their signs would otherwise read backwards.
+ */
+function fillTextUnmirrored(ctx: CanvasRenderingContext2D, text: string, cx: number, cy: number, maxWidth: number) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(-1, 1);
+  ctx.fillText(text, 0, 0, maxWidth);
+  ctx.restore();
 }
 
 // --- Kei car ---
@@ -132,7 +145,10 @@ const TAXI_SHAPE: VehicleShape = {
   headLight: [0.95, 0.56, 0.05, 0.08],
 };
 
-/** A JPN-style taxi in deep indigo: lit roof lamp, gold stripe and a red 空車 (vacant) sign. */
+/**
+ * A JPN-style taxi in deep indigo: lit roof lamp, gold stripe and a red 空車 (vacant) sign.
+ * Authored facing right and always drawn mirrored as oncoming traffic, so its text is pre-flipped.
+ */
 export function drawJapanTaxi(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
   headlightBeam(ctx, x + w, y + h * 0.62, 36, 1);
@@ -144,7 +160,7 @@ export function drawJapanTaxi(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.font = `bold ${Math.max(4, Math.round(h * 0.12))}px Arial, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("TAXI", x + w * 0.42, y + h * 0.115, w * 0.14);
+  fillTextUnmirrored(ctx, "TAXI", x + w * 0.42, y + h * 0.115, w * 0.14);
 
   drawVehicle(ctx, x, y, w, h, c, TAXI_SHAPE, {
     body: c.taxi ?? "#2c3256",
@@ -157,7 +173,7 @@ export function drawJapanTaxi(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.fillRect(x + w * 0.74, y + h * 0.36, w * 0.08, h * 0.1);
   ctx.fillStyle = "#ffffff";
   ctx.font = `bold ${Math.max(3, Math.round(h * 0.08))}px ${JP_FONT}`;
-  ctx.fillText("空車", x + w * 0.78, y + h * 0.415, w * 0.075);
+  fillTextUnmirrored(ctx, "空車", x + w * 0.78, y + h * 0.415, w * 0.075);
 }
 
 // --- Samurai ---

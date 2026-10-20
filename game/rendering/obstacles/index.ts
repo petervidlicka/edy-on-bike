@@ -23,7 +23,30 @@ import {
   drawDeliveryScooter, drawUmbrellaCyclist, drawKawaiiBarrier, drawManekiNeko, drawRamenBowl, drawShibaInu,
 } from "./tokyoObstacles";
 
+/**
+ * Motor vehicles are oncoming traffic. Their art is authored facing right, but the world
+ * scrolls left, so drawn as-is they read as reversing towards the rider — mirror them.
+ */
+const ONCOMING_VEHICLES: ReadonlySet<ObstacleType> = new Set([
+  ObstacleType.CAR, ObstacleType.SUV, ObstacleType.DELIVERY_VAN,
+  ObstacleType.LAND_CRUISER, ObstacleType.PINK_G_CLASS, ObstacleType.LAMBORGHINI_HURACAN,
+  ObstacleType.FERRARI_458, ObstacleType.CONVERTIBLE, ObstacleType.ROLLS_ROYCE_PHANTOM,
+  ObstacleType.PORSCHE_911, ObstacleType.KEI_CAR, ObstacleType.KEI_TRUCK, ObstacleType.JAPAN_TAXI,
+]);
+
 export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette) {
+  if (!ONCOMING_VEHICLES.has(obstacle.type)) {
+    drawObstacleArt(ctx, obstacle, palette);
+    return;
+  }
+  ctx.save();
+  ctx.translate(2 * obstacle.x + obstacle.width, 0);
+  ctx.scale(-1, 1);
+  drawObstacleArt(ctx, obstacle, palette);
+  ctx.restore();
+}
+
+function drawObstacleArt(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette) {
   const { type, x, y, width: w, height: h } = obstacle;
   switch (type) {
     case ObstacleType.ROCK:               drawRock(ctx, x, y, w, h, palette); break;

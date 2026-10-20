@@ -60,7 +60,16 @@ export default function StartScreen({
         fontFamily: font.ui,
       }}
     >
-      <GlassPanel style={{ pointerEvents: "none" }}>
+      {/* The panel takes pointer input so it can scroll on short screens; a tap on its
+          background still starts the run, as a tap on the scene does */}
+      <GlassPanel
+        style={{ pointerEvents: "auto" }}
+        onClick={(e) => {
+          // Buttons and links act on their own; the skin picker stops its clicks itself
+          if ((e.target as Element).closest("button, a")) return;
+          onStart();
+        }}
+      >
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
           <ScreenTitle as="h1">Edy on Bike</ScreenTitle>
           <p style={text.body}>Jump and double-jump to avoid obstacles</p>

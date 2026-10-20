@@ -109,6 +109,9 @@ export const badge: CSSProperties = {
   fontWeight: 800,
 };
 
+/** Highlight badge for achievements ("New personal best", "You made the top 10"). */
+export const badgeWarn: CSSProperties = { ...badge, background: color.warnBg, color: color.warnInk };
+
 /** Text input on a glass panel. */
 export const input: CSSProperties = {
   height: size.control,

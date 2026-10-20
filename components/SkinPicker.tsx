@@ -4,10 +4,10 @@
  * Horizontal bike picker (start screen and multiplayer lobby). Locked bikes show the best
  * score that unlocks them; only unlocked ones can be selected.
  */
-import { useRef, useEffect, useCallback } from "react";
+import { useCallback } from "react";
 import { SkinId, SkinDefinition } from "@/game/types";
 import { SKINS, isSkinUnlocked } from "@/game/skins";
-import { drawSkinPreview } from "@/game/rendering";
+import { SkinPreview, SKIN_PREVIEW_H, SKIN_PREVIEW_W } from "./SkinPreview";
 import { color, font, radius } from "./ui/tokens";
 
 interface SkinPickerProps {
@@ -16,9 +16,6 @@ interface SkinPickerProps {
   cheatUnlocked: boolean;
   onSelectSkin: (id: SkinId) => void;
 }
-
-const PREVIEW_W = 72;
-const PREVIEW_H = 79;
 
 function SkinCard({
   skin,
@@ -31,16 +28,6 @@ function SkinCard({
   isUnlocked: boolean;
   onSelect: () => void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    drawSkinPreview(ctx, skin, PREVIEW_W, PREVIEW_H);
-  }, [skin]);
-
   const handleClick = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
       e.stopPropagation();
@@ -79,15 +66,12 @@ function SkinCard({
         pointerEvents: "auto",
       }}
     >
-      <canvas
-        ref={canvasRef}
-        width={PREVIEW_W}
-        height={PREVIEW_H}
+      <SkinPreview
+        skin={skin}
         style={{
           // Shrinks on short landscape phones so the whole start screen fits without scrolling
-          height: `clamp(44px, 11vh, ${PREVIEW_H}px)`,
-          aspectRatio: `${PREVIEW_W} / ${PREVIEW_H}`,
-          imageRendering: "pixelated",
+          height: `clamp(44px, 11vh, ${SKIN_PREVIEW_H}px)`,
+          aspectRatio: `${SKIN_PREVIEW_W} / ${SKIN_PREVIEW_H}`,
           // Dim only the art, so the name and unlock score keep full contrast
           opacity: isUnlocked ? 1 : 0.35,
           filter: isUnlocked ? "none" : "grayscale(1)",

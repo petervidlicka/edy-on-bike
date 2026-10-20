@@ -15,7 +15,7 @@ import { LEADERBOARD_SIZE, scoreQualifies } from "@/lib/leaderboardConfig";
 import { useGameOverLeaderboard } from "@/hooks/useGameOverLeaderboard";
 import { useInputLockout, GAME_OVER_LOCKOUT_MS } from "@/hooks/useInputLockout";
 import { GlassPanel } from "./ui/GlassPanel";
-import { badge, color, font } from "./ui/tokens";
+import { badgeWarn, font } from "./ui/tokens";
 
 interface GameOverScreenProps {
   score: number;
@@ -90,7 +90,7 @@ export default function GameOverScreen({ score, bestScore, skinName, previousBes
             cheatUnlocked={cheatUnlocked}
             extraBadge={
               view === "form" && qualifies ? (
-                <span style={{ ...badge, background: color.warnBg, color: color.warnInk }}>
+                <span style={badgeWarn}>
                   You made the top {LEADERBOARD_SIZE}
                 </span>
               ) : null

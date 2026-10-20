@@ -4,7 +4,7 @@
  * Multiplayer lobby: create/join a room by code, pick a skin (same unlocks as
  * single-player), then wait for everyone to ready up.
  */
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { MAX_NAME_LENGTH } from "@/game/multiplayer/protocol";
 import type { PlayerInfo } from "@/game/multiplayer/protocol";
 import { SkinId } from "@/game/types";
@@ -13,7 +13,7 @@ import { useSavedSkinState } from "@/hooks/useSavedSkinState";
 import { useSavedPlayerName } from "@/hooks/useSavedPlayerName";
 import { savePlayerName } from "@/game/storage";
 import { getSkinById } from "@/game/skins";
-import { drawSkinPreview } from "@/game/rendering";
+import { SkinPreview } from "./SkinPreview";
 import { GlassPanel } from "./ui/GlassPanel";
 import { ScreenTitle } from "./ui/ScreenTitle";
 import { GlassButton } from "./ui/GlassButton";
@@ -33,18 +33,12 @@ interface MultiplayerLobbyProps {
   onLeave: () => void;
 }
 
+/** How long "Copied" / "Can't copy" shows before the button reads "Copy code" again. */
+const COPY_FEEDBACK_MS = 2000;
+
 /** Lays out a labelled field: caps label above its control. */
 const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
 
-/** Small bike preview next to each rider in the room list. */
-function RiderAvatar({ skinId }: { skinId: SkinId }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const ctx = canvasRef.current?.getContext("2d");
-    if (ctx) drawSkinPreview(ctx, getSkinById(skinId), 72, 79);
-  }, [skinId]);
-  return <canvas ref={canvasRef} width={72} height={79} aria-hidden="true" style={{ width: 36, height: 40, imageRendering: "pixelated" }} />;
-}
 
 /**
  * Shows create/join until the server confirms a room, then the room's rider
@@ -71,7 +65,7 @@ export default function MultiplayerLobby({
   const [skinState, handleSelectSkin] = useSavedSkinState();
   const selectedSkinId: SkinId = skinState.selectedSkinId;
   const [joinCode, setJoinCode] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   const localPlayer = players.find((p) => p.id === localPlayerId);
   const isReady = localPlayer?.ready ?? false;
@@ -79,23 +73,39 @@ export default function MultiplayerLobby({
   const canStart = !!name.trim() && !connecting;
   const canJoin = canStart && joinCode.length === 4;
 
+  // Same guards as the buttons' disabled state, so Enter can't send a second request mid-connect
   const handleCreate = useCallback(() => {
-    if (!name.trim()) return;
+    if (!canStart) return;
     savePlayerName(name.trim());
     onCreateRoom(name.trim(), selectedSkinId);
-  }, [name, selectedSkinId, onCreateRoom]);
+  }, [canStart, name, selectedSkinId, onCreateRoom]);
 
   const handleJoin = useCallback(() => {
-    if (!name.trim() || joinCode.length !== 4) return;
+    if (!canJoin) return;
     savePlayerName(name.trim());
     onJoinRoom(joinCode.toUpperCase(), name.trim(), selectedSkinId);
-  }, [name, joinCode, selectedSkinId, onJoinRoom]);
+  }, [canJoin, name, joinCode, selectedSkinId, onJoinRoom]);
+
+  // The label flips back after a moment, so a second copy (or a retry) reads as a fresh action
+  useEffect(() => {
+    if (copyStatus === "idle") return;
+    const id = setTimeout(() => setCopyStatus("idle"), COPY_FEEDBACK_MS);
+    return () => clearTimeout(id);
+  }, [copyStatus]);
 
   const handleCopy = useCallback(() => {
     if (!roomCode) return;
-    navigator.clipboard?.writeText(roomCode).then(
-      () => setCopied(true),
-      (err: unknown) => console.warn("[lobby] Copying the room code failed", err),
+    // No clipboard API outside secure contexts (e.g. testing over a LAN IP) — say so rather than do nothing
+    if (!navigator.clipboard) {
+      setCopyStatus("failed");
+      return;
+    }
+    navigator.clipboard.writeText(roomCode).then(
+      () => setCopyStatus("copied"),
+      (err: unknown) => {
+        console.warn("[lobby] Copying the room code failed", err);
+        setCopyStatus("failed");
+      },
     );
   }, [roomCode]);
 
@@ -122,7 +132,7 @@ export default function MultiplayerLobby({
               <span style={{ ...text.numberXl, letterSpacing: "0.15em" }}>{roomCode}</span>
               <GlassButton variant="quiet" onClick={handleCopy} style={{ alignSelf: "flex-start", padding: "0 4px" }}>
                 <CopyIcon />
-                {copied ? "Copied" : "Copy code"}
+                {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Can't copy" : "Copy code"}
               </GlassButton>
             </div>
             <p style={{ ...text.body, fontSize: "0.875rem" }}>
@@ -145,7 +155,7 @@ export default function MultiplayerLobby({
                   key={p.id}
                   style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 12px", borderRadius: "12px", background: "rgba(255,255,255,0.7)" }}
                 >
-                  <RiderAvatar skinId={p.skinId} />
+                  <SkinPreview skin={getSkinById(p.skinId)} style={{ width: 36, height: 40 }} />
                   <span style={{ flex: 1, minWidth: 0, fontSize: "0.95rem", fontWeight: 800, color: color.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {p.name}
                     {p.id === localPlayerId && <span style={{ fontWeight: 600, color: color.muted }}> (you)</span>}

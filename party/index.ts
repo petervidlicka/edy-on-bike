@@ -10,6 +10,12 @@ export { Matchmaker } from "./matchmaker";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    // PartyServer takes a socket's connection id from `?_pk=` when present, and the rooms key
+    // players by that id — a client choosing its own id could impersonate another rider.
+    // Our clients never send it, so refuse it outright and let PartyServer generate ids.
+    if (new URL(request.url).searchParams.has("_pk")) {
+      return new Response("Bad request", { status: 400 });
+    }
     return (await routePartykitRequest(request, env)) ?? new Response("Not found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;

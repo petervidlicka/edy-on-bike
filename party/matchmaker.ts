@@ -4,21 +4,33 @@
  * fresh room code. The race itself runs in a normal MultiplayerServer room (server.ts),
  * which the matched clients join with intent "quick".
  */
-import { Server, type Connection } from "partyserver";
+import { Server, type Connection, type ConnectionContext } from "partyserver";
 import {
   MAX_PLAYERS,
   QUICK_PLAY_CODE_PREFIX,
+  QUICK_PLAY_CODE_RANDOM_LENGTH,
   QUICK_PLAY_GRACE_MS,
   QUICK_PLAY_WAIT_MS,
+  randomRoomCode,
 } from "../game/multiplayer/protocol";
 import type { MatchmakerServerMessage } from "../game/multiplayer/protocol";
 
 /** Only message the matchmaker accepts; anything bigger is junk. */
 const MAX_MESSAGE_CHARS = 64;
 
-/** Same alphabet as friend-room codes: no I/O/0/1 to avoid confusion. */
-const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const CODE_RANDOM_LENGTH = 5;
+/** A socket that hasn't queued by now is closed; the client queues as soon as it opens. */
+const QUEUE_TIMEOUT_MS = 10_000;
+
+/**
+ * Per-IP limits, so one client can't fill matches with sockets that never join the room
+ * (each such no-show stalls real riders for the room's gather wait, then re-queues them).
+ * Two queued riders per IP still lets a household or classroom search side by side.
+ */
+const MAX_SOCKETS_PER_IP = 4;
+const MAX_QUEUED_PER_IP = 2;
+/** Matches per IP per window: a real rider needs ~30s+ per race, so this only bites bots. */
+const MAX_MATCHES_PER_IP = 10;
+const MATCH_WINDOW_MS = 2 * 60 * 1000;
 
 /** Groups queued riders into races of 2–4 (see QUICK_PLAY_WAIT_MS / QUICK_PLAY_GRACE_MS). */
 export class Matchmaker extends Server {
@@ -30,6 +42,22 @@ export class Matchmaker extends Server {
   /** When the current wait ends (Date.now), or null while nobody's wait is counting down. */
   deadline: number | null = null;
   deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Client IP of each open socket (Cloudflare's cf-connecting-ip). */
+  socketIps: Map<string, string> = new Map();
+  /** Recent match times per IP, pruned to MATCH_WINDOW_MS. */
+  recentMatches: Map<string, number[]> = new Map();
+
+  onConnect(conn: Connection, ctx: ConnectionContext) {
+    const ip = ctx.request.headers.get("cf-connecting-ip") ?? "unknown";
+    if (this.countSocketsFrom(ip) >= MAX_SOCKETS_PER_IP) {
+      conn.close(1013, "Too many connections");
+      return;
+    }
+    this.socketIps.set(conn.id, ip);
+    setTimeout(() => {
+      if (this.socketIps.has(conn.id) && !this.queue.has(conn.id)) conn.close(1008, "Queue timeout");
+    }, QUEUE_TIMEOUT_MS);
+  }
 
   onMessage(sender: Connection, message: string | ArrayBuffer | ArrayBufferView) {
     if (typeof message !== "string" || message.length > MAX_MESSAGE_CHARS) return;
@@ -40,7 +68,13 @@ export class Matchmaker extends Server {
       return;
     }
     if (typeof parsed !== "object" || parsed === null || (parsed as { type?: unknown }).type !== "queue") return;
-    if (this.queue.has(sender.id)) return;
+    // Only sockets we registered on connect (ids are server-generated, see index.ts) may queue
+    const ip = this.socketIps.get(sender.id);
+    if (ip === undefined || this.queue.has(sender.id)) return;
+    if (this.countQueuedFrom(ip) >= MAX_QUEUED_PER_IP || !this.underMatchLimit(ip)) {
+      sender.close(1013, "Too many searches");
+      return;
+    }
 
     this.queue.set(sender.id, sender);
     if (this.queue.size >= MAX_PLAYERS) {
@@ -52,6 +86,7 @@ export class Matchmaker extends Server {
   }
 
   onClose(conn: Connection) {
+    this.socketIps.delete(conn.id);
     if (!this.queue.delete(conn.id)) return;
     if (this.queue.size === 0) this.clearDeadline();
     this.broadcastStatus();
@@ -91,10 +126,17 @@ export class Matchmaker extends Server {
   private match() {
     this.clearDeadline();
     const group = Array.from(this.queue.values()).slice(0, MAX_PLAYERS);
-    const roomCode = generateQuickPlayCode();
+    // Q + 5 characters: never the 4-character shape of a typed friend code
+    const roomCode = randomRoomCode(QUICK_PLAY_CODE_RANDOM_LENGTH, QUICK_PLAY_CODE_PREFIX);
+    const now = Date.now();
+    this.pruneMatchHistory(now);
     for (const conn of group) {
       this.queue.delete(conn.id);
+      const ip = this.socketIps.get(conn.id);
+      if (ip !== undefined) this.recentMatches.set(ip, [...(this.recentMatches.get(ip) ?? []), now]);
       this.send(conn, { type: "matched", roomCode, expected: group.length });
+      // A matched socket's job is done; closing it means it can't simply queue again
+      conn.close(1000, "Matched");
     }
     if (this.queue.size > 0) this.armDeadline();
   }
@@ -108,13 +150,33 @@ export class Matchmaker extends Server {
   private send(conn: Connection, msg: MatchmakerServerMessage) {
     conn.send(JSON.stringify(msg));
   }
-}
 
-/** @returns A code like "Q7KX2M" — never the 4-character shape of a typed friend code. */
-function generateQuickPlayCode(): string {
-  let code = QUICK_PLAY_CODE_PREFIX;
-  for (let i = 0; i < CODE_RANDOM_LENGTH; i++) {
-    code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+  private countSocketsFrom(ip: string): number {
+    let count = 0;
+    for (const socketIp of this.socketIps.values()) if (socketIp === ip) count++;
+    return count;
   }
-  return code;
+
+  private countQueuedFrom(ip: string): number {
+    let count = 0;
+    for (const id of this.queue.keys()) if (this.socketIps.get(id) === ip) count++;
+    return count;
+  }
+
+  /** Whether this IP may be matched again within MATCH_WINDOW_MS. */
+  private underMatchLimit(ip: string): boolean {
+    const cutoff = Date.now() - MATCH_WINDOW_MS;
+    const recent = (this.recentMatches.get(ip) ?? []).filter((at) => at > cutoff);
+    return recent.length < MAX_MATCHES_PER_IP;
+  }
+
+  /** Drops match times outside the window, so the single global instance doesn't grow forever. */
+  private pruneMatchHistory(nowMs: number) {
+    const cutoff = nowMs - MATCH_WINDOW_MS;
+    for (const [ip, times] of this.recentMatches) {
+      const recent = times.filter((at) => at > cutoff);
+      if (recent.length === 0) this.recentMatches.delete(ip);
+      else this.recentMatches.set(ip, recent);
+    }
+  }
 }

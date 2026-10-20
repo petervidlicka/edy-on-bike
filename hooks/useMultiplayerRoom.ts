@@ -11,6 +11,7 @@ import type {
   PlayerInfo, RankingEntry, RoomPhase, ServerMessage, ClientMessage,
   MatchmakerClientMessage, MatchmakerServerMessage,
 } from "@/game/multiplayer/protocol";
+import { FRIEND_CODE_LENGTH, randomRoomCode } from "@/game/multiplayer/protocol";
 import type { SkinId } from "@/game/types";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
 import { MULTIPLAYER_HOST, matchmakerUrl, roomUrl } from "@/lib/multiplayerConfig";
@@ -56,14 +57,11 @@ function parseServerMessage<M extends { type: string } = ServerMessage>(data: un
   return null;
 }
 
-function generateRoomCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 to avoid confusion
-  let code = "";
-  for (let i = 0; i < 4; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-}
+/** How long to wait for the server to accept a join before giving up on the room. */
+const JOIN_TIMEOUT_MS = 10_000;
+
+/** New codes to try when a freshly generated room code turns out to be in use. */
+const MAX_CREATE_RETRIES = 3;
 
 /**
  * Connection and room state for the /multiplayer page. The socket closes on
@@ -90,6 +88,10 @@ export function useMultiplayerRoom() {
   const quickParamsRef = useRef<QuickPlayParams | null>(null);
   /** startQuickPlay, reachable from connect()'s handlers without a circular useCallback dependency. */
   const requeueRef = useRef<() => void>(() => {});
+  /** Retries left for createRoom when the server reports the generated code as taken. */
+  const createRetriesRef = useRef(0);
+  /** Opens a room on a fresh code; set below, since connect() can't depend on itself. */
+  const retryCreateRef = useRef<(name: string, skinId: SkinId) => void>(() => {});
   const adapterRef = useRef<MultiplayerAdapter | null>(null);
   /** Set once results arrive, so the server's later idle close doesn't read as a dropped race. */
   const raceFinishedRef = useRef(false);
@@ -156,6 +158,14 @@ export function useMultiplayerRoom() {
     let joined = false;
     let myId = "";
 
+    // The socket can open and then never get an answer (server stuck, proxy dropping frames)
+    const joinTimer = setTimeout(() => {
+      if (wsRef.current !== ws || joined) return;
+      releaseConnection(false);
+      resetRoomState();
+      setError("The multiplayer server didn't respond. Check your connection and try again.");
+    }, JOIN_TIMEOUT_MS);
+
     /** One adapter per race: it accumulates crash/score state, so a rematch needs a fresh one. */
     const startAdapter = (roster: PlayerInfo[]) => {
       adapterRef.current?.destroy();
@@ -177,6 +187,7 @@ export function useMultiplayerRoom() {
       switch (msg.type) {
         case "room_joined": {
           joined = true;
+          clearTimeout(joinTimer);
           myId = msg.playerId;
           setLocalPlayerId(msg.playerId);
           setPlayers(msg.players);
@@ -213,6 +224,12 @@ export function useMultiplayerRoom() {
             prev.map((p) => (p.id === msg.playerId ? { ...p, ready: true } : p))
           );
           break;
+        case "countdown_cancelled":
+          // Someone left mid-countdown and too few riders remain
+          setPlayers(msg.players);
+          startAdapter(msg.players);
+          setPhase("lobby");
+          break;
         case "countdown_start":
           setPhase("countdown");
           setSeed(msg.seed);
@@ -232,8 +249,14 @@ export function useMultiplayerRoom() {
         case "error":
           if (!joined) {
             // Join rejected (no such room / race running / full) — back to create/join
+            clearTimeout(joinTimer);
             releaseConnection(false);
             resetRoomState();
+            if (msg.reason === "room_taken" && intent === "create" && createRetriesRef.current > 0) {
+              createRetriesRef.current--;
+              retryCreateRef.current(name, skinId);
+              break;
+            }
           }
           setError(msg.message);
           break;
@@ -241,6 +264,7 @@ export function useMultiplayerRoom() {
     };
 
     ws.onclose = () => {
+      clearTimeout(joinTimer);
       // disconnect()/unmount clear wsRef before closing; anything else is a dropped connection
       if (wsRef.current !== ws) return;
       if (raceFinishedRef.current) {
@@ -266,8 +290,8 @@ export function useMultiplayerRoom() {
 
   const createRoom = useCallback(
     (name: string, skinId: SkinId) => {
-      const code = generateRoomCode();
-      connect(code, name, skinId, "create");
+      createRetriesRef.current = MAX_CREATE_RETRIES;
+      connect(randomRoomCode(FRIEND_CODE_LENGTH), name, skinId, "create");
     },
     [connect]
   );
@@ -340,6 +364,12 @@ export function useMultiplayerRoom() {
       console.error(`[Multiplayer] WebSocket error connecting to the matchmaker on ${MULTIPLAYER_HOST}`);
     };
   }, [connect, closeMatchmaker]);
+
+  useEffect(() => {
+    retryCreateRef.current = (name, skinId) => {
+      connect(randomRoomCode(FRIEND_CODE_LENGTH), name, skinId, "create");
+    };
+  }, [connect]);
 
   useEffect(() => {
     requeueRef.current = () => {

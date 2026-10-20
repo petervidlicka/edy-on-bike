@@ -8,14 +8,24 @@
 import { Server, type Connection } from "partyserver";
 import {
   MAX_MESSAGE_CHARS,
-  MIN_UPDATE_INTERVAL_MS,
+  MESSAGE_BURST,
+  MESSAGE_RATE_PER_SEC,
+  SNAPSHOT_BURST,
+  SNAPSHOT_RATE_PER_SEC,
   ScoreGuard,
+  SnapshotClock,
+  TokenBucket,
   sanitizeExpectedPlayers,
   sanitizeName,
   sanitizeSkinId,
   sanitizeSnapshot,
 } from "./validation";
-import { MAX_NAME_LENGTH, MAX_PLAYERS } from "../game/multiplayer/protocol";
+import {
+  MAX_NAME_LENGTH,
+  MAX_PLAYERS,
+  isFriendRoomCode,
+  isQuickPlayCode,
+} from "../game/multiplayer/protocol";
 import type {
   ClientMessage,
   PlayerInfo,
@@ -51,6 +61,13 @@ const STALE_CHECK_INTERVAL_MS = 2_000;
  * that it races with whoever made it (2+), or sends the lone rider back to the queue.
  */
 const QUICK_GATHER_MS = 5_000;
+/** A socket that hasn't joined by now is closed, so idle sockets can't keep a room resident. */
+const JOIN_TIMEOUT_MS = 10_000;
+/**
+ * Sockets connected but not (yet) joined. Real clients join within a round trip, so a
+ * handful covers simultaneous arrivals; more is someone opening sockets to hold the room.
+ */
+const MAX_PENDING_SOCKETS = MAX_PLAYERS * 2;
 
 // ── Server ─────────────────────────────────────────────────────────────
 
@@ -74,6 +91,12 @@ export class MultiplayerServer extends Server {
   lastUpdateAt: Map<string, number> = new Map();
   /** Server-only: plausibility guard for each racer's client-reported score. */
   scoreGuards: Map<string, ScoreGuard> = new Map();
+  /** Server-only: per-racer snapshot rate limit (see SNAPSHOT_RATE_PER_SEC). */
+  snapshotLimits: Map<string, TokenBucket> = new Map();
+  /** Server-only: per-racer check that snapshot timestamps move forward plausibly. */
+  snapshotClocks: Map<string, SnapshotClock> = new Map();
+  /** Per-socket message budget, checked before parsing (joined or not). */
+  messageLimits: WeakMap<Connection, TokenBucket> = new WeakMap();
   /** Matchmade room (first joiner came with intent "quick"). */
   quickPlay = false;
   /** Quick play: riders the matchmaker put in this room. */
@@ -86,15 +109,28 @@ export class MultiplayerServer extends Server {
    */
   quickGatherEnded = false;
 
-  onConnect() {
-    // Don't add as player yet — wait for "join" message.
-    // PartyServer tracks the socket internally; we add it to our map
-    // only after a successful join.
-    this.resetInactivityTimer();
+  onConnect(conn: Connection) {
+    // Only codes the client could have produced host rooms; anything else is a probe
+    if (!isFriendRoomCode(this.name) && !isQuickPlayCode(this.name)) {
+      conn.close(1008, "Invalid room code");
+      return;
+    }
+    if (this.pendingSocketCount() > MAX_PENDING_SOCKETS) {
+      conn.close(1013, "Too many connections");
+      return;
+    }
+
+    // Don't add as player yet — wait for "join" message. PartyServer tracks the
+    // socket internally; we add it to our map only after a successful join.
+    this.messageLimits.set(conn, new TokenBucket(MESSAGE_RATE_PER_SEC, MESSAGE_BURST, Date.now()));
+    setTimeout(() => {
+      if (!this.isPlayerSocket(conn)) conn.close(1008, "Join timeout");
+    }, JOIN_TIMEOUT_MS);
   }
 
   onMessage(sender: Connection, message: string | ArrayBuffer | ArrayBufferView) {
     if (typeof message !== "string" || message.length > MAX_MESSAGE_CHARS) return;
+    if (!this.messageLimits.get(sender)?.take(Date.now())) return; // flooding — drop unparsed
 
     let data: IncomingMessage;
     try {
@@ -105,12 +141,18 @@ export class MultiplayerServer extends Server {
       return;
     }
 
+    if (data.type === "join") {
+      this.handleJoin(data, sender);
+      return;
+    }
+
+    // Everything else must come from the socket that joined as this player. Connection ids
+    // are only trusted for sockets in our own map (see index.ts for why ids can't be chosen).
+    if (!this.isPlayerSocket(sender)) return;
+    // Only joined players keep the room alive; idle sockets can't hold it open
     this.resetInactivityTimer();
 
     switch (data.type) {
-      case "join":
-        this.handleJoin(data, sender);
-        break;
       case "ready":
         this.handleReady(sender);
         break;
@@ -130,10 +172,10 @@ export class MultiplayerServer extends Server {
   }
 
   onClose(conn: Connection) {
+    // A socket that never joined (or a stale duplicate) must not remove the player with its id
+    if (!this.isPlayerSocket(conn)) return;
     const player = this.players.get(conn.id);
-    if (!player) {
-      return;
-    }
+    if (!player) return;
 
     // If the player was in a race and still alive, treat as a crash
     if ((this.phase === "racing" || this.phase === "countdown") && player.alive) {
@@ -150,20 +192,14 @@ export class MultiplayerServer extends Server {
 
     this.players.delete(conn.id);
     this.connections.delete(conn.id);
-
-    this.checkFinishCondition();
-    // Everyone left may now be ready (e.g. the one holdout just left)
-    this.maybeStartCountdown();
-
-    if (this.players.size === 0) {
-      this.cleanup();
-    }
+    this.afterPlayerRemoved();
   }
 
   // ── Message handlers ─────────────────────────────────────────────────
 
   private handleJoin(data: Incoming<"join">, sender: Connection) {
-    if (this.players.has(sender.id)) return; // duplicate join from the same socket
+    // Duplicate join from the same socket (ids are server-generated, so never another one's)
+    if (this.connections.has(sender.id)) return;
 
     const name = sanitizeName(data.name);
     if (!name) {
@@ -179,6 +215,23 @@ export class MultiplayerServer extends Server {
     }
 
     const quickIntent = data.intent === "quick";
+    // Friend rooms live on typed-code shapes and matchmade rooms on Q-codes, so neither kind
+    // can be opened on the other's code (which would strand matched riders in a friend lobby)
+    if (quickIntent ? !isQuickPlayCode(this.name) : !isFriendRoomCode(this.name)) {
+      this.rejectJoin(sender, "That room code isn't valid. Check the code and try again.");
+      return;
+    }
+
+    // Room codes are random, so a new room can land on a code someone is already using
+    if (data.intent === "create" && this.players.size > 0) {
+      this.send(sender, {
+        type: "error",
+        message: "That room code is taken. Try creating the room again.",
+        reason: "room_taken",
+      });
+      return;
+    }
+
     if (quickIntent && this.quickGatherEnded) {
       // A matched rider who arrived too late (the race went ahead, or the match fell through
       // and the lone rider is leaving): send them back to the queue instead of a dead end
@@ -219,6 +272,7 @@ export class MultiplayerServer extends Server {
 
     this.players.set(sender.id, playerInfo);
     this.connections.set(sender.id, sender);
+    this.resetInactivityTimer();
 
     // Send room_joined to the joining player
     this.send(sender, {
@@ -264,7 +318,8 @@ export class MultiplayerServer extends Server {
 
   private handleReady(sender: Connection) {
     const player = this.players.get(sender.id);
-    if (!player) return;
+    // Only meaningful in the lobby, and only once — repeats would just be re-broadcast spam
+    if (!player || player.ready || this.phase !== "lobby") return;
 
     player.ready = true;
 
@@ -294,11 +349,10 @@ export class MultiplayerServer extends Server {
     if (!player || !player.alive || this.phase !== "racing") return;
 
     const now = Date.now();
-    const lastAt = this.lastUpdateAt.get(sender.id) ?? now;
-    if (now - lastAt < MIN_UPDATE_INTERVAL_MS) return; // flooding — drop, don't relay
+    if (!this.snapshotLimits.get(sender.id)?.take(now)) return; // flooding — drop, don't relay
 
     const snapshot = sanitizeSnapshot(data.snapshot);
-    if (!snapshot) return;
+    if (!snapshot || !this.snapshotClocks.get(sender.id)?.accept(snapshot.t, now)) return;
 
     // Keep a plausible latest score so a racer who times out or disconnects is ranked fairly
     player.score = this.scoreGuards.get(sender.id)?.accept(snapshot.s, now) ?? player.score;
@@ -339,14 +393,19 @@ export class MultiplayerServer extends Server {
     this.sendToPlayers(
       { type: "player_left", playerId: player.id },
     );
+    this.afterPlayerRemoved();
+  }
 
+  /** Shared tail of leave and disconnect: re-evaluate the race and lobby without that player. */
+  private afterPlayerRemoved() {
+    if (this.players.size === 0) {
+      this.cleanup();
+      return;
+    }
+    this.maybeCancelCountdown();
     this.checkFinishCondition();
     // Everyone left may now be ready (e.g. the one holdout just left)
     this.maybeStartCountdown();
-
-    if (this.players.size === 0) {
-      this.cleanup();
-    }
   }
 
   // ── Game flow ────────────────────────────────────────────────────────
@@ -359,6 +418,25 @@ export class MultiplayerServer extends Server {
     }
   }
 
+  /**
+   * A race needs 2 riders: if someone leaves mid-countdown and only one is left, go back to
+   * the lobby instead of starting a solo "race". A matchmade rider is re-queued instead.
+   */
+  private maybeCancelCountdown() {
+    if (this.phase !== "countdown" || this.players.size >= 2) return;
+    if (this.countdownTimer) {
+      clearTimeout(this.countdownTimer);
+      this.countdownTimer = null;
+    }
+    this.phase = "lobby";
+    if (this.quickPlay) {
+      this.sendToPlayers({ type: "match_failed" });
+      return;
+    }
+    for (const player of this.players.values()) player.alive = true;
+    this.sendToPlayers({ type: "countdown_cancelled", players: Array.from(this.players.values()) });
+  }
+
   private startCountdown() {
     this.phase = "countdown";
     this.seed = Math.floor(Math.random() * 2147483647);
@@ -369,6 +447,7 @@ export class MultiplayerServer extends Server {
     });
 
     this.countdownTimer = setTimeout(() => {
+      this.countdownTimer = null;
       this.phase = "racing";
       this.sendToPlayers({ type: "race_start" });
       this.startStaleCheck();
@@ -382,6 +461,8 @@ export class MultiplayerServer extends Server {
     for (const id of this.players.keys()) {
       this.lastUpdateAt.set(id, raceStart);
       this.scoreGuards.set(id, new ScoreGuard(raceStart));
+      this.snapshotLimits.set(id, new TokenBucket(SNAPSHOT_RATE_PER_SEC, SNAPSHOT_BURST, raceStart));
+      this.snapshotClocks.set(id, new SnapshotClock());
     }
 
     this.staleCheckTimer = setInterval(() => {
@@ -403,6 +484,8 @@ export class MultiplayerServer extends Server {
     }
     this.lastUpdateAt.clear();
     this.scoreGuards.clear();
+    this.snapshotLimits.clear();
+    this.snapshotClocks.clear();
   }
 
   private checkFinishCondition() {
@@ -436,6 +519,19 @@ export class MultiplayerServer extends Server {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * Whether this socket is the one that joined as `conn.id`. Every handler but join keys on
+   * the connection id, so this is what ties a message (or a close) to the right player.
+   */
+  private isPlayerSocket(conn: Connection): boolean {
+    return this.connections.get(conn.id) === conn;
+  }
+
+  /** Open sockets that haven't joined as a player. */
+  private pendingSocketCount(): number {
+    return Array.from(this.getConnections()).length - this.connections.size;
+  }
 
   /** Tells a client why it can't join; the client shows the message and drops the socket. */
   private rejectJoin(sender: Connection, message: string) {

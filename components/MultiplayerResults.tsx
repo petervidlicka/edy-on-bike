@@ -2,6 +2,10 @@
 
 /** End-of-race rankings, with Play Again (same room) and Leave. */
 import type { RankingEntry, MAX_PLAYERS } from "@/game/multiplayer/protocol";
+import { GlassPanel } from "./ui/GlassPanel";
+import { ScreenTitle } from "./ui/ScreenTitle";
+import { GlassButton } from "./ui/GlassButton";
+import { color, font, formatScore } from "./ui/tokens";
 
 interface MultiplayerResultsProps {
   rankings: RankingEntry[];
@@ -10,26 +14,8 @@ interface MultiplayerResultsProps {
   onLeave: () => void;
 }
 
-const glassBtn: React.CSSProperties = {
-  background: "rgba(255,255,255,0.22)",
-  backdropFilter: "blur(24px) saturate(200%)",
-  WebkitBackdropFilter: "blur(24px) saturate(200%)",
-  border: "1.5px solid rgba(255,255,255,0.55)",
-  borderRadius: "18px",
-  padding: "0.65rem 2.25rem",
-  boxShadow:
-    "0 2px 20px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
-  color: "#1e293b",
-  fontSize: "1rem",
-  fontWeight: 700,
-  letterSpacing: "0.06em",
-  textAlign: "center",
-  cursor: "pointer",
-  fontFamily: "var(--font-nunito), Arial, sans-serif",
-};
-
-/** One label per finishing place; sized to the room limit so a bigger room fails to compile until it's extended. */
-const MEDAL_LABELS = ["\u{1F947}", "\u{1F948}", "\u{1F949}", "4th"] as const satisfies { length: typeof MAX_PLAYERS };
+/** Medal colour per finishing place (null = no medal); sized to the room limit so a bigger room fails to compile until it's extended. */
+const MEDAL_COLORS = [color.gold, "#cbd5e1", "#d6a26a", null] as const satisfies { length: typeof MAX_PLAYERS };
 
 /** Rankings come from the server, so every player sees the same order and scores. */
 export default function MultiplayerResults({
@@ -44,110 +30,82 @@ export default function MultiplayerResults({
         position: "fixed",
         inset: 0,
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: "1.25rem",
-        fontFamily: "var(--font-nunito), Arial, sans-serif",
-        padding: "1rem",
+        fontFamily: font.ui,
+        padding: "8px",
       }}
     >
-      <h2
-        style={{
-          color: "#27435E",
-          fontSize: "2.2rem",
-          fontFamily: "var(--font-fredoka), sans-serif",
-          fontWeight: 600,
-          margin: 0,
-          letterSpacing: "0.04em",
-          textShadow: "0 2px 6px rgba(255,255,255,0.4)",
-        }}
-      >
-        RACE RESULTS
-      </h2>
+      <GlassPanel>
+        <ScreenTitle>Race Results</ScreenTitle>
 
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.5rem",
-          width: "100%",
-          maxWidth: "360px",
-        }}
-      >
-        {rankings.map((entry, idx) => {
-          const isLocal = entry.playerId === localPlayerId;
-          return (
-            <div
-              key={entry.playerId}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.75rem",
-                padding: "0.65rem 1rem",
-                borderRadius: "14px",
-                background: isLocal
-                  ? "rgba(255,255,255,0.35)"
-                  : "rgba(255,255,255,0.22)",
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-                border: isLocal
-                  ? "2px solid rgba(251,191,36,0.6)"
-                  : "1px solid rgba(255,255,255,0.4)",
-                boxShadow: isLocal
-                  ? "0 0 16px rgba(251,191,36,0.2)"
-                  : "none",
-              }}
-            >
-              {/* Rank medal */}
-              <span
+        <ol
+          style={{
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px",
+            width: "min(360px, 80vw)",
+          }}
+        >
+          {rankings.map((entry, idx) => {
+            const isLocal = entry.playerId === localPlayerId;
+            const medal = MEDAL_COLORS[idx] ?? null;
+            return (
+              <li
+                key={entry.playerId}
                 style={{
-                  fontSize: idx < 3 ? "1.5rem" : "1rem",
-                  width: "2rem",
-                  textAlign: "center",
-                  color: idx >= 3 ? "#94a3b8" : undefined,
-                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  padding: "6px 12px",
+                  borderRadius: "12px",
+                  color: isLocal ? color.white : color.ink,
+                  background: isLocal ? color.navy : "rgba(255,255,255,0.7)",
                 }}
               >
-                {MEDAL_LABELS[idx] ?? `${idx + 1}th`}
-              </span>
+                <span
+                  aria-label={`Place ${idx + 1}`}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    flexShrink: 0,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontFamily: font.mono,
+                    fontSize: "0.85rem",
+                    fontWeight: 700,
+                    // Medal discs always carry ink text; unmedalled places just show the number
+                    color: medal ? color.ink : "inherit",
+                    background: medal ?? "transparent",
+                    boxShadow: medal ? "inset 0 -2px 0 rgba(0,0,0,0.15)" : "none",
+                  }}
+                >
+                  {idx + 1}
+                </span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: "1rem", fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {entry.name}
+                  {isLocal && <span style={{ fontWeight: 600, opacity: 0.85 }}> (you)</span>}
+                </span>
+                <span style={{ fontFamily: font.mono, fontSize: "1rem", fontWeight: 700 }}>{formatScore(entry.score)}</span>
+              </li>
+            );
+          })}
+        </ol>
 
-              {/* Player name */}
-              <span
-                style={{
-                  flex: 1,
-                  fontSize: "1rem",
-                  fontWeight: isLocal ? 700 : 600,
-                  color: "#334155",
-                }}
-              >
-                {entry.name}
-              </span>
-
-              {/* Score */}
-              <span
-                style={{
-                  fontSize: "1rem",
-                  fontWeight: 700,
-                  color: "#27435E",
-                  fontFamily: "monospace",
-                }}
-              >
-                {entry.score}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
-        <button onClick={onPlayAgain} style={glassBtn}>
-          PLAY AGAIN
-        </button>
-        <button onClick={onLeave} style={glassBtn}>
-          LEAVE
-        </button>
-      </div>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <GlassButton variant="quiet" onClick={onLeave}>
+            Leave
+          </GlassButton>
+          <GlassButton variant="primary" onClick={onPlayAgain}>
+            Play again
+          </GlassButton>
+        </div>
+      </GlassPanel>
     </div>
   );
 }

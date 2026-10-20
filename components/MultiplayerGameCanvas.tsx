@@ -12,7 +12,12 @@ import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
 import { SeededRNG } from "@/game/multiplayer/SeededRNG";
 import { PlayerInfo } from "@/game/multiplayer/protocol";
 import { useHapticFeedback } from "@/hooks/useHapticFeedback";
-import { AudioControls, TrickFeedbackPopup, TrickDpad, btnStyle } from "./HUD";
+import { AudioControls, TrickFeedbackPopup, TrickDpad } from "./HUD";
+import { GlassButton } from "./ui/GlassButton";
+import { GlassPanel } from "./ui/GlassPanel";
+import { HudChip } from "./ui/HudChip";
+import { ScreenTitle } from "./ui/ScreenTitle";
+import { badge, color, font, formatScore, glassSurfaceSmall, radius, text } from "./ui/tokens";
 import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
 import { useGameEngine } from "@/hooks/useGameEngine";
 import { useEngineInput } from "@/hooks/useEngineInput";
@@ -120,20 +125,13 @@ export default function MultiplayerGameCanvas({
         vibrationOn={vibrationOn}
         onToggleVibration={toggleVibration}
       >
-        <button
-          onClick={onLeave}
-          title="Leave race"
-          style={{
-            ...btnStyle,
-            lineHeight: 1,
-            fontSize: "0.75rem",
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            fontFamily: "var(--font-nunito), Arial, sans-serif",
-          }}
-        >
-          LEAVE
-        </button>
+        <GlassButton variant="icon" onClick={onLeave} title="Leave race" aria-label="Leave race">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </GlassButton>
       </AudioControls>
 
       {/* Waiting overlay — local rider crashed, race still running for others */}
@@ -149,44 +147,14 @@ export default function MultiplayerGameCanvas({
             pointerEvents: "none",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "0.6rem",
-              padding: "1rem 1.5rem",
-              borderRadius: "18px",
-              background: "rgba(0,0,0,0.35)",
-              backdropFilter: "blur(8px)",
-              WebkitBackdropFilter: "blur(8px)",
-              color: "#fff",
-              fontFamily: "var(--font-nunito), Arial, sans-serif",
-              textAlign: "center",
-              pointerEvents: "auto",
-            }}
-          >
-            <span style={{ fontSize: "1.4rem", fontWeight: 800, fontFamily: "var(--font-fredoka), sans-serif" }}>
-              You crashed! {score}
-            </span>
-            <span style={{ fontSize: "0.85rem", fontWeight: 600, opacity: 0.85 }}>
-              Waiting for the others to finish…
-            </span>
-            <button
-              onClick={onLeave}
-              style={{
-                ...btnStyle,
-                lineHeight: 1,
-                padding: "0.5rem 1.5rem",
-                fontSize: "0.85rem",
-                fontWeight: 700,
-                letterSpacing: "0.06em",
-                fontFamily: "var(--font-nunito), Arial, sans-serif",
-              }}
-            >
-              LEAVE
-            </button>
-          </div>
+          <GlassPanel style={{ pointerEvents: "auto", fontFamily: font.ui }}>
+            <ScreenTitle>You Crashed</ScreenTitle>
+            <span style={text.numberXl}>{formatScore(score)}</span>
+            <p style={{ ...text.body, fontSize: "0.875rem" }}>Waiting for the others to finish…</p>
+            <GlassButton variant="quiet" onClick={onLeave}>
+              Leave race
+            </GlassButton>
+          </GlassPanel>
         </div>
       )}
 
@@ -224,53 +192,62 @@ export default function MultiplayerGameCanvas({
           <div
             style={{
               position: "fixed",
-              top: "0.75rem",
-              right: "0.75rem",
+              top: "1rem",
+              right: "1.5rem",
               display: "flex",
               flexDirection: "column",
-              gap: "0.25rem",
+              alignItems: "flex-end",
+              gap: "0.5rem",
               zIndex: 50,
-              background: "rgba(0,0,0,0.35)",
-              backdropFilter: "blur(8px)",
-              WebkitBackdropFilter: "blur(8px)",
-              borderRadius: "12px",
-              padding: "0.5rem 0.75rem",
-              minWidth: "140px",
+              pointerEvents: "none",
             }}
           >
-            {playerStandings.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "0.75rem",
-                  fontSize: "0.78rem",
-                  fontFamily: "var(--font-nunito), Arial, sans-serif",
-                  fontWeight: p.id === localPlayerId ? 700 : 600,
-                  color: p.id === localPlayerId ? "#fbbf24" : "#e2e8f0",
-                  textDecoration: !p.alive ? "line-through" : "none",
-                  opacity: !p.alive ? 0.6 : 1,
-                }}
-              >
-                <span>{p.name}</span>
-                <span>{p.score}</span>
-              </div>
-            ))}
-            <div
+            <HudChip score={score} multiplier={multiplier} />
+            <TrickFeedbackPopup trickFeedback={trickFeedback} />
+            <ol
+              aria-label="Standings"
               style={{
-                borderTop: "1px solid rgba(255,255,255,0.15)",
-                paddingTop: "0.25rem",
-                marginTop: "0.1rem",
-                fontSize: "0.72rem",
-                fontFamily: "var(--font-space-mono), monospace",
-                color: "#94a3b8",
-                textAlign: "right",
+                ...glassSurfaceSmall,
+                margin: 0,
+                padding: "6px",
+                listStyle: "none",
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px",
+                width: "200px",
+                borderRadius: radius.md,
+                fontFamily: font.ui,
               }}
             >
-              &times;{multiplier}
-            </div>
-            <TrickFeedbackPopup trickFeedback={trickFeedback} />
+              {playerStandings.map((p, i) => {
+                const mine = p.id === localPlayerId;
+                return (
+                  <li
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "4px 10px",
+                      borderRadius: radius.sm,
+                      color: mine ? color.white : p.alive ? color.ink : color.muted,
+                      background: mine ? color.navy : "rgba(255,255,255,0.6)",
+                    }}
+                  >
+                    <span style={{ width: 14, fontFamily: font.mono, fontSize: "0.75rem", fontWeight: 700 }}>{i + 1}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: "0.8rem", fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {p.name}
+                    </span>
+                    {!p.alive && (
+                      <span style={{ ...badge, padding: "1px 6px", fontSize: "0.65rem", color: mine ? color.white : color.muted, background: mine ? "rgba(255,255,255,0.2)" : "rgba(30,41,59,0.08)" }}>
+                        OUT
+                      </span>
+                    )}
+                    <span style={{ fontFamily: font.mono, fontSize: "0.8rem", fontWeight: 700 }}>{formatScore(p.score)}</span>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
 
           <TrickDpad

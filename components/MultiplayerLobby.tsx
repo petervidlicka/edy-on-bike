@@ -5,7 +5,9 @@
  * skin (same unlocks as single-player), then wait for everyone to ready up.
  */
 import { useState, useCallback, useEffect } from "react";
-import { MAX_NAME_LENGTH } from "@/game/multiplayer/protocol";
+import {
+  FRIEND_CODE_LENGTH, MAX_NAME_LENGTH, ROOM_CODE_CHARS, isFriendRoomCode,
+} from "@/game/multiplayer/protocol";
 import type { PlayerInfo } from "@/game/multiplayer/protocol";
 import { SkinId } from "@/game/types";
 import SkinPicker from "@/components/SkinPicker";
@@ -43,6 +45,17 @@ interface MultiplayerLobbyProps {
 
 /** How long "Copied" / "Can't copy" shows before the button reads "Copy code" again. */
 const COPY_FEEDBACK_MS = 2000;
+
+/**
+ * Uppercases typed or pasted text and keeps only characters that can appear in a room
+ * code, so stray symbols can't reach the socket URL and look-alikes (O/0, I/1) never match.
+ */
+function toRoomCodeInput(raw: string): string {
+  return Array.from(raw.toUpperCase())
+    .filter((ch) => ROOM_CODE_CHARS.includes(ch))
+    .join("")
+    .slice(0, FRIEND_CODE_LENGTH);
+}
 
 /** Lays out a labelled field: caps label above its control. */
 const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
@@ -82,7 +95,7 @@ export default function MultiplayerLobby({
   const isReady = localPlayer?.ready ?? false;
 
   const canStart = !!name.trim() && !connecting;
-  const canJoin = canStart && joinCode.length === 4;
+  const canJoin = canStart && isFriendRoomCode(joinCode);
 
   // Same guards as the buttons' disabled state, so Enter can't send a second request mid-connect
   const handleQuickPlay = useCallback(() => {
@@ -265,11 +278,11 @@ export default function MultiplayerLobby({
                 type="text"
                 placeholder="ABCD"
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
+                onChange={(e) => setJoinCode(toRoomCodeInput(e.target.value))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleJoin();
                 }}
-                maxLength={4}
+                maxLength={FRIEND_CODE_LENGTH}
                 autoCapitalize="characters"
                 autoComplete="off"
                 style={{

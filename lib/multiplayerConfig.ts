@@ -28,7 +28,7 @@ const LOCAL_HOST =
  * @example roomUrl("192.168.0.5:8787", "AB12") // "ws://192.168.0.5:8787/parties/race/AB12"
  */
 export function roomUrl(host: string, roomCode: string): string {
-  return `${socketProtocol(host)}://${host}/parties/race/${roomCode}`;
+  return `${socketProtocol(host)}://${host}/parties/race/${encodeURIComponent(roomCode)}`;
 }
 
 /**

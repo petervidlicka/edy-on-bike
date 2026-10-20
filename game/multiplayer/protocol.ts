@@ -36,6 +36,50 @@ export const QUICK_PLAY_GRACE_MS = 5_000;
  */
 export const QUICK_PLAY_CODE_PREFIX = "Q";
 
+// ── Room codes ──
+
+/** Alphabet of every room code: no I/O/0/1, so codes read back unambiguously. */
+export const ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/** Length of the codes friends type to join a room. */
+export const FRIEND_CODE_LENGTH = 4;
+
+/** Random characters after QUICK_PLAY_CODE_PREFIX in a matchmade room code. */
+export const QUICK_PLAY_CODE_RANDOM_LENGTH = 5;
+
+/**
+ * Picks a random room code from ROOM_CODE_CHARS.
+ * @param length - Number of random characters.
+ * @param prefix - Fixed start, e.g. QUICK_PLAY_CODE_PREFIX.
+ * @example randomRoomCode(FRIEND_CODE_LENGTH) // "K7XM"
+ */
+export function randomRoomCode(length: number, prefix = ""): string {
+  let code = prefix;
+  for (let i = 0; i < length; i++) {
+    code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+  }
+  return code;
+}
+
+const ROOM_CODE_CLASS = `[${ROOM_CODE_CHARS}]`;
+const FRIEND_CODE_PATTERN = new RegExp(`^${ROOM_CODE_CLASS}{${FRIEND_CODE_LENGTH}}$`);
+const QUICK_PLAY_CODE_PATTERN = new RegExp(
+  `^${QUICK_PLAY_CODE_PREFIX}${ROOM_CODE_CLASS}{${QUICK_PLAY_CODE_RANDOM_LENGTH}}$`,
+);
+
+/**
+ * Whether a code has the shape of a typed friend-room code. The server only hosts friend
+ * rooms on these, so a matchmade code can never be opened as a friend room (or vice versa).
+ */
+export function isFriendRoomCode(code: string): boolean {
+  return FRIEND_CODE_PATTERN.test(code);
+}
+
+/** Whether a code has the shape the matchmaker hands out (see QUICK_PLAY_CODE_PREFIX). */
+export function isQuickPlayCode(code: string): boolean {
+  return QUICK_PLAY_CODE_PATTERN.test(code);
+}
+
 // ── Ghost snapshot — minimal state sent at ~15 Hz per player ──
 
 export interface GhostSnapshot {
@@ -139,6 +183,8 @@ export type ServerMessage =
       type: "countdown_start";
       seed: number;
     }
+  /** A player left during the countdown and too few remain: back to the lobby with this roster. */
+  | { type: "countdown_cancelled"; players: PlayerInfo[] }
   | { type: "race_start" }
   | {
       type: "ghost_update";
@@ -158,7 +204,11 @@ export type ServerMessage =
   | { type: "room_reset"; players: PlayerInfo[] }
   /** Quick-play room: the match fell through or went ahead without this rider, so the client re-queues. */
   | { type: "match_failed" }
-  | { type: "error"; message: string };
+  /**
+   * Join refused; `message` is shown to the player. `reason: "room_taken"` means a freshly
+   * generated code was already in use, so the client quietly retries with a new one.
+   */
+  | { type: "error"; message: string; reason?: "room_taken" };
 
 // ── Matchmaker (quick play) — a separate socket from the room ──
 

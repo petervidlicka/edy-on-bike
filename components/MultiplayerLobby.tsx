@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * Multiplayer lobby: create/join a room by code, pick a skin (same unlocks as
- * single-player), then wait for everyone to ready up.
+ * Multiplayer lobby: quick play (matchmaking) or create/join a room by code, pick a
+ * skin (same unlocks as single-player), then wait for everyone to ready up.
  */
 import { useState, useCallback, useEffect } from "react";
 import { MAX_NAME_LENGTH } from "@/game/multiplayer/protocol";
 import type { PlayerInfo } from "@/game/multiplayer/protocol";
 import { SkinId } from "@/game/types";
 import SkinPicker from "@/components/SkinPicker";
+import { QuickPlayWaiting } from "@/components/QuickPlayWaiting";
+import type { QuickPlayQueue } from "@/hooks/useMultiplayerRoom";
 import { useSavedSkinState } from "@/hooks/useSavedSkinState";
 import { useSavedPlayerName } from "@/hooks/useSavedPlayerName";
 import { savePlayerName } from "@/game/storage";
@@ -27,6 +29,12 @@ interface MultiplayerLobbyProps {
   error?: string | null;
   /** Waiting for the server to accept a create/join — buttons stay disabled until it answers. */
   connecting?: boolean;
+  /** Matchmade room — there's no code worth sharing. */
+  quickPlay?: boolean;
+  /** Set while searching for a quick-play match. */
+  queue?: QuickPlayQueue | null;
+  onQuickPlay: (name: string, skinId: SkinId) => void;
+  onCancelQuickPlay: () => void;
   onCreateRoom: (name: string, skinId: SkinId) => void;
   onJoinRoom: (code: string, name: string, skinId: SkinId) => void;
   onReady: () => void;
@@ -39,7 +47,6 @@ const COPY_FEEDBACK_MS = 2000;
 /** Lays out a labelled field: caps label above its control. */
 const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
 
-
 /**
  * Shows create/join until the server confirms a room, then the room's rider
  * list with Ready / Leave.
@@ -50,6 +57,10 @@ export default function MultiplayerLobby({
   players,
   error,
   connecting = false,
+  quickPlay = false,
+  queue = null,
+  onQuickPlay,
+  onCancelQuickPlay,
   onCreateRoom,
   onJoinRoom,
   onReady,
@@ -74,6 +85,12 @@ export default function MultiplayerLobby({
   const canJoin = canStart && joinCode.length === 4;
 
   // Same guards as the buttons' disabled state, so Enter can't send a second request mid-connect
+  const handleQuickPlay = useCallback(() => {
+    if (!canStart) return;
+    savePlayerName(name.trim());
+    onQuickPlay(name.trim(), selectedSkinId);
+  }, [canStart, name, selectedSkinId, onQuickPlay]);
+
   const handleCreate = useCallback(() => {
     if (!canStart) return;
     savePlayerName(name.trim());
@@ -119,26 +136,37 @@ export default function MultiplayerLobby({
     padding: "8px",
   };
 
+  if (queue && !roomCode) {
+    return <QuickPlayWaiting queue={queue} onRideSolo={onLeave} onCancel={onCancelQuickPlay} />;
+  }
+
   // --- Room view (has room code) ---
   if (roomCode) {
     const readyCount = players.filter((p) => p.ready).length;
+    const everyoneReady = players.length >= 2 && readyCount === players.length;
     return (
       <div style={overlay}>
         <GlassPanel style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", justifyContent: "center", gap: "clamp(16px, 4vw, 32px)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 240 }}>
-            <ScreenTitle>Race Room</ScreenTitle>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "12px 16px", borderRadius: radius.md, background: "rgba(255,255,255,0.7)" }}>
-              <span style={text.label}>Room code</span>
-              <span style={{ ...text.numberXl, letterSpacing: "0.15em" }}>{roomCode}</span>
-              <GlassButton variant="quiet" onClick={handleCopy} style={{ alignSelf: "flex-start", padding: "0 4px" }}>
-                <CopyIcon />
-                {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Can't copy" : "Copy code"}
-              </GlassButton>
-            </div>
+            <ScreenTitle>{quickPlay ? "Quick Play" : "Race Room"}</ScreenTitle>
+            {!quickPlay && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "12px 16px", borderRadius: radius.md, background: "rgba(255,255,255,0.7)" }}>
+                <span style={text.label}>Room code</span>
+                <span style={{ ...text.numberXl, letterSpacing: "0.15em" }}>{roomCode}</span>
+                <GlassButton variant="quiet" onClick={handleCopy} style={{ alignSelf: "flex-start", padding: "0 4px" }}>
+                  <CopyIcon />
+                  {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Can't copy" : "Copy code"}
+                </GlassButton>
+              </div>
+            )}
             <p style={{ ...text.body, fontSize: "0.875rem" }}>
               {players.length < 2
-                ? "Share the code with friends to race them."
-                : "The race starts when everyone is ready."}
+                ? quickPlay
+                  ? "Waiting for the other riders…"
+                  : "Share the code with friends to race them."
+                : everyoneReady
+                  ? "Starting…"
+                  : "The race starts when everyone is ready."}
             </p>
           </div>
 
@@ -190,7 +218,7 @@ export default function MultiplayerLobby({
       <GlassPanel style={{ alignItems: "stretch", width: "min(760px, 100%)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <ScreenTitle>Multiplayer</ScreenTitle>
-          <GlassButton variant="quiet" onClick={onLeave}>Back</GlassButton>
+          <GlassButton variant="quiet" onClick={onLeave} aria-label="Back to single player">Back</GlassButton>
         </div>
 
         <div style={fieldStyle}>
@@ -203,9 +231,9 @@ export default function MultiplayerLobby({
           />
         </div>
 
-        {/* Name, then the two ways in, read left to right; wraps to a column on narrow screens */}
+        {/* Name, then the ways in (quick play first, it's the default), read left to right; wraps on narrow screens */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-end" }}>
-          <div style={{ ...fieldStyle, flex: "1 1 180px" }}>
+          <div style={{ ...fieldStyle, flex: "1 1 160px" }}>
             <label htmlFor="mp-name" style={text.label}>Your name</label>
             <input
               id="mp-name"
@@ -217,9 +245,15 @@ export default function MultiplayerLobby({
               style={input}
             />
           </div>
-          <div style={{ ...fieldStyle, flex: "1 1 150px" }}>
+          <div style={{ ...fieldStyle, flex: "1 1 140px" }}>
+            <span style={text.label}>Race anyone</span>
+            <GlassButton variant="primary" onClick={handleQuickPlay} disabled={!canStart}>
+              Quick play
+            </GlassButton>
+          </div>
+          <div style={{ ...fieldStyle, flex: "1 1 140px" }}>
             <span style={text.label}>Host a race</span>
-            <GlassButton variant="primary" onClick={handleCreate} disabled={!canStart}>
+            <GlassButton variant="secondary" onClick={handleCreate} disabled={!canStart}>
               Create room
             </GlassButton>
           </div>

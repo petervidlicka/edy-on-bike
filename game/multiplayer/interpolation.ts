@@ -99,5 +99,6 @@ function lerpSnapshot(a: GhostSnapshot, b: GhostSnapshot, t: number): GhostSnaps
     at: t < 0.5 ? a.at : b.at,
     tp: lerpNum(a.tp, b.tp, t),
     s: Math.round(lerpNum(a.s, b.s, t)),
+    x: a.x !== undefined && b.x !== undefined ? lerpNum(a.x, b.x, t) : b.x,
   };
 }

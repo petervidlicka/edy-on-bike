@@ -43,7 +43,6 @@ export function updateAmbulanceLogic(
   amb: AmbulanceState,
   dt: number,
   rawDt: number,
-  canvasW: number,
 ): AmbulanceAction {
   amb.phaseTimer += rawDt;
   amb.sirenFlash += rawDt;
@@ -81,8 +80,9 @@ export function updateAmbulanceLogic(
       break;
 
     case AmbulancePhase.DRIVING_OUT:
-      amb.x += AMBULANCE_DRIVE_OUT_SPEED * dt;
-      if (amb.x > canvasW + 20) {
+      // Keeps driving the way it came (leftwards, behind the rider) rather than U-turning.
+      amb.x -= AMBULANCE_DRIVE_OUT_SPEED * dt;
+      if (amb.x + amb.width < -20) {
         return AmbulanceAction.REMOVE;
       }
       break;

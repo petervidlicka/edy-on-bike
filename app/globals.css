@@ -84,3 +84,8 @@ a:focus-visible {
   outline: 3px solid #27435e;
   outline-offset: 2px;
 }
+
+/* Quick-play waiting spinner (components/QuickPlayWaiting.tsx) */
+@keyframes quickplay-spin {
+  to { transform: rotate(360deg); }
+}

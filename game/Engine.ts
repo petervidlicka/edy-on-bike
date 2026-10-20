@@ -408,7 +408,7 @@ export class Engine {
 
     this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
 
-    const action = updateAmbulanceLogic(this.ambulance, dt, rawDt, this.canvasW);
+    const action = updateAmbulanceLogic(this.ambulance, dt, rawDt);
 
     if (action === AmbulanceAction.STOP_SIREN) {
       this.sound.stopSiren();
@@ -507,6 +507,9 @@ export class Engine {
       && this.ambulance
       && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
 
+    // The ambulance sits in the far lane: drawn behind the rider so it can drive out past them.
+    if (this.ambulance) drawAmbulance(ctx, this.ambulance);
+
     if (crashing || ambulancePreRevive || this.state === GameState.GAME_OVER) {
       drawCrashBike(ctx, this.crashState, this.skin);
       drawCrashRider(ctx, this.crashState, this.skin);
@@ -515,7 +518,6 @@ export class Engine {
     }
 
     if (this.ambulance) {
-      drawAmbulance(ctx, this.ambulance);
       if (this.ambulance.reviveFlashOpacity > 0) {
         drawReviveFlash(ctx, this.ambulance.reviveFlashOpacity, canvasW, canvasH);
       }

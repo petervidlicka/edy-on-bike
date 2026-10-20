@@ -60,6 +60,18 @@ const inputStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
+/** Pinned top-left so leaving multiplayer never depends on scrolling. */
+const backBtn: React.CSSProperties = {
+  ...glassBtn,
+  position: "fixed",
+  top: "max(0.75rem, env(safe-area-inset-top))",
+  left: "max(0.75rem, env(safe-area-inset-left))",
+  padding: "0.45rem 1rem",
+  fontSize: "0.85rem",
+  borderRadius: "14px",
+  zIndex: 1,
+};
+
 /**
  * Shows create/join until the server confirms a room, then the room's player
  * list with READY/LEAVE.
@@ -115,7 +127,8 @@ export default function MultiplayerLobby({
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
+          justifyContent: "safe center",
+          overflowY: "auto",
           gap: "1rem",
           fontFamily: "var(--font-nunito), Arial, sans-serif",
           padding: "1rem",
@@ -253,12 +266,18 @@ export default function MultiplayerLobby({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
+        // "safe" keeps the top reachable when the content is taller than a landscape phone
+        justifyContent: "safe center",
+        overflowY: "auto",
         gap: "0.75rem",
         fontFamily: "var(--font-nunito), Arial, sans-serif",
         padding: "1rem",
       }}
     >
+      <button onClick={onLeave} aria-label="Back to single player" style={backBtn}>
+        ← BACK
+      </button>
+
       <h2
         style={{
           color: "#27435E",

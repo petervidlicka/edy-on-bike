@@ -27,6 +27,16 @@ const AMBULANCE_SHAPE: VehicleShape = {
  * that alternate while the siren runs.
  */
 export function drawAmbulance(ctx: CanvasRenderingContext2D, amb: AmbulanceState) {
+  // Authored facing right, but it arrives from the right and leaves to the left, so
+  // mirror it to keep the cab pointing the way it drives.
+  ctx.save();
+  ctx.translate(2 * amb.x + amb.width, 0);
+  ctx.scale(-1, 1);
+  drawAmbulanceArt(ctx, amb);
+  ctx.restore();
+}
+
+function drawAmbulanceArt(ctx: CanvasRenderingContext2D, amb: AmbulanceState) {
   const { x, y, width: w, height: h } = amb;
 
   drawVehicle(ctx, x, y, w, h, AMBULANCE_COLORS, AMBULANCE_SHAPE, {

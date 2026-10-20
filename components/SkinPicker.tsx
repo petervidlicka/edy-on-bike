@@ -133,6 +133,8 @@ export default function SkinPicker({
         overflowX: "auto",
         padding: "0.6rem 0.3rem",
         maxWidth: "min(90vw, 672px)",
+        // A horizontal scroller also clips vertically, so never let a cramped flex column squash it
+        flexShrink: 0,
         pointerEvents: "auto",
         WebkitOverflowScrolling: "touch",
       }}

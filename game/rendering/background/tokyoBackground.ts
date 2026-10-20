@@ -10,18 +10,13 @@
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
+import { glow, hash01 } from "../obstacles/drawHelpers";
 
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
 const NEON = ["#ff3d8b", "#3de8ff", "#ffd23d", "#5dff7a", "#b45dff", "#ff5a3d", "#ff9a3d"];
 const SIGN_TEXTS = ["ラーメン", "寿司", "居酒屋", "カラオケ", "ホテル", "焼鳥", "喫茶", "ゲーム", "東京", "酒場", "薬"];
 const BILLBOARD_TEXTS = ["TOKYO", "カラオケ", "NEON", "ゲーム", "24H"];
-
-/** Deterministic 0..1 noise for a seed and a couple of indices. */
-function hash01(a: number, b = 0, c = 0): number {
-  const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453;
-  return s - Math.floor(s);
-}
 
 // --- Cached neon signs ---
 
@@ -94,20 +89,6 @@ function drawNeonSign(ctx: CanvasRenderingContext2D, x: number, y: number, text:
   ctx.drawImage(sign, x - glowPad, y - glowPad, sign.width / SIGN_SCALE, sign.height / SIGN_SCALE);
 }
 
-/** Soft round glow without shadowBlur. */
-function glow(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string, alpha: number) {
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  g.addColorStop(0, color);
-  g.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
 /** Blinking red aviation light on a rooftop or mast. */
 function aviationLight(ctx: CanvasRenderingContext2D, x: number, y: number, seed: number) {
   const on = Math.floor(performance.now() / 700 + seed) % 2 === 0;
@@ -128,6 +109,8 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBound
   const t = performance.now() / 1000;
   const viewW = view.right - view.left;
   const skyTop = Math.min(0, view.top);
+  // Fade alpha set by drawBackground across a biome transition; every opacity here scales it
+  const fade = ctx.globalAlpha;
 
   // Stars in the upper sky, spread over the whole view (it widens when the camera zooms out).
   ctx.fillStyle = "#ffffff";
@@ -135,10 +118,10 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBound
   for (let i = 0; i < starCount; i++) {
     const sx = view.left + hash01(i, 1) * viewW;
     const sy = skyTop + hash01(i, 2) * (groundY * 0.45 - skyTop);
-    ctx.globalAlpha = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * (1 + hash01(i, 3) * 2) + i));
+    ctx.globalAlpha = fade * (0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * (1 + hash01(i, 3) * 2) + i)));
     ctx.fillRect(sx, sy, hash01(i, 4) < 0.15 ? 1.6 : 1, hash01(i, 4) < 0.15 ? 1.6 : 1);
   }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = fade;
 
   // Moon with a soft halo.
   const mx = view.left + viewW * 0.82;
@@ -200,10 +183,10 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBound
     ctx.fillStyle = "#ffd890";
     for (let k = 0; k < 6; k++) {
       if (hash01(i, k, 9) > 0.5) continue;
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = fade * 0.5;
       ctx.fillRect(bx + 3 + hash01(i, k, 11) * (blockW - 6), baseY - bh + 4 + hash01(i, k, 13) * (bh - 8), 1.4, 1.4);
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = fade;
   }
 }
 
@@ -215,6 +198,8 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBound
  */
 export function drawNeonReflections(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, offset: number) {
   const cell = 46;
+  // Fade alpha set by drawBackground across a biome transition; every opacity here scales it
+  const fade = ctx.globalAlpha;
   // Road offset accumulates at 0.6 of world speed; buildings scroll at 0.4
   const off = offset * (0.4 / 0.6);
   const first = Math.floor((off + view.left) / cell) - 1;
@@ -228,16 +213,16 @@ export function drawNeonReflections(ctx: CanvasRenderingContext2D, view: ViewBou
     const g = ctx.createLinearGradient(0, groundY, 0, groundY + len);
     g.addColorStop(0, color);
     g.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = fade * 0.35;
     ctx.fillStyle = g;
     ctx.fillRect(rx, groundY, 3 + hash01(i, 25) * 5, len);
   }
   // White shimmer streaks along the wet surface.
-  ctx.globalAlpha = 0.18;
+  ctx.globalAlpha = fade * 0.18;
   ctx.fillStyle = "#ffffff";
   const sheen = offset % 90;
   for (let sx = Math.floor(view.left / 90) * 90 - sheen; sx < view.right; sx += 90) ctx.fillRect(sx, groundY + 15, 26, 1);
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = fade;
 }
 
 // --- Neon building ---

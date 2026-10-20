@@ -1,6 +1,7 @@
 /**
- * Small canvas helpers shared by the biome obstacle renderers (Austria, Tokyo): box
- * mapping, polygons, rounded boxes, contact shadows and round-capped strokes.
+ * Small canvas helpers shared by the biome obstacle and backdrop renderers (Austria,
+ * Tokyo): box mapping, polygons, rounded boxes, contact shadows, round-capped strokes,
+ * soft glows and deterministic noise.
  */
 /** A canvas point as [x, y]. */
 export type Pt = [number, number];
@@ -55,4 +56,34 @@ export function strokeLine(ctx: CanvasRenderingContext2D, pts: Pt[], color: stri
   ctx.moveTo(...pts[0]);
   for (const p of pts.slice(1)) ctx.lineTo(...p);
   ctx.stroke();
+}
+
+/**
+ * Soft round glow (lamps, screens, the moon) without shadowBlur, which is slow on phones.
+ * Scales the current globalAlpha rather than replacing it, so it fades along with
+ * whatever it is drawn into (e.g. a skyline across a biome transition).
+ * @param alpha - Opacity at the glow's centre, relative to the current globalAlpha.
+ */
+export function glow(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string, alpha = 0.35) {
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g.addColorStop(0, color);
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Deterministic 0..1 noise for a seed and a couple of indices, so procedural scenery
+ * (peaks, windows, signs) comes out the same every frame without storing it.
+ * @example
+ * const h = groundY * (0.12 + hash01(i, 7) * 0.2);
+ */
+export function hash01(a: number, b = 0, c = 0): number {
+  const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453;
+  return s - Math.floor(s);
 }

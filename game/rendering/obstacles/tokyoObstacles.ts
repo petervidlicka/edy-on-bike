@@ -7,24 +7,10 @@
  */
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
-import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine } from "./drawHelpers";
+import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow } from "./drawHelpers";
 
 /** Japanese-capable font stack for the little signs and labels. */
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
-
-/** Soft round glow (lamps, screens) without shadowBlur, which is slow on phones. */
-function glow(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string, alpha = 0.35) {
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  g.addColorStop(0, color);
-  g.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
 
 /** Headlight beam spilling forward onto the wet road. */
 function headlightBeam(ctx: CanvasRenderingContext2D, fromX: number, fromY: number, length: number, dir: 1 | -1) {

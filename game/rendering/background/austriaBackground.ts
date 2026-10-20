@@ -7,14 +7,14 @@ import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/ty
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
 import { drawRedDeer } from "../obstacles/austriaObstacles";
+import { hash01 as noise } from "../obstacles/drawHelpers";
 
 const SNOW = "#f6f9fc";
 const SNOW_SHADE = "#d4e0ec";
 
-/** Deterministic 0..1 noise per integer, so the mountain range is the same every frame. */
+/** Deterministic 0..1 noise per integer (the shared hash's b = 1 row), so the mountain range is the same every frame. */
 function hash01(n: number): number {
-  const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-  return s - Math.floor(s);
+  return noise(n, 1);
 }
 
 // --- Alpine range (skyline band) ---

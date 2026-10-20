@@ -1,7 +1,10 @@
 /**
- * Title, score, personal-best line and unlock progress shared by every game-over view.
+ * Title, score, personal-best badge and unlock progress shared by every game-over view.
  */
+import type { ReactNode } from "react";
 import { UnlockProgress } from "./UnlockProgress";
+import { ScreenTitle } from "./ui/ScreenTitle";
+import { badge, color, font, formatScore, text } from "./ui/tokens";
 
 interface GameOverHeaderProps {
   score: number;
@@ -9,49 +12,38 @@ interface GameOverHeaderProps {
   /** Best before this run, so the unlock bar can animate from it. */
   previousBest: number;
   cheatUnlocked: boolean;
+  /** Extra badge shown beside the personal-best one (e.g. "You made the top 10"). */
+  extraBadge?: ReactNode;
 }
 
 /**
- * @param props - The run's score, the saved best, and the pre-run best and cheat state for the unlock bar.
+ * @param props - The run's score, the saved best, the pre-run best and cheat state for the unlock bar, and an optional extra badge.
  * @example
  * <GameOverHeader score={420} bestScore={900} previousBest={800} cheatUnlocked={false} />
  */
-export function GameOverHeader({ score, bestScore, previousBest, cheatUnlocked }: GameOverHeaderProps) {
+export function GameOverHeader({ score, bestScore, previousBest, cheatUnlocked, extraBadge }: GameOverHeaderProps) {
   const isNewBest = score > 0 && score >= bestScore;
   return (
     <>
-      <h2
-        style={{
-          color: "#27435E",
-          fontSize: "clamp(1.8rem, 9vh, 2.5rem)",
-          lineHeight: 1.1,
-          fontFamily: "var(--font-fredoka), sans-serif",
-          fontWeight: 600,
-          margin: "0 0 clamp(0rem, 1vh, 0.5rem)",
-          letterSpacing: "0.08em",
-          textShadow: "0 2px 6px rgba(255,255,255,0.3)",
-        }}
-      >
-        GAME OVER
-      </h2>
+      <ScreenTitle>Game Over</ScreenTitle>
 
-      <p style={{ color: "#1e293b", margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>
-        Score: <strong>{score}</strong>
-      </p>
-
-      {isNewBest ? (
-        <p style={{ color: "#92400e", margin: 0, fontSize: "0.9rem", fontWeight: 700 }}>
-          🎉 New personal best!
-        </p>
-      ) : bestScore > 0 ? (
-        <p style={{ color: "#475569", margin: 0, fontSize: "0.9rem", fontWeight: 600 }}>
-          Your best: {bestScore}
-        </p>
-      ) : null}
-
-      <div style={{ marginTop: "0.3rem" }}>
-        <UnlockProgress bestScore={bestScore} cheatUnlocked={cheatUnlocked} animateFrom={previousBest} />
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+        <span style={text.label}>Score</span>
+        <span style={text.numberXl}>{formatScore(score)}</span>
       </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8 }}>
+        {isNewBest ? (
+          <span style={{ ...badge, background: color.warnBg, color: color.warnInk }}>New personal best</span>
+        ) : bestScore > 0 ? (
+          <span style={{ ...badge, background: "rgba(255,255,255,0.7)", color: color.body, fontWeight: 700 }}>
+            Best <span style={{ fontFamily: font.mono }}>{formatScore(bestScore)}</span>
+          </span>
+        ) : null}
+        {extraBadge}
+      </div>
+
+      <UnlockProgress bestScore={bestScore} cheatUnlocked={cheatUnlocked} animateFrom={previousBest} />
     </>
   );
 }

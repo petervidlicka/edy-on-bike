@@ -1,22 +1,49 @@
+/**
+ * Idle-state overlay: title, bike picker, unlock progress and the way into a run
+ * (Start button, Space, gamepad A or a tap on the scene) or into multiplayer.
+ */
 import Link from "next/link";
 import { SkinId } from "@/game/types";
 import SkinPicker from "./SkinPicker";
 import { UnlockProgress } from "./UnlockProgress";
 import { isMultiplayerEnabled } from "@/lib/multiplayerConfig";
 import { useGamepadConnected } from "@/hooks/useGamepad";
+import { GlassPanel } from "./ui/GlassPanel";
+import { ScreenTitle } from "./ui/ScreenTitle";
+import { GlassButton, glassButtonStyle } from "./ui/GlassButton";
+import { color, font, formatScore, text } from "./ui/tokens";
 
 interface StartScreenProps {
   bestScore: number;
   cheatUnlocked: boolean;
   selectedSkinId: SkinId;
   onSelectSkin: (id: SkinId) => void;
+  /** Starts the run (same as Space or a tap on the scene). */
+  onStart: () => void;
 }
 
+/** Small key-cap shown inside the Start button; hidden on touch screens via `.kbd-hint`. */
+const kbdStyle = {
+  padding: "2px 8px",
+  borderRadius: "6px",
+  background: "rgba(255,255,255,0.18)",
+  fontFamily: font.mono,
+  fontSize: "0.7rem",
+  letterSpacing: 0,
+  textTransform: "none",
+} as const;
+
+/**
+ * @param props - Saved best and unlock state, selected bike, and the select / start actions.
+ * @example
+ * <StartScreen bestScore={620} cheatUnlocked={false} selectedSkinId="default" onSelectSkin={pick} onStart={start} />
+ */
 export default function StartScreen({
   bestScore,
   cheatUnlocked,
   selectedSkinId,
   onSelectSkin,
+  onStart,
 }: StartScreenProps) {
   const hasGamepad = useGamepadConnected();
 
@@ -26,97 +53,50 @@ export default function StartScreen({
         position: "fixed",
         inset: 0,
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
+        // Taps outside the controls fall through to the canvas, which starts the run
         pointerEvents: "none",
-        gap: "clamp(0.3rem, 1.8vh, 0.75rem)",
-        fontFamily: "var(--font-nunito), Arial, sans-serif",
+        fontFamily: font.ui,
       }}
     >
-      <h1
-        style={{
-          color: "#27435E",
-          fontSize: "clamp(2.2rem, 10vh, 3rem)",
-          lineHeight: 1.1,
-          fontFamily: "var(--font-fredoka), sans-serif",
-          fontWeight: 600,
-          margin: 0,
-          letterSpacing: "0.04em",
-          textShadow: "0 2px 6px rgba(255,255,255,0.4)",
-        }}
-      >
-        Edy on Bike
-      </h1>
-      <p
-        style={{
-          color: "#334155",
-          fontSize: "1rem",
-          margin: 0,
-          fontWeight: 600,
-        }}
-      >
-        Jump and double-jump to avoid obstacles
-      </p>
-      <SkinPicker
-        selectedSkinId={selectedSkinId}
-        bestScore={bestScore}
-        cheatUnlocked={cheatUnlocked}
-        onSelectSkin={onSelectSkin}
-      />
-      <UnlockProgress bestScore={bestScore} cheatUnlocked={cheatUnlocked} />
-      <div
-        style={{
-          marginTop: "0.5rem",
-          color: "#1e293b",
-          fontSize: "1rem",
-          fontWeight: 700,
-          background: "rgba(255,255,255,0.22)",
-          backdropFilter: "blur(24px) saturate(200%)",
-          WebkitBackdropFilter: "blur(24px) saturate(200%)",
-          border: "1.5px solid rgba(255,255,255,0.55)",
-          borderRadius: "18px",
-          padding: "0.65rem 2.25rem",
-          letterSpacing: "0.06em",
-          textAlign: "center",
-          boxShadow: "0 2px 20px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
-        }}
-      >
-        {hasGamepad ? "PRESS Ⓐ TO START" : "PRESS SPACE TO START"}
-        {!hasGamepad && <span
-          style={{
-            display: "block",
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            color: "#64748b",
-            letterSpacing: "0.04em",
-            marginTop: "0.2rem",
-          }}
-        >
-          or tap on mobile
-        </span>}
-      </div>
-      {isMultiplayerEnabled && (
-        <Link href="/multiplayer" style={{ textDecoration: "none", pointerEvents: "auto" }}>
-          <div style={{
-            color: "#1e3a5f",
-            fontSize: "0.9rem",
-            fontWeight: 700,
-            background: "rgba(100,150,255,0.22)",
-            backdropFilter: "blur(24px) saturate(200%)",
-            WebkitBackdropFilter: "blur(24px) saturate(200%)",
-            border: "1.5px solid rgba(100,150,255,0.45)",
-            borderRadius: "18px",
-            padding: "0.55rem 2rem",
-            letterSpacing: "0.06em",
-            textAlign: "center",
-            boxShadow: "0 2px 20px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
-            cursor: "pointer",
-          }}>
-            MULTIPLAYER
+      <GlassPanel style={{ pointerEvents: "none" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+          <ScreenTitle as="h1">Edy on Bike</ScreenTitle>
+          <p style={text.body}>Jump and double-jump to avoid obstacles</p>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "0 4px" }}>
+            <span style={text.label}>Choose your rider</span>
+            {bestScore > 0 && (
+              <span style={text.label}>
+                Best <span style={{ fontFamily: font.mono, color: color.ink }}>{formatScore(bestScore)}</span>
+              </span>
+            )}
           </div>
-        </Link>
-      )}
+          <SkinPicker
+            selectedSkinId={selectedSkinId}
+            bestScore={bestScore}
+            cheatUnlocked={cheatUnlocked}
+            onSelectSkin={onSelectSkin}
+          />
+        </div>
+
+        <UnlockProgress bestScore={bestScore} cheatUnlocked={cheatUnlocked} />
+
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+          <GlassButton variant="primary" onClick={onStart}>
+            START RIDE
+            <span className="kbd-hint" style={kbdStyle}>{hasGamepad ? "Ⓐ" : "Space"}</span>
+          </GlassButton>
+          {isMultiplayerEnabled && (
+            <Link href="/multiplayer" style={glassButtonStyle("secondary")}>
+              MULTIPLAYER
+            </Link>
+          )}
+        </div>
+      </GlassPanel>
     </div>
   );
 }

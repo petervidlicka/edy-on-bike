@@ -14,6 +14,8 @@ import { GameOverLinkButton } from "./GameOverLinkButton";
 import { LEADERBOARD_SIZE, scoreQualifies } from "@/lib/leaderboardConfig";
 import { useGameOverLeaderboard } from "@/hooks/useGameOverLeaderboard";
 import { useInputLockout, GAME_OVER_LOCKOUT_MS } from "@/hooks/useInputLockout";
+import { GlassPanel } from "./ui/GlassPanel";
+import { badge, color, font } from "./ui/tokens";
 
 interface GameOverScreenProps {
   score: number;
@@ -76,32 +78,38 @@ export default function GameOverScreen({ score, bestScore, skinName, previousBes
         justifyContent: "center",
         pointerEvents: view === "form" ? "none" : "auto",
         cursor: view === "form" || locked ? undefined : "pointer",
-        gap: "clamp(0.2rem, 1vh, 0.4rem)",
-        fontFamily: "var(--font-nunito), Arial, sans-serif",
+        fontFamily: font.ui,
       }}
     >
-      {view !== "leaderboard" && (
-        <GameOverHeader score={score} bestScore={bestScore} previousBest={previousBest} cheatUnlocked={cheatUnlocked} />
-      )}
+      <GlassPanel style={{ pointerEvents: "auto" }}>
+        {view !== "leaderboard" && (
+          <GameOverHeader
+            score={score}
+            bestScore={bestScore}
+            previousBest={previousBest}
+            cheatUnlocked={cheatUnlocked}
+            extraBadge={
+              view === "form" && qualifies ? (
+                <span style={{ ...badge, background: color.warnBg, color: color.warnInk }}>
+                  You made the top {LEADERBOARD_SIZE}
+                </span>
+              ) : null
+            }
+          />
+        )}
 
-      {view === "summary" && (
-        <GameOverSummary
-          locked={locked}
-          // A board that arrives after the layout froze can still turn out to qualify
-          offerSave={board.status === "error" || qualifies}
-          onRestart={onRestart}
-          onShowLeaderboard={() => setChosenView("leaderboard")}
-          onSaveScore={() => setChosenView("form")}
-        />
-      )}
+        {view === "summary" && (
+          <GameOverSummary
+            locked={locked}
+            // A board that arrives after the layout froze can still turn out to qualify
+            offerSave={board.status === "error" || qualifies}
+            onRestart={onRestart}
+            onShowLeaderboard={() => setChosenView("leaderboard")}
+            onSaveScore={() => setChosenView("form")}
+          />
+        )}
 
-      {view === "form" && (
-        <>
-          {qualifies && (
-            <p style={{ color: "#92400e", margin: "0.3rem 0 0", fontSize: "1rem", fontWeight: 800 }}>
-              🏆 You made the top {LEADERBOARD_SIZE}!
-            </p>
-          )}
+        {view === "form" && (
           <LeaderboardForm
             score={score}
             skinName={skinName}
@@ -110,14 +118,14 @@ export default function GameOverScreen({ score, bestScore, skinName, previousBes
             onSavedAndRestart={onRestart}
             onSkip={onRestart}
           />
-        </>
-      )}
+        )}
 
-      {view === "leaderboard" && (
-        <GameOverLeaderboard board={board} saved={saved} locked={locked} onRestart={onRestart} />
-      )}
+        {view === "leaderboard" && (
+          <GameOverLeaderboard board={board} saved={saved} locked={locked} onRestart={onRestart} />
+        )}
 
-      <GameOverLinkButton onClick={onHome}>Home / change bike</GameOverLinkButton>
+        <GameOverLinkButton onClick={onHome}>Home / change bike</GameOverLinkButton>
+      </GlassPanel>
     </div>
   );
 }

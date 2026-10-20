@@ -3,12 +3,15 @@ import { formatMultiplier } from "@/game/ComboChain";
 import type { TrickFeedbackData } from "@/hooks/useGameEngine";
 import { useCanVibrate } from "@/hooks/useHapticFeedback";
 import { useGamepadConnected } from "@/hooks/useGamepad";
+import { GlassButton } from "./ui/GlassButton";
+import { HudChip } from "./ui/HudChip";
+import { color, font, glassSurfaceSmall, radius } from "./ui/tokens";
 
 /** Guards against browsers firing both onTouchStart and onClick. */
 let lastTouchTime = 0;
 
-const TRICK_COLOR_CLEAN = "#1a7a2e";
-const TRICK_COLOR_SKETCHY = "#d97706";
+const TRICK_COLOR_CLEAN = color.success;
+const TRICK_COLOR_SKETCHY = color.caution;
 
 interface HUDProps {
   score: number;
@@ -33,8 +36,9 @@ interface HUDProps {
 function MusicIcon({ muted }: { muted: boolean }) {
   return (
     <svg
-      width="24"
-      height="24"
+      width="20"
+      height="20"
+      aria-hidden="true"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -58,8 +62,9 @@ function MusicIcon({ muted }: { muted: boolean }) {
 function SpeakerIcon({ muted }: { muted: boolean }) {
   return (
     <svg
-      width="24"
-      height="24"
+      width="20"
+      height="20"
+      aria-hidden="true"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -86,8 +91,9 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
 function VibrationIcon({ off }: { off: boolean }) {
   return (
     <svg
-      width="24"
-      height="24"
+      width="20"
+      height="20"
+      aria-hidden="true"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -104,50 +110,53 @@ function VibrationIcon({ off }: { off: boolean }) {
 
 function PauseIcon() {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
       <rect x="6" y="4" width="4" height="16" rx="1" />
       <rect x="14" y="4" width="4" height="16" rx="1" />
     </svg>
   );
 }
 
-/** Shared glass style for small HUD buttons, so screens composing HUD pieces match. */
-export const btnStyle: React.CSSProperties = {
-  background: "rgba(255,255,255,0.22)",
-  backdropFilter: "blur(24px) saturate(200%)",
-  WebkitBackdropFilter: "blur(24px) saturate(200%)",
-  border: "1.5px solid rgba(255,255,255,0.55)",
-  borderRadius: "14px",
-  color: "#1e293b",
-  cursor: "pointer",
-  padding: "0.45rem 0.65rem",
-  lineHeight: 0,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  boxShadow:
-    "0 2px 16px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
-};
-
-const dpadBtnStyle: React.CSSProperties = {
-  width: "48px",
-  height: "48px",
-  borderRadius: "50%",
-  background: "rgba(255,255,255,0.35)",
-  border: "2px solid rgba(30,41,59,0.3)",
-  color: "#1e293b",
+/** Touch trick button: big enough to hit mid-jump, labelled so the move is clear without knowing the arrow keys. */
+const trickBtnStyle: React.CSSProperties = {
+  width: "56px",
+  height: "56px",
+  borderRadius: radius.md,
+  background: "rgba(255,255,255,0.75)",
+  border: "1px solid rgba(30,41,59,0.12)",
+  boxShadow: "0 4px 16px rgba(15,23,42,0.1)",
+  color: color.ink,
   cursor: "pointer",
   display: "flex",
+  flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
+  gap: "3px",
   padding: 0,
+  fontFamily: font.ui,
 };
 
-function ArrowSVG({ points }: { points: string }) {
+/** Path data for each trick's icon: a flip arrow per direction, a full stretch, arms up. */
+const TRICK_ICONS = {
+  frontflip: "M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5",
+  backflip: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
+  superman: "M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4",
+  noHander: "M6 4l6 8 6-8M12 12v8",
+} as const;
+
+function TrickButton({ label, title, icon, onPress }: { label: string; title: string; icon: string; onPress: () => void }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points={points} />
-    </svg>
+    <button
+      onTouchStart={(e) => { e.preventDefault(); onPress(); }}
+      title={title}
+      aria-label={title}
+      style={trickBtnStyle}
+    >
+      <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d={icon} />
+      </svg>
+      <span style={{ fontSize: "11px", fontWeight: 800, lineHeight: 1, pointerEvents: "none" }}>{label}</span>
+    </button>
   );
 }
 
@@ -181,31 +190,34 @@ export function AudioControls({
         top: "1rem",
         left: "1.5rem",
         display: "flex",
-        gap: "0.4rem",
+        gap: "0.5rem",
       }}
     >
-      <button
+      <GlassButton
+        variant="icon"
         onClick={onToggleMusic}
         title={musicMuted ? "Music on" : "Music off"}
-        style={btnStyle}
+        aria-label={musicMuted ? "Music on" : "Music off"}
       >
         <MusicIcon muted={musicMuted} />
-      </button>
-      <button
+      </GlassButton>
+      <GlassButton
+        variant="icon"
         onClick={onToggleSfx}
         title={sfxMuted ? "Sound on" : "Sound off"}
-        style={btnStyle}
+        aria-label={sfxMuted ? "Sound on" : "Sound off"}
       >
         <SpeakerIcon muted={sfxMuted} />
-      </button>
+      </GlassButton>
       {canVibrate && (
-        <button
+        <GlassButton
+          variant="icon"
           onClick={onToggleVibration}
           title={vibrationOn ? "Vibration off" : "Vibration on"}
-          style={btnStyle}
+          aria-label={vibrationOn ? "Vibration off" : "Vibration on"}
         >
           <VibrationIcon off={!vibrationOn} />
-        </button>
+        </GlassButton>
       )}
       {children}
     </div>
@@ -223,10 +235,14 @@ export function TrickFeedbackPopup({
     <span
       style={{
         color: trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN,
-        fontFamily: "var(--font-space-mono), monospace",
-        fontSize: "0.7rem",
-        fontWeight: "bold",
-        textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+        fontFamily: font.mono,
+        fontSize: "0.8rem",
+        fontWeight: 700,
+        padding: "4px 10px",
+        borderRadius: radius.sm,
+        background: "rgba(255,255,255,0.85)",
+        whiteSpace: "nowrap",
+        pointerEvents: "none",
       }}
     >
       {trickFeedback.name} +{trickFeedback.points}
@@ -253,6 +269,7 @@ export function TrickDpad({
   const hasGamepad = useGamepadConnected();
   if (hasGamepad) return null;
 
+  // Cross layout mirrors the arrow keys and gamepad D-pad (↑ front, ↓ back, ← superman, → no-hander)
   return (
     <div
       style={{
@@ -260,50 +277,19 @@ export function TrickDpad({
         bottom: "1.5rem",
         right: "1.5rem",
         display: "grid",
-        gridTemplateColumns: "48px 48px 48px",
-        gridTemplateRows: "48px 48px 48px",
-        gap: "4px",
+        gridTemplateColumns: "56px 56px 56px",
+        gridTemplateRows: "56px 56px 56px",
+        gap: "6px",
       }}
     >
-      {/* Row 1: _, Up (Frontflip), _ */}
       <div />
-      <button
-        onTouchStart={(e) => { e.preventDefault(); onFrontflip(); }}
-        title="Frontflip (↑)"
-        style={dpadBtnStyle}
-      >
-        <ArrowSVG points="6 15 12 9 18 15" />
-      </button>
+      <TrickButton label="Front" title="Frontflip (↑)" icon={TRICK_ICONS.frontflip} onPress={onFrontflip} />
       <div />
-
-      {/* Row 2: Left (Superman), Tricks label, Right (No Hander) */}
-      <button
-        onTouchStart={(e) => { e.preventDefault(); onSuperman(); }}
-        title="Superman (←)"
-        style={dpadBtnStyle}
-      >
-        <ArrowSVG points="15 6 9 12 15 18" />
-      </button>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", color: "rgba(30,41,59,0.65)", textAlign: "center", lineHeight: 1.1, pointerEvents: "none" }}>
-        Tricks
-      </div>
-      <button
-        onTouchStart={(e) => { e.preventDefault(); onNoHander(); }}
-        title="No Hander (→)"
-        style={dpadBtnStyle}
-      >
-        <ArrowSVG points="9 6 15 12 9 18" />
-      </button>
-
-      {/* Row 3: _, Down (Backflip), _ */}
+      <TrickButton label="Superman" title="Superman (←)" icon={TRICK_ICONS.superman} onPress={onSuperman} />
       <div />
-      <button
-        onTouchStart={(e) => { e.preventDefault(); onBackflip(); }}
-        title="Backflip (↓)"
-        style={dpadBtnStyle}
-      >
-        <ArrowSVG points="6 9 12 15 18 9" />
-      </button>
+      <TrickButton label="No hands" title="No hander (→)" icon={TRICK_ICONS.noHander} onPress={onNoHander} />
+      <div />
+      <TrickButton label="Back" title="Backflip (↓)" icon={TRICK_ICONS.backflip} onPress={onBackflip} />
       <div />
     </div>
   );
@@ -340,32 +326,15 @@ export default function HUD({
           display: "flex",
           flexDirection: "column",
           alignItems: "flex-end",
-          gap: "0.2rem",
+          gap: "0.5rem",
           pointerEvents: "none",
         }}
       >
-        <span
-          style={{
-            color: trickFeedback
-              ? trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN
-              : "#1e293b",
-            fontFamily: "var(--font-space-mono), monospace",
-            fontSize: "1.25rem",
-            fontWeight: "bold",
-            transition: "color 0.3s ease",
-          }}
-        >
-          {String(score).padStart(5, "0")}
-        </span>
-        <span
-          style={{
-            color: "#475569",
-            fontFamily: "var(--font-space-mono), monospace",
-            fontSize: "0.75rem",
-          }}
-        >
-          &times;{multiplier}
-        </span>
+        <HudChip
+          score={score}
+          multiplier={multiplier}
+          accent={trickFeedback ? (trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN) : undefined}
+        />
         <TrickFeedbackPopup trickFeedback={trickFeedback} />
       </div>
 
@@ -378,9 +347,9 @@ export default function HUD({
         onToggleVibration={onToggleVibration}
       >
         {onPause && (
-          <button onClick={onPause} title="Pause (Esc or P)" style={btnStyle}>
+          <GlassButton variant="icon" onClick={onPause} title="Pause (Esc or P)" aria-label="Pause">
             <PauseIcon />
-          </button>
+          </GlassButton>
         )}
       </AudioControls>
 
@@ -389,16 +358,16 @@ export default function HUD({
         onTouchStart={(e) => { e.preventDefault(); lastTouchTime = Date.now(); onJump(); }}
         onClick={() => { if (Date.now() - lastTouchTime < 500) return; onJump(); }}
         title="Jump (tap or space)"
+        aria-label="Jump"
         style={{
+          ...glassSurfaceSmall,
           position: "fixed",
           bottom: "1.5rem",
           left: "1.5rem",
-          width: "72px",
-          height: "72px",
+          width: "80px",
+          height: "80px",
           borderRadius: "50%",
-          background: "rgba(255,255,255,0.35)",
-          border: "2px solid rgba(30,41,59,0.3)",
-          color: "#1e293b",
+          color: color.ink,
           cursor: "pointer",
           display: "flex",
           flexDirection: "column",
@@ -406,10 +375,13 @@ export default function HUD({
           justifyContent: "center",
           gap: "2px",
           padding: 0,
+          fontFamily: font.ui,
         }}
       >
-        <ArrowSVG points="6 15 12 9 18 15" />
-        <span style={{ fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
+        <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 15 12 9 18 15" />
+        </svg>
+        <span style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.08em", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
       </button>}
 
       <TrickDpad

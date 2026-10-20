@@ -493,8 +493,37 @@ function drawSkiGoggles(ctx: CanvasRenderingContext2D, headX: number, headY: num
 }
 
 /**
+ * Hachimaki: a white headband tied over the helmet rim with a red rising sun at the
+ * front and two knot tails streaming back, flapping with the wheel rotation.
+ */
+function drawHachimaki(ctx: CanvasRenderingContext2D, headX: number, headY: number, flap: number) {
+  const bandY = headY - 2.6;
+  // Tails from the knot at the back of the head.
+  ctx.fillStyle = "#f4f4f6";
+  for (const [phase, len, dy] of [[0, 9, -0.6], [1.7, 7, 1.2]] as const) {
+    const w1 = Math.sin(flap * 2.6 + phase) * 1.8;
+    ctx.beginPath();
+    ctx.moveTo(headX - 6, bandY + dy);
+    ctx.quadraticCurveTo(headX - 6 - len * 0.5, bandY + dy - 1.5 + w1, headX - 6 - len, bandY + dy + 0.5 - w1);
+    ctx.lineTo(headX - 6 - len, bandY + dy + 2 - w1);
+    ctx.quadraticCurveTo(headX - 6 - len * 0.5, bandY + dy + 0.6 + w1, headX - 6, bandY + dy + 1.8);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Band across the helmet rim.
+  ctx.fillRect(headX - 7.5, bandY - 1, 15, 2.4);
+  ctx.fillStyle = "rgba(0,0,0,0.12)";
+  ctx.fillRect(headX - 7.5, bandY + 1, 15, 0.5);
+  // Rising sun at the front.
+  ctx.fillStyle = "#c8102e";
+  ctx.beginPath();
+  ctx.arc(headX + 4, bandY + 0.2, 1.1, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
  * Draws Edy on the bike: wheels, frame, rider pose (lean, crouch, tuck, tricks) and headwear.
- * @param gear - Biome kit worn over the skin (winter: goggles and a scarf); omit for none.
+ * @param gear - Biome kit worn over the skin (winter: goggles and a scarf; hachimaki: a headband); omit for none.
  */
 export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, skin: SkinDefinition, gear?: RiderGear) {
   const { x, y, wheelRotation, bikeTilt, riderLean, riderCrouch, legTuck, backflipAngle, flipDirection } = player;
@@ -688,6 +717,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
   // Helmet (skin-specific style)
   drawHelmet(ctx, headPosX, headPosY, skin.helmetStyle, c.helmet);
   if (gear === "winter") drawSkiGoggles(ctx, headPosX, headPosY);
+  else if (gear === "hachimaki") drawHachimaki(ctx, headPosX, headPosY, wheelRotation);
 
   ctx.restore();
 }

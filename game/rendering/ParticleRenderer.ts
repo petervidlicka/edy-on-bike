@@ -47,12 +47,28 @@ export function drawParticles(
   particles: Particle[],
   config: ParticleOverlayConfig
 ): void {
-  ctx.fillStyle = config.color;
   ctx.globalAlpha = config.opacity;
-  for (const p of particles) {
+  if (config.type === "rain") {
+    // Streaks along the fall direction, longer for the bigger (nearer) drops
+    const len = Math.hypot(config.speed.x, config.speed.y) || 1;
+    const ux = config.speed.x / len;
+    const uy = config.speed.y / len;
+    ctx.strokeStyle = config.color;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fill();
+    for (const p of particles) {
+      const streak = p.size * 4;
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - ux * streak, p.y - uy * streak);
+    }
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = config.color;
+    for (const p of particles) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   ctx.globalAlpha = 1;
 }

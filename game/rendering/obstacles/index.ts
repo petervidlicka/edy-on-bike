@@ -18,6 +18,11 @@ import {
   drawSnowCat, drawSnowKicker, drawFreerideSkier, drawRaceSkier, drawSnowboarder, drawSnowScooter,
 } from "./austriaObstacles";
 
+import {
+  drawKeiCar, drawKeiTruck, drawJapanTaxi, drawSamurai, drawSushiRolls, drawVendingMachine, drawSakeBarrels,
+  drawDeliveryScooter, drawUmbrellaCyclist, drawKawaiiBarrier, drawManekiNeko, drawRamenBowl, drawShibaInu,
+} from "./tokyoObstacles";
+
 export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette) {
   const { type, x, y, width: w, height: h } = obstacle;
   switch (type) {
@@ -58,5 +63,18 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleIn
     case ObstacleType.RACE_SKIER:         drawRaceSkier(ctx, x, y, w, h, palette); break;
     case ObstacleType.SNOWBOARDER:        drawSnowboarder(ctx, x, y, w, h); break;
     case ObstacleType.SNOW_SCOOTER:       drawSnowScooter(ctx, x, y, w, h); break;
+    case ObstacleType.KEI_CAR:            drawKeiCar(ctx, x, y, w, h, palette); break;
+    case ObstacleType.KEI_TRUCK:          drawKeiTruck(ctx, x, y, w, h, palette); break;
+    case ObstacleType.JAPAN_TAXI:         drawJapanTaxi(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SAMURAI:            drawSamurai(ctx, x, y, w, h); break;
+    case ObstacleType.SUSHI_ROLLS:        drawSushiRolls(ctx, x, y, w, h); break;
+    case ObstacleType.VENDING_MACHINE:    drawVendingMachine(ctx, x, y, w, h); break;
+    case ObstacleType.SAKE_BARRELS:       drawSakeBarrels(ctx, x, y, w, h); break;
+    case ObstacleType.DELIVERY_SCOOTER:   drawDeliveryScooter(ctx, x, y, w, h); break;
+    case ObstacleType.UMBRELLA_CYCLIST:   drawUmbrellaCyclist(ctx, x, y, w, h); break;
+    case ObstacleType.KAWAII_BARRIER:     drawKawaiiBarrier(ctx, x, y, w, h); break;
+    case ObstacleType.MANEKI_NEKO:        drawManekiNeko(ctx, x, y, w, h); break;
+    case ObstacleType.RAMEN_BOWL:         drawRamenBowl(ctx, x, y, w, h); break;
+    case ObstacleType.SHIBA_INU:          drawShibaInu(ctx, x, y, w, h, palette); break;
   }
 }

@@ -2,7 +2,7 @@ import type { BackgroundElement, ObstacleType } from "../types";
 
 // ── Biome identifiers ──
 
-export type BiomeId = "suburban" | "dubai" | "austria";
+export type BiomeId = "suburban" | "dubai" | "austria" | "tokyo";
 
 // ── Color palette for an environment ──
 
@@ -130,14 +130,22 @@ export interface EnvironmentPalette {
     antler?: string;
     skiRacer?: string;
     skiRacerDark?: string;
+
+    // Tokyo-specific (optional — fall back to built-in colours)
+    keiCar?: string;
+    keiCarDark?: string;
+    taxi?: string;
+    taxiDark?: string;
+    neonPink?: string;
+    neonCyan?: string;
   };
 }
 
 /**
- * Extra kit Edy wears in a biome, drawn over the selected skin (e.g. goggles and a
- * scarf in the snow). Absent = the skin as designed.
+ * Extra kit Edy wears in a biome, drawn over the selected skin: goggles and a scarf in
+ * the snow, a hachimaki headband in Tokyo. Absent = the skin as designed.
  */
-export type RiderGear = "winter";
+export type RiderGear = "winter" | "hachimaki";
 
 /**
  * Draws a far scenery band (mountain range, distant skyline) between the sky and the
@@ -200,10 +208,11 @@ export interface ObstaclePoolConfig {
   getWeightedTypes: (elapsedMs: number) => WeightedType[];
 }
 
-// ── Particle overlay (snow, sand) ──
+// ── Particle overlay (snow, sand, rain) ──
 
 export interface ParticleOverlayConfig {
-  type: "snow" | "sand";
+  /** Snow and sand draw as dots; rain draws as streaks along its fall direction. */
+  type: "snow" | "sand" | "rain";
   /** Particles per 100×100px area */
   density: number;
   speed: { x: number; y: number };
@@ -228,6 +237,11 @@ export interface EnvironmentDefinition {
   particleOverlay?: ParticleOverlayConfig;
   /** Optional far scenery band drawn behind the building layer. */
   skyline?: SkylineDrawFn;
+  /**
+   * Optional pass over the road after it is drawn (e.g. neon reflections on wet tarmac).
+   * Same signature as a skyline; `offset` is the road layer's scroll.
+   */
+  roadOverlay?: SkylineDrawFn;
   /** Optional biome kit drawn on the rider. */
   riderGear?: RiderGear;
 }

@@ -42,6 +42,7 @@ Playing rules live in `game/voiceLines.ts` (chance, priority) and `game/VoiceMan
 | `skin-unlocked-<n>` | A bike unlocks mid-run | 100 % | "New bike!" |
 | `biome-dubai-<n>` | Dubai starts | 100 % | "Dubai!" |
 | `biome-austria-<n>` | Snowy Austria starts | 100 % | "Servus, Austria!" |
+| `biome-tokyo-<n>` | Night Tokyo starts | 100 % | "Konbanwa, Tokyo!" |
 | `biome-<id>-<n>` | Another biome starts (`suburban` on a new lap, ...) | 100 % | "Back home!" |
 | `grind-<n>` | A long grind ends (optional) | 40 % | "Grind!" |
 

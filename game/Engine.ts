@@ -714,7 +714,7 @@ export class Engine {
       ctx.translate(this.crashState.shakeOffsetX, this.crashState.shakeOffsetY);
     }
 
-    drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers, this.envManager.getSkylines());
+    drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers, this.envManager.getSkylines(), this.envManager.getRoadOverlays());
     if (this.particleConfig && this.particles.length > 0) {
       drawParticles(ctx, this.particles, this.particleConfig);
     }

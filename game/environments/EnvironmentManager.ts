@@ -4,11 +4,13 @@ import type {
   EnvironmentPalette,
   BackgroundDrawFn,
   RiderGear,
+  SkylineDrawFn,
   SkylinePass,
 } from "./types";
 import { SUBURBAN_ENVIRONMENT } from "./suburban";
 import { DUBAI_ENVIRONMENT } from "./dubai";
 import { AUSTRIA_ENVIRONMENT } from "./austria";
+import { TOKYO_ENVIRONMENT } from "./tokyo";
 import { lerpPalette, easeInOutCubic } from "./colorLerp";
 
 // ── Biome cycle ──
@@ -19,6 +21,7 @@ const BIOME_CYCLE: EnvironmentDefinition[] = [
   SUBURBAN_ENVIRONMENT,
   DUBAI_ENVIRONMENT,
   AUSTRIA_ENVIRONMENT,
+  TOKYO_ENVIRONMENT,
 ];
 
 /** How long each biome lasts before the next transition starts. */
@@ -178,14 +181,12 @@ export class EnvironmentManager {
    * band fades out while the incoming one fades in.
    */
   getSkylines(): SkylinePass[] {
-    if (this.transitioning && this.fromEnv && this.toEnv) {
-      const t = easeInOutCubic(Math.min(1, this.transitionProgress));
-      const passes: SkylinePass[] = [];
-      if (this.fromEnv.skyline) passes.push({ draw: this.fromEnv.skyline, alpha: 1 - t });
-      if (this.toEnv.skyline) passes.push({ draw: this.toEnv.skyline, alpha: t });
-      return passes;
-    }
-    return this.currentEnv.skyline ? [{ draw: this.currentEnv.skyline, alpha: 1 }] : [];
+    return this.fadedPasses((env) => env.skyline);
+  }
+
+  /** Road overlays (e.g. wet-road neon reflections), faded across a transition like skylines. */
+  getRoadOverlays(): SkylinePass[] {
+    return this.fadedPasses((env) => env.roadOverlay);
   }
 
   /** Biome kit for the rider; switches halfway through a transition, with the buildings. */
@@ -210,6 +211,21 @@ export class EnvironmentManager {
   }
 
   // ── Internal ──
+
+  /** One pass per biome that has the picked drawer: outgoing fades out, incoming fades in. */
+  private fadedPasses(pick: (env: EnvironmentDefinition) => SkylineDrawFn | undefined): SkylinePass[] {
+    if (this.transitioning && this.fromEnv && this.toEnv) {
+      const t = easeInOutCubic(Math.min(1, this.transitionProgress));
+      const passes: SkylinePass[] = [];
+      const from = pick(this.fromEnv);
+      const to = pick(this.toEnv);
+      if (from) passes.push({ draw: from, alpha: 1 - t });
+      if (to) passes.push({ draw: to, alpha: t });
+      return passes;
+    }
+    const current = pick(this.currentEnv);
+    return current ? [{ draw: current, alpha: 1 }] : [];
+  }
 
   private startTransition(toEnv: EnvironmentDefinition): void {
     this.fromEnv = this.currentEnv;

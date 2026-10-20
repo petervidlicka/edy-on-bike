@@ -11,7 +11,7 @@ import type { Offset } from "../rendering/CrashRenderer";
 import { clamp01, figurePoint, HEAD_OFFSET, launchBike, lerp, stepBike } from "./physics";
 import type { CarBonkData, CrashVariant } from "./types";
 
-/** The obstacle types this variant handles: every one drawn as a car. */
+/** The obstacle types this variant handles: every one drawn as a car, plus the snow vehicles. */
 export const CAR_OBSTACLES: readonly ObstacleType[] = [
   ObstacleType.CAR,
   ObstacleType.SUV,
@@ -23,6 +23,8 @@ export const CAR_OBSTACLES: readonly ObstacleType[] = [
   ObstacleType.CONVERTIBLE,
   ObstacleType.ROLLS_ROYCE_PHANTOM,
   ObstacleType.PORSCHE_911,
+  ObstacleType.SNOW_SCOOTER,
+  ObstacleType.SNOW_CAT,
 ];
 
 const DURATION = 2.3;

@@ -118,7 +118,8 @@ export function checkRampCollision(
     return { onRamp: true, surfaceY, surfaceAngle, rampType: "straight" };
   }
 
-  if (obstacle.type === ObstacleType.CURVED_RAMP) {
+  // The snow kicker shares the curved ramp's profile; only its art differs
+  if (obstacle.type === ObstacleType.CURVED_RAMP || obstacle.type === ObstacleType.SNOW_KICKER) {
     const curvedT = t * t; // ease-in quadratic — gentle at bottom, steep at lip
     const surfaceY = rampBaseY - curvedT * obstacle.height;
     const dydx = (-2 * t * obstacle.height) / obstacle.width;

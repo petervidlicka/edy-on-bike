@@ -13,6 +13,11 @@ import {
   drawCactus, drawDubaiChocolate, drawDubaiBillboard, drawLamborghiniHuracan, drawFerrari458, drawConvertible, drawRollsRoycePhantom, drawPorsche911,
 } from "./dubaiObstacles";
 
+import {
+  drawSnowman, drawFrozenLake, drawRedDeer, drawBeerCrates, drawBeerCrateWall,
+  drawSnowCat, drawSnowKicker, drawFreerideSkier, drawRaceSkier, drawSnowboarder, drawSnowScooter,
+} from "./austriaObstacles";
+
 /**
  * Motor vehicles are oncoming traffic. Their art is authored facing right, but the world
  * scrolls left, so drawn as-is they read as reversing towards the rider — mirror them.
@@ -65,5 +70,16 @@ function drawObstacleArt(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstan
     case ObstacleType.ROLLS_ROYCE_PHANTOM: drawRollsRoycePhantom(ctx, x, y, w, h, palette); break;
     case ObstacleType.PORSCHE_911:        drawPorsche911(ctx, x, y, w, h, palette); break;
     case ObstacleType.DUBAI_BILLBOARD:    drawDubaiBillboard(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SNOWMAN:            drawSnowman(ctx, x, y, w, h, palette); break;
+    case ObstacleType.FROZEN_LAKE:        drawFrozenLake(ctx, x, y, w, h, palette); break;
+    case ObstacleType.RED_DEER:           drawRedDeer(ctx, x, y, w, h, palette); break;
+    case ObstacleType.BEER_CRATES:        drawBeerCrates(ctx, x, y, w, h, palette); break;
+    case ObstacleType.BEER_CRATE_WALL:    drawBeerCrateWall(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SNOW_CAT:           drawSnowCat(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SNOW_KICKER:        drawSnowKicker(ctx, x, y, w, h, palette); break;
+    case ObstacleType.FREERIDE_SKIER:     drawFreerideSkier(ctx, x, y, w, h); break;
+    case ObstacleType.RACE_SKIER:         drawRaceSkier(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SNOWBOARDER:        drawSnowboarder(ctx, x, y, w, h); break;
+    case ObstacleType.SNOW_SCOOTER:       drawSnowScooter(ctx, x, y, w, h); break;
   }
 }

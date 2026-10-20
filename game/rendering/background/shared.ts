@@ -1,5 +1,5 @@
 import { BackgroundLayer } from "../../types";
-import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
+import type { EnvironmentPalette, BackgroundDrawFn, SkylinePass } from "../../environments/types";
 import { getTotalLayerWidth } from "../../Background";
 import type { ViewBounds } from "../../Camera";
 import { decodePedestrianVariant, SKIN_TONES, HAIR_COLORS } from "../../environments/pedestrians";
@@ -72,9 +72,19 @@ export function drawBackground(
   view: ViewBounds,
   groundY: number,
   palette: EnvironmentPalette,
-  drawers: Record<string, BackgroundDrawFn>
+  drawers: Record<string, BackgroundDrawFn>,
+  skylines: readonly SkylinePass[] = []
 ) {
   drawSky(ctx, view, groundY, palette);
+
+  // Far scenery (mountain ranges) sits behind the clouds and scrolls with them
+  for (const pass of skylines) {
+    if (pass.alpha <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = pass.alpha;
+    pass.draw(ctx, view, groundY, layers[0].offset, palette);
+    ctx.restore();
+  }
 
   // Layer 0: clouds
   const cloudLayer = layers[0];

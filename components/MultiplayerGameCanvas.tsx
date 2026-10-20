@@ -42,7 +42,7 @@ interface MultiplayerGameCanvasProps {
  * One race. Mounts at countdown_start and is replaced by the results screen
  * when the server reports race_finished.
  */
-export default function MultiplayerGameCanvas({
+export function MultiplayerGameCanvas({
   seed,
   raceStarted,
   players,

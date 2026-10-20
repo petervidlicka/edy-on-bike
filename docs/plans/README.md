@@ -1,17 +1,17 @@
 # Fun & QoL roadmap
 
-Plans for the next round of game improvements. Each plan is one feature branch off `dev` (`feature/<name>`), merged by PR once it's been played and approved.
+Plans for the last round of game improvements. Each plan was one feature branch off `dev` (`feature/<name>`), merged by PR once it had been played and approved. **All eight have shipped**; the plans are kept as design notes, so the code is the reference where they differ.
 
-| # | Plan | Size | Depends on |
-|---|---|---|---|
-| 01 | [Pause button + Esc/P](01-pause.md) | S | — |
-| 02 | [Faster restart after game over](02-quick-retry.md) | S | — |
-| 03 | ["Next unlock" progress](03-next-unlock-progress.md) | S | after 02 (both edit the game over screen) |
-| 04 | [Haptics on mobile](04-haptics.md) | S | game events |
-| 05 | [Combo chain + combo meter](05-combo-system.md) | M | game events |
-| 06 | [Grinds on rideable obstacles](06-grinds.md) | S–M | 05 |
-| 07 | [Edy says things (voice lines)](07-voice-lines.md) | M | game events, clips recorded/sourced |
-| 08 | [Funnier, varied crashes](08-funny-crashes.md) | M–L | — |
+| # | Plan | Size | Depends on | Status |
+|---|---|---|---|---|
+| 01 | [Pause button + Esc/P](01-pause.md) | S | — | Shipped |
+| 02 | [Faster restart after game over](02-quick-retry.md) | S | — | Shipped |
+| 03 | ["Next unlock" progress](03-next-unlock-progress.md) | S | after 02 (both edit the game over screen) | Shipped |
+| 04 | [Haptics on mobile](04-haptics.md) | S | game events | Shipped |
+| 05 | [Combo chain + combo meter](05-combo-system.md) | M | game events | Shipped |
+| 06 | [Grinds on rideable obstacles](06-grinds.md) | S–M | 05 | Shipped |
+| 07 | [Edy says things (voice lines)](07-voice-lines.md) | M | game events, clips recorded/sourced | Shipped |
+| 08 | [Funnier, varied crashes](08-funny-crashes.md) | M–L | — | Shipped |
 
 ## Suggested order
 
@@ -44,8 +44,8 @@ export type GameEvent =
 - Ship it as part of whichever of 04 / 05 lands first.
 
 ## Parked for later
-- **Biomes 3 & 4: Snow and Night.** That makes 4 in total. `EnvironmentManager` already has commented-out slots at 4 and 6 minutes. Obstacles and locations are still to be brainstormed.
+- ~~Biomes 3 & 4: Snow and Night.~~ Shipped as Austria and Night Tokyo (`game/environments/`).
 - Other brainstorm ideas not picked this round: swipe gestures, hold-to-jump-higher, best-run ghost, collectibles, power-ups, missions/stickers, photo mode, easy mode, multiplayer emotes and trick-off.
 
-## Known issue found while planning
-`party/validation.ts` caps a single score jump at 600 (`MAX_BONUS_BURST`), but a triple Superman + triple Backflip already pays 1060, so big tricks are **silently clamped in multiplayer today**. Plan 05 raises the cap. It's worth fixing even if 05 slips.
+## Known issue found while planning (fixed)
+`party/validation.ts` used to cap a single score jump at 600 (`MAX_BONUS_BURST`), which clamped big tricks in multiplayer. The cap is now derived from `MAX_CHAIN_LANDING_BONUS` in `game/constants.ts`, so it follows trick tuning.

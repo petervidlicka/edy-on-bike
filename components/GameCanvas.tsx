@@ -4,8 +4,8 @@ import { useRef, useEffect, useCallback, useState } from "react";
 import { GameState, ObstacleType } from "@/game/types";
 import { getSkinById } from "@/game/skins";
 import { loadSkinState } from "@/game/storage";
-import StartScreen from "./StartScreen";
-import HUD from "./HUD";
+import { StartScreen } from "./StartScreen";
+import { HUD } from "./HUD";
 import GameOverScreen from "./GameOverScreen";
 import { PauseMenu } from "./PauseMenu";
 import { UnlockToast } from "./UnlockToast";
@@ -31,7 +31,13 @@ const DEBUG_OBSTACLE_SEQUENCE = [
   ObstacleType.CAR, ObstacleType.DELIVERY_VAN, ObstacleType.PORSCHE_911,
 ];
 
-export default function GameCanvas() {
+/**
+ * The single-player game: owns the canvas and engine, and swaps the start, HUD,
+ * pause and game-over overlays as the run moves through its states.
+ * @example
+ * <OrientationGuard><GameCanvas /></OrientationGuard>
+ */
+export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
   // True while the player (or a hidden tab promoted to one) holds a "user" pause

@@ -10,7 +10,7 @@ import {
 } from "@/game/multiplayer/protocol";
 import type { PlayerInfo } from "@/game/multiplayer/protocol";
 import { SkinId } from "@/game/types";
-import SkinPicker from "@/components/SkinPicker";
+import { SkinPicker } from "@/components/SkinPicker";
 import { QuickPlayWaiting } from "@/components/QuickPlayWaiting";
 import type { QuickPlayQueue } from "@/hooks/useMultiplayerRoom";
 import { useSavedSkinState } from "@/hooks/useSavedSkinState";
@@ -64,7 +64,7 @@ const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "colum
  * Shows create/join until the server confirms a room, then the room's rider
  * list with Ready / Leave.
  */
-export default function MultiplayerLobby({
+export function MultiplayerLobby({
   roomCode,
   localPlayerId,
   players,

@@ -30,7 +30,11 @@ export function useCanVibrate(): boolean {
  * @example
  * const { onGameEvent, vibrationOn, toggleVibration } = useHapticFeedback();
  */
-export function useHapticFeedback() {
+export function useHapticFeedback(): {
+  onGameEvent: (event: GameEvent) => void;
+  vibrationOn: boolean;
+  toggleVibration: () => void;
+} {
   const [vibrationOff, toggleVibration] = useStoredFlag("edy-vibration-off", false);
   const vibrationOn = !vibrationOff;
 

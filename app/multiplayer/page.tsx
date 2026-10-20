@@ -6,11 +6,11 @@
  */
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import OrientationGuard from "@/components/OrientationGuard";
-import MultiplayerLobby from "@/components/MultiplayerLobby";
-import MultiplayerGameCanvas from "@/components/MultiplayerGameCanvas";
-import MultiplayerResults from "@/components/MultiplayerResults";
-import MultiplayerBackdrop from "@/components/MultiplayerBackdrop";
+import { OrientationGuard } from "@/components/OrientationGuard";
+import { MultiplayerLobby } from "@/components/MultiplayerLobby";
+import { MultiplayerGameCanvas } from "@/components/MultiplayerGameCanvas";
+import { MultiplayerResults } from "@/components/MultiplayerResults";
+import { MultiplayerBackdrop } from "@/components/MultiplayerBackdrop";
 import { useSavedSkinState } from "@/hooks/useSavedSkinState";
 import { useMultiplayerRoom } from "@/hooks/useMultiplayerRoom";
 

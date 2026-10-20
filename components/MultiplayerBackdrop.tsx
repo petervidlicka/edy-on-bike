@@ -19,7 +19,7 @@ interface MultiplayerBackdropProps {
  * An idle Engine: it draws sky, buildings, road and rider like the single-player
  * start screen, but never starts (no input handlers, no audio until start()).
  */
-export default function MultiplayerBackdrop({ skinId }: MultiplayerBackdropProps) {
+export function MultiplayerBackdrop({ skinId }: MultiplayerBackdropProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { engineRef } = useGameEngine(canvasRef);
 

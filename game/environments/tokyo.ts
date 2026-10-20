@@ -6,6 +6,7 @@
  */
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
+import { EASING_OUT, stagedPool } from "./stages";
 import { TOKYO_BACKGROUND_DRAWERS, drawTokyoNightSky, drawNeonReflections } from "../rendering";
 import type {
   EnvironmentDefinition,
@@ -239,45 +240,25 @@ function generateTokyoElements(
 
 // biomeMs = biome-relative elapsed time (0 = when this biome started, not game start)
 function tokyoWeightedTypes(biomeMs: number): WeightedType[] {
-  const earlyWeight = biomeMs >= 30_000 ? 0.4 : biomeMs >= 15_000 ? 0.7 : 1.0;
-
-  const types: WeightedType[] = [
+  return stagedPool(biomeMs, [
     // Stage 1: street clutter + the first Kei cars
-    { type: ObstacleType.SHIBA_INU, weight: earlyWeight },
-    { type: ObstacleType.RAMEN_BOWL, weight: earlyWeight },
-    { type: ObstacleType.MANEKI_NEKO, weight: earlyWeight },
-    { type: ObstacleType.KAWAII_BARRIER, weight: 0.8 },
-    { type: ObstacleType.KEI_CAR, weight: 0.6 },
-    { type: ObstacleType.VENDING_MACHINE, weight: 0.4 },
-  ];
-  // Stage 2 (15s into Tokyo): ramps, rideables, samurai, traffic and moving riders
-  if (biomeMs >= 15_000) {
-    types.push({ type: ObstacleType.STRAIGHT_RAMP, weight: 0.4 });
-    types.push({ type: ObstacleType.CURVED_RAMP, weight: 0.4 });
-    types.push({ type: ObstacleType.SUSHI_ROLLS, weight: 0.5 });
-    types.push({ type: ObstacleType.SAKE_BARRELS, weight: 0.5 });
-    types.push({ type: ObstacleType.SAMURAI, weight: 0.6 });
-    types.push({ type: ObstacleType.KEI_TRUCK, weight: 0.5 });
-    types.push({ type: ObstacleType.JAPAN_TAXI, weight: 0.5 });
-    types.push({ type: ObstacleType.DELIVERY_SCOOTER, weight: 0.5 });
-    types.push({ type: ObstacleType.UMBRELLA_CYCLIST, weight: 0.4 });
-    for (const t of types) {
-      if (t.type === ObstacleType.KEI_CAR) t.weight = 0.8;
-      if (t.type === ObstacleType.VENDING_MACHINE) t.weight = 0.6;
-    }
-  }
-  // Stage 3 (30s into Tokyo): full roster, max weights
-  if (biomeMs >= 30_000) {
-    for (const t of types) {
-      if (t.type === ObstacleType.SUSHI_ROLLS) t.weight = 0.7;
-      if (t.type === ObstacleType.SAKE_BARRELS) t.weight = 0.7;
-      if (t.type === ObstacleType.SAMURAI) t.weight = 0.8;
-      if (t.type === ObstacleType.JAPAN_TAXI) t.weight = 0.7;
-      if (t.type === ObstacleType.DELIVERY_SCOOTER) t.weight = 0.7;
-      if (t.type === ObstacleType.UMBRELLA_CYCLIST) t.weight = 0.6;
-    }
-  }
-  return types;
+    [ObstacleType.SHIBA_INU, EASING_OUT],
+    [ObstacleType.RAMEN_BOWL, EASING_OUT],
+    [ObstacleType.MANEKI_NEKO, EASING_OUT],
+    [ObstacleType.KAWAII_BARRIER, [0.8, 0.8, 0.8]],
+    [ObstacleType.KEI_CAR, [0.6, 0.8, 0.8]],
+    [ObstacleType.VENDING_MACHINE, [0.4, 0.6, 0.6]],
+    // Stage 2 (15s into Tokyo): ramps, rideables, samurai, traffic and moving riders
+    [ObstacleType.STRAIGHT_RAMP, [null, 0.4, 0.4]],
+    [ObstacleType.CURVED_RAMP, [null, 0.4, 0.4]],
+    [ObstacleType.SUSHI_ROLLS, [null, 0.5, 0.7]],
+    [ObstacleType.SAKE_BARRELS, [null, 0.5, 0.7]],
+    [ObstacleType.SAMURAI, [null, 0.6, 0.8]],
+    [ObstacleType.KEI_TRUCK, [null, 0.5, 0.5]],
+    [ObstacleType.JAPAN_TAXI, [null, 0.5, 0.7]],
+    [ObstacleType.DELIVERY_SCOOTER, [null, 0.5, 0.7]],
+    [ObstacleType.UMBRELLA_CYCLIST, [null, 0.4, 0.6]],
+  ]);
 }
 
 // ── Full environment definition ──

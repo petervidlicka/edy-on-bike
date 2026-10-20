@@ -4,7 +4,7 @@
  */
 import Link from "next/link";
 import { SkinId } from "@/game/types";
-import SkinPicker from "./SkinPicker";
+import { SkinPicker } from "./SkinPicker";
 import { UnlockProgress } from "./UnlockProgress";
 import { isMultiplayerEnabled } from "@/lib/multiplayerConfig";
 import { useGamepadConnected } from "@/hooks/useGamepad";
@@ -38,7 +38,7 @@ const kbdStyle = {
  * @example
  * <StartScreen bestScore={620} cheatUnlocked={false} selectedSkinId="default" onSelectSkin={pick} onStart={start} />
  */
-export default function StartScreen({
+export function StartScreen({
   bestScore,
   cheatUnlocked,
   selectedSkinId,

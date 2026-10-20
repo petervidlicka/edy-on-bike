@@ -18,7 +18,7 @@ interface MultiplayerResultsProps {
 const MEDAL_COLORS = [color.gold, "#cbd5e1", "#d6a26a", null] as const satisfies { length: typeof MAX_PLAYERS };
 
 /** Rankings come from the server, so every player sees the same order and scores. */
-export default function MultiplayerResults({
+export function MultiplayerResults({
   rankings,
   localPlayerId,
   onPlayAgain,

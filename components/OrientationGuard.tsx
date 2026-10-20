@@ -1,6 +1,12 @@
 "use client";
 
+/**
+ * Keeps phones in landscape: a "rotate your device" overlay in portrait, and in a mobile
+ * browser a one-time "tap for fullscreen" hint (or "Add to Home Screen" where fullscreen
+ * isn't available). The native apps are locked to landscape and already fullscreen.
+ */
 import { useState, useEffect, useCallback, useRef } from "react";
+import { Capacitor } from "@capacitor/core";
 
 // --- Fullscreen helpers ---
 
@@ -12,8 +18,12 @@ function getFullscreenElement(): Element | null {
   );
 }
 
-/** True when running as an installed PWA or launched from Home Screen. */
+/**
+ * True when the game already fills the screen without a browser UI: the native Capacitor
+ * app, an installed PWA, or a Home Screen launch. No fullscreen hint is shown then.
+ */
 function isStandaloneMode(): boolean {
+  if (Capacitor.isNativePlatform()) return true;
   if (window.matchMedia("(display-mode: standalone)").matches) return true;
   if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
   // iOS Safari standalone detection
@@ -24,7 +34,12 @@ function isStandaloneMode(): boolean {
 
 type PromptMode = "hidden" | "fullscreen" | "install";
 
-export default function OrientationGuard({
+/**
+ * Wraps a game screen with the orientation overlay and fullscreen hint.
+ * @example
+ * <OrientationGuard><GameCanvas /></OrientationGuard>
+ */
+export function OrientationGuard({
   children,
 }: {
   children: React.ReactNode;

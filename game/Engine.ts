@@ -9,6 +9,7 @@ import {
   FLIP_TOLERANCE,
   SKETCHY_TOLERANCE,
   AMBULANCE_CHANCE,
+  PLAYER_X_RATIO,
   CRASH_SKIP_AFTER_S,
   BIG_TRICK_POINTS,
   COMBO_MIN_LINKS_FOR_SUMMARY,
@@ -56,6 +57,9 @@ import type { CrashCause } from "./crashes";
 import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
 import type { GhostSnapshot } from "./multiplayer/protocol";
 import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
+import { TrickBoost } from "./multiplayer/TrickBoost";
+import { Camera, MIN_CAMERA_ZOOM, getViewBounds } from "./Camera";
+import { drawHeightMarker } from "./rendering/HeightMarker";
 
 /** Milliseconds per 60fps frame; converts the capped `dt` into game time for the chain timers. */
 const FRAME_MS = 1000 / 60;
@@ -152,13 +156,20 @@ export class Engine {
   private particleConfig: ParticleOverlayConfig | null = null;
   private rng: { random(): number } = { random: Math.random };
   private multiplayer: MultiplayerAdapter | null = null;
+  /** Zooms out for big air so the rider never leaves the screen. Render-only. */
+  private camera = new Camera();
+  /** Multiplayer only: landed tricks push the rider forward so the leader stands out from the ghosts. */
+  private boost: TrickBoost | null = null;
 
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks, options?: EngineOptions) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
     this.callbacks = callbacks;
     if (options?.rng) this.rng = options.rng;
-    if (options?.multiplayer) this.multiplayer = options.multiplayer;
+    if (options?.multiplayer) {
+      this.multiplayer = options.multiplayer;
+      this.boost = new TrickBoost();
+    }
     this.loop = this.loop.bind(this);
     this.resize(window.innerWidth, window.innerHeight);
     this.rafId = requestAnimationFrame(this.loop);
@@ -220,6 +231,8 @@ export class Engine {
     this.envManager.reset();
     this.particles = [];
     this.particleConfig = null;
+    this.boost?.reset();
+    this.camera.reset();
     this.player = createPlayer(this.groundY, this.canvasW);
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
@@ -290,6 +303,7 @@ export class Engine {
       this.updateAmbulance(dt, rawDt);
     }
 
+    this.camera.update(rawDt, this.state === GameState.RUNNING ? this.player.y : null, this.groundY);
     this.render();
     this.rafId = requestAnimationFrame(this.loop);
   }
@@ -357,6 +371,10 @@ export class Engine {
     const prevBackflipAngle = this.player.backflipAngle;
     const prevFlipDirection = this.player.flipDirection;
     updatePlayer(this.player, dt, this.groundY, this.speed);
+    if (this.boost) {
+      this.boost.update(rawDt);
+      this.player.x = this.canvasW * (PLAYER_X_RATIO + this.boost.offset);
+    }
     updateLayers(this.layers, this.speed, dt);
     if (this.particleConfig && this.particles.length > 0) {
       updateParticles(this.particles, this.particleConfig, dt, this.canvasW, this.canvasH);
@@ -394,7 +412,9 @@ export class Engine {
     for (const obs of this.obstacles) {
       moveObstacle(obs, this.speed, dt);
     }
-    this.obstacles = this.obstacles.filter((obs) => obs.x + obs.width > 0);
+    // Spawn and cull outside the widest zoomed-out view, so obstacles never pop in or out on screen
+    const widestView = getViewBounds(MIN_CAMERA_ZOOM, this.canvasW, this.canvasH, this.groundY);
+    this.obstacles = this.obstacles.filter((obs) => obs.x + obs.width > widestView.left);
 
     // Obstacle spawning
     this.distanceSinceLastObstacle += this.speed * dt;
@@ -402,10 +422,10 @@ export class Engine {
     if (this.distanceSinceLastObstacle >= gap) {
       if (this.debugSequence) {
         const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
-        this.obstacles.push(createObstacle(type, this.canvasW, this.groundY, this.speed));
+        this.obstacles.push(createObstacle(type, widestView.right, this.groundY, this.speed, this.player.x));
         this.debugIndex++;
       } else {
-        const spawned = spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.speed, this.rng.random.bind(this.rng));
+        const spawned = spawnObstacle(widestView.right, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.speed, this.player.x, this.rng.random.bind(this.rng));
         this.obstacles.push(spawned);
         this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng)) + spawnGapPadding(spawned);
       }
@@ -534,7 +554,7 @@ export class Engine {
       tickCrashAnim(this.crashState, rawDt);
     }
 
-    const action = updateAmbulanceLogic(this.ambulance, dt, rawDt, this.canvasW);
+    const action = updateAmbulanceLogic(this.ambulance, dt, rawDt);
 
     if (action === AmbulanceAction.STOP_SIREN) {
       this.sound.stopSiren();
@@ -606,6 +626,8 @@ export class Engine {
     this.score += paid;
     this.distance = this.score * SCORE_PER_PX;
     this.callbacks.onScoreUpdate(this.score);
+    // Multiplied points, so a climbing combo chain pushes the rider further
+    this.boost?.onTrick(paid, isSketchy);
     this.sound.playComboStep(this.chain.links);
     this.floatingTexts.push(createTrickFloatingText(label, paid, this.player.x, this.player.y, this.player.width, isSketchy, multiplier));
     this.emit({ type: "trickLanded", label, points: paid, sketchy: isSketchy, big: bonus >= BIG_TRICK_POINTS, multiplier });
@@ -714,10 +736,17 @@ export class Engine {
       ctx.translate(this.crashState.shakeOffsetX, this.crashState.shakeOffsetY);
     }
 
-    drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers, this.envManager.getSkylines());
+    // World layers draw under the camera zoom; particles are a screen-space weather overlay
+    const view = getViewBounds(this.camera.zoom, canvasW, canvasH, groundY);
+    ctx.save();
+    this.camera.apply(ctx, canvasW, groundY);
+    drawBackground(ctx, this.layers, canvasW, view, groundY, palette, drawers, this.envManager.getSkylines());
+    ctx.restore();
     if (this.particleConfig && this.particles.length > 0) {
       drawParticles(ctx, this.particles, this.particleConfig);
     }
+    ctx.save();
+    this.camera.apply(ctx, canvasW, groundY);
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs, palette);
     }
@@ -734,18 +763,14 @@ export class Engine {
       && this.ambulance
       && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
 
+    // The ambulance sits in the far lane: drawn behind the rider so it can drive out past them.
+    if (this.ambulance) drawAmbulance(ctx, this.ambulance);
+
     if (crashing || ambulancePreRevive || this.state === GameState.GAME_OVER) {
       drawCrash(ctx, this.crashState, { skin: this.skin, palette, groundY });
     } else {
       drawPlayer(ctx, this.player, this.skin, riderGear);
       drawSparks(ctx, this.sparks);
-    }
-
-    if (this.ambulance) {
-      drawAmbulance(ctx, this.ambulance);
-      if (this.ambulance.reviveFlashOpacity > 0) {
-        drawReviveFlash(ctx, this.ambulance.reviveFlashOpacity, canvasW, canvasH);
-      }
     }
 
     for (const ft of this.floatingTexts) {
@@ -756,6 +781,19 @@ export class Engine {
         pop: ft.pop,
         fontFamily: ft.pop ? this.displayFont ?? undefined : undefined,
       });
+    }
+    ctx.restore();
+
+    if (this.ambulance && this.ambulance.reviveFlashOpacity > 0) {
+      drawReviveFlash(ctx, this.ambulance.reviveFlashOpacity, canvasW, canvasH);
+    }
+
+    // Launch higher than the zoomed-out camera can show: pin a height marker to the top edge
+    if (this.state === GameState.RUNNING) {
+      const top = this.camera.toScreen(this.player.x + this.player.width / 2, this.player.y, canvasW, groundY);
+      if (top.y < 0) {
+        drawHeightMarker(ctx, top.x, groundY - (this.player.y + this.player.height), canvasW);
+      }
     }
 
     if (crashing) {
@@ -787,6 +825,7 @@ export class Engine {
       at: p.activeTrick,
       tp: p.trickProgress,
       s: this.score,
+      x: p.x / this.canvasW,
     };
   }
 

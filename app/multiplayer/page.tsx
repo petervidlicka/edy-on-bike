@@ -27,8 +27,12 @@ export default function MultiplayerPage() {
     rankings,
     adapter,
     error,
+    quickPlay,
+    queue,
     createRoom,
     joinRoom,
+    startQuickPlay,
+    cancelQuickPlay,
     setReady,
     playAgain,
     disconnect,
@@ -55,6 +59,10 @@ export default function MultiplayerPage() {
           players={players}
           error={error}
           connecting={connectionState !== "disconnected" && !roomCode}
+          quickPlay={quickPlay}
+          queue={queue}
+          onQuickPlay={startQuickPlay}
+          onCancelQuickPlay={cancelQuickPlay}
           onCreateRoom={createRoom}
           onJoinRoom={joinRoom}
           onReady={setReady}

@@ -124,6 +124,7 @@ export default function GameCanvas() {
           cheatUnlocked={cheatUnlocked}
           selectedSkinId={selectedSkinId}
           onSelectSkin={chooseSkin}
+          onStart={() => engineRef.current?.jump()}
         />
       )}
 

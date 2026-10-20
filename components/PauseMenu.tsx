@@ -9,7 +9,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { Engine } from "@/game/Engine";
 import { useGamepadPress } from "@/hooks/useGamepad";
 import { useCanVibrate } from "@/hooks/useHapticFeedback";
-import { glassBtn } from "./sharedStyles";
+import { GlassPanel } from "./ui/GlassPanel";
+import { ScreenTitle } from "./ui/ScreenTitle";
+import { GlassButton } from "./ui/GlassButton";
+import { font } from "./ui/tokens";
 
 /** Time each countdown number stays on screen (3 numbers = 1.5 s total). */
 const COUNTDOWN_STEP_MS = 500;
@@ -126,12 +129,10 @@ export function PauseMenu({
         inset: 0,
         zIndex: 50,
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: "0.7rem",
         background: "rgba(30,41,59,0.28)",
-        fontFamily: "var(--font-nunito), Arial, sans-serif",
+        fontFamily: font.ui,
       }}
     >
       {countdown !== null ? (
@@ -139,7 +140,7 @@ export function PauseMenu({
           key={countdown}
           style={{
             color: "#fff",
-            fontFamily: "var(--font-fredoka), sans-serif",
+            fontFamily: font.display,
             fontSize: "6rem",
             fontWeight: 600,
             textShadow: "0 4px 24px rgba(0,0,0,0.35)",
@@ -148,42 +149,31 @@ export function PauseMenu({
           {countdown}
         </span>
       ) : (
-        <>
-          <h2
-            style={{
-              color: "#fff",
-              fontSize: "2.5rem",
-              fontFamily: "var(--font-fredoka), sans-serif",
-              fontWeight: 600,
-              margin: "0 0 0.5rem",
-              textShadow: "0 2px 12px rgba(0,0,0,0.35)",
-            }}
-          >
-            Paused
-          </h2>
-          <button onClick={startResume} style={{ ...glassBtn, fontSize: "1.2rem", padding: "0.7rem 3rem" }}>
+        <GlassPanel style={{ minWidth: "min(300px, 90vw)" }}>
+          <ScreenTitle>Paused</ScreenTitle>
+          <GlassButton variant="primary" onClick={startResume} style={{ width: "100%" }}>
             Resume
-          </button>
-          <button onClick={handleRestart} style={glassBtn}>
+          </GlassButton>
+          <GlassButton variant="secondary" onClick={handleRestart} style={{ width: "100%" }}>
             Restart
-          </button>
-          <button onClick={handleHome} style={glassBtn}>
-            Home
-          </button>
-          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-            <button onClick={onToggleMusic} style={{ ...glassBtn, padding: "0.4rem 1rem", fontSize: "0.8rem" }}>
+          </GlassButton>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center" }}>
+            <GlassButton variant="quiet" onClick={onToggleMusic} aria-pressed={!musicMuted}>
               Music: {musicMuted ? "Off" : "On"}
-            </button>
-            <button onClick={onToggleSfx} style={{ ...glassBtn, padding: "0.4rem 1rem", fontSize: "0.8rem" }}>
+            </GlassButton>
+            <GlassButton variant="quiet" onClick={onToggleSfx} aria-pressed={!sfxMuted}>
               Sound: {sfxMuted ? "Off" : "On"}
-            </button>
+            </GlassButton>
             {canVibrate && (
-              <button onClick={onToggleVibration} style={{ ...glassBtn, padding: "0.4rem 1rem", fontSize: "0.8rem" }}>
+              <GlassButton variant="quiet" onClick={onToggleVibration} aria-pressed={vibrationOn}>
                 Vibration: {vibrationOn ? "On" : "Off"}
-              </button>
+              </GlassButton>
             )}
           </div>
-        </>
+          <GlassButton variant="quiet" onClick={handleHome}>
+            Home / change bike
+          </GlassButton>
+        </GlassPanel>
       )}
     </div>
   );

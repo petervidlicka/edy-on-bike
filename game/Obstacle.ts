@@ -129,14 +129,17 @@ function weightedRandom(types: WeightedType[], rng: () => number = Math.random):
 }
 
 /**
- * Builds an obstacle of `type` just off the right edge, sitting on the road.
+ * Builds an obstacle of `type` just beyond `spawnEdge` (the right edge of the widest
+ * view), sitting on the road.
  * @param speed - World scroll speed at spawn; sizes how far a moving obstacle travels.
+ * @param riderX - The rider's x; a mover keeps moving until it gets there.
  */
 export function createObstacle(
   type: ObstacleType,
-  canvasWidth: number,
+  spawnEdge: number,
   groundY: number,
-  speed: number = INITIAL_SPEED
+  speed: number = INITIAL_SPEED,
+  riderX: number = spawnEdge * PLAYER_X_RATIO
 ): ObstacleInstance {
   const spec = OBSTACLE_SPECS[type];
   // Ramps keep exact positioning (physics-dependent), everything else sits
@@ -146,12 +149,12 @@ export function createObstacle(
   const isRamp = RAMP_TYPES.has(type) || type === ObstacleType.CONTAINER_WITH_RAMP;
   const maxSink = spec.height - 2 * HITBOX_PADDING - MIN_HIT_BAND;
   const yOffset = isRamp ? 0 : Math.max(0, Math.min(maxSink, MAX_ROAD_SINK));
-  const spawnX = canvasWidth + 60;
+  const spawnX = spawnEdge + 60;
   const vx = MOTION_VX[type];
   const motion: ObstacleMotion | undefined = vx === undefined ? undefined : {
     vx,
     travelled: 0,
-    maxTravel: motionTravel(vx, spawnX - canvasWidth * PLAYER_X_RATIO, speed),
+    maxTravel: motionTravel(vx, spawnX - riderX, speed),
   };
   // Oncoming movers start further out by their full travel, so they close in on the
   // obstacle ahead of them no more than a static one spawned at the usual point would.
@@ -198,15 +201,16 @@ export function spawnGapPadding(obstacle: ObstacleInstance): number {
 }
 
 export function spawnObstacle(
-  canvasWidth: number,
+  spawnEdge: number,
   groundY: number,
   elapsedMs: number,
   envDef: EnvironmentDefinition,
   speed: number,
+  riderX: number,
   rng: () => number = Math.random
 ): ObstacleInstance {
   const type = weightedRandom(envDef.obstaclePool.getWeightedTypes(elapsedMs), rng);
-  return createObstacle(type, canvasWidth, groundY, speed);
+  return createObstacle(type, spawnEdge, groundY, speed, riderX);
 }
 
 // Returns the pixel distance to wait before spawning the next obstacle.

@@ -4,12 +4,12 @@
  * otherwise the player types a name and lands on the leaderboard after saving.
  */
 import { useState, useEffect, useCallback, useRef } from "react";
-import { glassBtn } from "./sharedStyles";
 import { GameOverPrimaryButton } from "./GameOverPrimaryButton";
 import { GameOverLinkButton } from "./GameOverLinkButton";
 import { loadPlayerName, savePlayerName } from "@/game/storage";
 import { LeaderboardError, submitScore } from "@/lib/leaderboardClient";
 import { useGamepadPress } from "@/hooks/useGamepad";
+import { color, input, text } from "./ui/tokens";
 
 interface LeaderboardFormProps {
   score: number;
@@ -139,11 +139,10 @@ export default function LeaderboardForm({
   return (
     <div
       style={{
-        marginTop: "0.6rem",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: "0.4rem",
+        gap: "0.5rem",
         pointerEvents: "auto",
       }}
     >
@@ -157,61 +156,40 @@ export default function LeaderboardForm({
           </GameOverLinkButton>
         </>
       ) : (
-        <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              if (error) setError("");
-            }}
-            onKeyDown={handleInputKeyDown}
-            placeholder="Your name"
-            maxLength={20}
-            style={{
-              padding: "0.35rem 0.65rem",
-              borderRadius: "6px",
-              border: "2px solid rgba(30,41,59,0.3)",
-              fontSize: "0.9rem",
-              fontFamily: "var(--font-nunito), Arial, sans-serif",
-              outline: "none",
-              width: "145px",
-              background: "rgba(255,255,255,0.88)",
-              color: "#1e293b",
-            }}
-          />
-          <button
-            onClick={submit}
-            disabled={submitting || locked}
-            style={{
-              ...glassBtn,
-              background: submitting ? "rgba(200,210,220,0.35)" : "rgba(106,138,154,0.38)",
-              color: submitting ? "#94a3b8" : "#fff",
-              cursor: submitting || locked ? "default" : "pointer",
-              opacity: locked ? 0.45 : 1,
-              transition: "opacity 0.5s ease",
-              border: "1.5px solid rgba(255,255,255,0.45)",
-              textShadow: submitting ? "none" : "0 1px 2px rgba(0,0,0,0.15)",
-            }}
-          >
-            {submitting ? "Saving…" : "Save score"}
-          </button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label htmlFor="leaderboard-name" style={text.label}>
+            Name for the leaderboard
+          </label>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input
+              id="leaderboard-name"
+              type="text"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (error) setError("");
+              }}
+              onKeyDown={handleInputKeyDown}
+              placeholder="Your name"
+              maxLength={20}
+              aria-invalid={error ? true : undefined}
+              style={{
+                ...input,
+                width: "min(200px, 40vw)",
+                border: error ? `2px solid ${color.danger}` : input.border,
+              }}
+            />
+            <GameOverPrimaryButton onClick={submit} disabled={submitting || locked}>
+              {submitting ? "Saving…" : "Save"}
+            </GameOverPrimaryButton>
+          </div>
         </div>
       )}
 
       {error && (
-        <div
-          style={{
-            background: "rgba(254,226,226,0.85)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            border: "1px solid rgba(220,38,38,0.25)",
-            borderRadius: "12px",
-            padding: "0.3rem 0.85rem",
-          }}
-        >
-          <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0, fontWeight: 600 }}>{error}</p>
-        </div>
+        <p role="alert" style={{ ...text.body, color: color.danger, fontSize: "0.8rem", fontWeight: 700 }}>
+          {error}
+        </p>
       )}
 
       <GameOverLinkButton onClick={handleSkip} disabled={submitting}>

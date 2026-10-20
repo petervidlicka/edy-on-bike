@@ -3,7 +3,7 @@
  * lockout runs, so it's visibly not ready instead of silently ignoring presses.
  */
 import type { ReactNode } from "react";
-import { glassBtn } from "./sharedStyles";
+import { GlassButton } from "./ui/GlassButton";
 
 interface GameOverPrimaryButtonProps {
   children: ReactNode;
@@ -13,32 +13,22 @@ interface GameOverPrimaryButtonProps {
 }
 
 /**
- * @param props - Label, click handler and disabled state.
+ * @param props - Label, click handler and disabled state; clicks never bubble to the "tap anywhere to replay" overlay.
  * @example
- * <GameOverPrimaryButton onClick={onRestart} disabled={locked}>▶ Play again</GameOverPrimaryButton>
+ * <GameOverPrimaryButton onClick={onRestart} disabled={locked}>Play again</GameOverPrimaryButton>
  */
 export function GameOverPrimaryButton({ children, onClick, disabled }: GameOverPrimaryButtonProps) {
   return (
-    <button
+    <GlassButton
+      variant="primary"
       onClick={(e) => {
         e.stopPropagation();
         if (!disabled) onClick();
       }}
       disabled={disabled}
-      style={{
-        ...glassBtn,
-        fontSize: "1.2rem",
-        padding: "0.75rem 2.4rem",
-        marginTop: "0.5rem",
-        background: "rgba(106,138,154,0.55)",
-        color: "#fff",
-        textShadow: "0 1px 2px rgba(0,0,0,0.2)",
-        cursor: disabled ? "default" : "pointer",
-        opacity: disabled ? 0.45 : 1,
-        transition: "opacity 0.5s ease",
-      }}
+      style={{ transition: "opacity 0.5s ease" }}
     >
       {children}
-    </button>
+    </GlassButton>
   );
 }

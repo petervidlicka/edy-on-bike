@@ -77,6 +77,11 @@ function lerpValue(a: PaletteValue, b: PaletteValue, t: number): PaletteValue {
         result[key] = (a as Record<string, PaletteValue>)[key];
       }
     }
+    // Biome-only colours (e.g. the incoming biome's obstacle colours) have nothing to
+    // blend with; keep them so the new biome's obstacles draw right during the transition
+    for (const key of Object.keys(b)) {
+      if (!(key in result)) result[key] = (b as Record<string, PaletteValue>)[key];
+    }
     return result;
   }
   // Fallback: return 'a' when t < 0.5, 'b' when t >= 0.5

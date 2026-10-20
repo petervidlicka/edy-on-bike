@@ -7,6 +7,7 @@ import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
 import { drawPlayer } from "../rendering/PlayerRenderer";
 import { getSkinById } from "../skins";
 import type { GhostPlayer } from "./MultiplayerAdapter";
+import type { RiderGear } from "../environments/types";
 import type { MAX_PLAYERS } from "./protocol";
 
 /**
@@ -41,12 +42,14 @@ function getLabelFonts(): { name: string; score: string } {
  * Draws a ghost (remote) player semi-transparently.
  * Constructs a mock PlayerState from the interpolated snapshot
  * and reuses the existing drawPlayer() renderer.
+ * @param gear - The current biome's rider kit, so ghosts dress like the local rider.
  */
 export function drawGhostPlayer(
   ctx: CanvasRenderingContext2D,
   ghost: GhostPlayer,
   groundY: number,
-  canvasW: number
+  canvasW: number,
+  gear?: RiderGear
 ): void {
   const snap = ghost.snapshot;
   const fade = 1 - Math.min(1, Math.max(0, (ghost.staleMs - GHOST_FADE_START_MS) / GHOST_FADE_DURATION_MS));
@@ -90,7 +93,7 @@ export function drawGhostPlayer(
   ctx.save();
   ctx.globalAlpha = 0.35 * fade;
 
-  drawPlayer(ctx, mockPlayer, skin);
+  drawPlayer(ctx, mockPlayer, skin, gear);
 
   // Name label above ghost
   ctx.globalAlpha = 0.7 * fade;

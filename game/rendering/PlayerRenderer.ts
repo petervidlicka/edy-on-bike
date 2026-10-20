@@ -1,4 +1,5 @@
 import { PlayerState, TrickType, SkinDefinition, HelmetStyle, BikeStyle } from "../types";
+import type { RiderGear } from "../environments/types";
 
 // --- Player (BMX bike + stick-figure rider with helmet) ---
 // The bike rotates around the bottom bracket during a bunnyhop (bikeTilt).
@@ -441,7 +442,61 @@ export function getWheelParams(skin: SkinDefinition): {
   return { spokeCount, spokeWidth, spokeColor, knobby, tyreWidth };
 }
 
-export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, skin: SkinDefinition) {
+// --- Biome gear (worn over any skin) ---
+
+/**
+ * Winter scarf: knotted at the neck with two red-and-white tails streaming back in the
+ * wind, flapping with the wheel rotation so it moves while riding.
+ */
+function drawWinterScarf(ctx: CanvasRenderingContext2D, neckX: number, neckY: number, flap: number) {
+  const wave = Math.sin(flap * 2.4);
+  const tail = (dy: number, len: number, phase: number) => {
+    const w1 = Math.sin(flap * 2.4 + phase) * 2;
+    ctx.beginPath();
+    ctx.moveTo(neckX - 1, neckY + dy);
+    ctx.quadraticCurveTo(neckX - len * 0.5, neckY + dy - 2 + w1, neckX - len, neckY + dy + 1 - w1);
+    ctx.lineTo(neckX - len, neckY + dy + 3.2 - w1);
+    ctx.quadraticCurveTo(neckX - len * 0.5, neckY + dy + 1 + w1, neckX - 1, neckY + dy + 2.6);
+    ctx.closePath();
+    ctx.fill();
+  };
+  ctx.fillStyle = "#c8102e";
+  tail(-0.5, 11 + wave, 0);
+  ctx.fillStyle = "#e8e8ec";
+  tail(1.2, 8 - wave, 1.3);
+  // Wrap round the neck.
+  ctx.fillStyle = "#c8102e";
+  ctx.beginPath();
+  ctx.ellipse(neckX, neckY + 0.5, 4, 2.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.8)";
+  ctx.fillRect(neckX - 3, neckY, 6, 0.9);
+}
+
+/** Ski goggles over the helmet: dark strap and an orange mirrored lens across the eye. */
+function drawSkiGoggles(ctx: CanvasRenderingContext2D, headX: number, headY: number) {
+  ctx.fillStyle = "#1e2024";
+  ctx.fillRect(headX - 6, headY - 2.6, 9, 2.2);
+  const lens = ctx.createLinearGradient(headX, headY - 3.4, headX, headY + 0.6);
+  lens.addColorStop(0, "#ffd04a");
+  lens.addColorStop(1, "#e2501e");
+  ctx.fillStyle = "#1e2024";
+  ctx.beginPath();
+  ctx.ellipse(headX + 3.4, headY - 1.2, 3, 2.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = lens;
+  ctx.beginPath();
+  ctx.ellipse(headX + 3.6, headY - 1.2, 2.3, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.fillRect(headX + 2.6, headY - 2.1, 1.3, 0.7);
+}
+
+/**
+ * Draws Edy on the bike: wheels, frame, rider pose (lean, crouch, tuck, tricks) and headwear.
+ * @param gear - Biome kit worn over the skin (winter: goggles and a scarf); omit for none.
+ */
+export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, skin: SkinDefinition, gear?: RiderGear) {
   const { x, y, wheelRotation, bikeTilt, riderLean, riderCrouch, legTuck, backflipAngle, flipDirection } = player;
   const c = skin.colors;
   const g = getBikeGeometry(skin.bikeStyle, x, y);
@@ -605,6 +660,8 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
   ctx.arc(drawGripX, drawGripY, 2, 0, Math.PI * 2);
   ctx.fill();
 
+  if (gear === "winter") drawWinterScarf(ctx, shoulderX, shoulderY - 1, wheelRotation);
+
   // Head
   const headPosX = shoulderX + 1;
   const headPosY = shoulderY - 7;
@@ -630,6 +687,7 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
 
   // Helmet (skin-specific style)
   drawHelmet(ctx, headPosX, headPosY, skin.helmetStyle, c.helmet);
+  if (gear === "winter") drawSkiGoggles(ctx, headPosX, headPosY);
 
   ctx.restore();
 }

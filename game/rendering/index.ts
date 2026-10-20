@@ -1,4 +1,4 @@
-export { drawBackground, SUBURBAN_BACKGROUND_DRAWERS, DUBAI_BACKGROUND_DRAWERS } from "./background";
+export { drawBackground, SUBURBAN_BACKGROUND_DRAWERS, DUBAI_BACKGROUND_DRAWERS, AUSTRIA_BACKGROUND_DRAWERS, drawAlpineRange } from "./background";
 export { drawPlayer, drawSkinPreview } from "./PlayerRenderer";
 export { drawObstacle } from "./obstacles";
 export { drawFloatingText } from "./FloatingTextRenderer";

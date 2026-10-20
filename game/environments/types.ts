@@ -2,7 +2,7 @@ import type { BackgroundElement, ObstacleType } from "../types";
 
 // ── Biome identifiers ──
 
-export type BiomeId = "suburban" | "dubai" | "desert" | "snow";
+export type BiomeId = "suburban" | "dubai" | "austria";
 
 // ── Color palette for an environment ──
 
@@ -114,7 +114,47 @@ export interface EnvironmentPalette {
     porscheDark?: string;
     billboardFrame?: string;
     billboardPost?: string;
+
+    // Austria-specific (optional — fall back to built-in colours)
+    snow?: string;
+    snowShadow?: string;
+    ice?: string;
+    iceHighlight?: string;
+    beerCrate?: string;
+    beerCrateDark?: string;
+    snowCat?: string;
+    snowCatDark?: string;
+    snowCatTrack?: string;
+    redDeer?: string;
+    redDeerDark?: string;
+    antler?: string;
+    skiRacer?: string;
+    skiRacerDark?: string;
   };
+}
+
+/**
+ * Extra kit Edy wears in a biome, drawn over the selected skin (e.g. goggles and a
+ * scarf in the snow). Absent = the skin as designed.
+ */
+export type RiderGear = "winter";
+
+/**
+ * Draws a far scenery band (mountain range, distant skyline) between the sky and the
+ * building layer. `offset` is the cloud layer's scroll, so it moves at cloud parallax.
+ */
+export type SkylineDrawFn = (
+  ctx: CanvasRenderingContext2D,
+  canvasW: number,
+  groundY: number,
+  offset: number,
+  palette: EnvironmentPalette
+) => void;
+
+/** A skyline to draw this frame and how opaque, so it can fade in and out across a transition. */
+export interface SkylinePass {
+  draw: SkylineDrawFn;
+  alpha: number;
 }
 
 // ── Background element drawing ──
@@ -186,4 +226,8 @@ export interface EnvironmentDefinition {
   musicTrack: string;
   /** Optional particle overlay (snow, sand, etc.) */
   particleOverlay?: ParticleOverlayConfig;
+  /** Optional far scenery band drawn behind the building layer. */
+  skyline?: SkylineDrawFn;
+  /** Optional biome kit drawn on the rider. */
+  riderGear?: RiderGear;
 }

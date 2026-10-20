@@ -3,33 +3,32 @@ import type {
   EnvironmentDefinition,
   EnvironmentPalette,
   BackgroundDrawFn,
+  RiderGear,
+  SkylinePass,
 } from "./types";
 import { SUBURBAN_ENVIRONMENT } from "./suburban";
 import { DUBAI_ENVIRONMENT } from "./dubai";
+import { AUSTRIA_ENVIRONMENT } from "./austria";
 import { lerpPalette, easeInOutCubic } from "./colorLerp";
 
-// ── Time thresholds for biome transitions ──
-// When new biomes are added, register them in BIOME_REGISTRY and add entries here.
+// ── Biome cycle ──
+// Each biome lasts BIOME_DURATION_MS; after the last one the run loops back to the
+// first. New biomes are added to the cycle in play order.
 
-interface BiomeThreshold {
-  timeMs: number;
-  biomeId: BiomeId;
-}
-
-const BIOME_THRESHOLDS: BiomeThreshold[] = [
-  { timeMs: 0, biomeId: "suburban" },
-  { timeMs: 60_000, biomeId: "dubai" },
-  // Future:
-  // { timeMs: 240_000, biomeId: "desert" },
-  // { timeMs: 360_000, biomeId: "snow" },
+const BIOME_CYCLE: EnvironmentDefinition[] = [
+  SUBURBAN_ENVIRONMENT,
+  DUBAI_ENVIRONMENT,
+  AUSTRIA_ENVIRONMENT,
 ];
 
-// Registry of all available environments.
-// New biomes register themselves here when implemented.
-const BIOME_REGISTRY: Record<string, EnvironmentDefinition> = {
-  suburban: SUBURBAN_ENVIRONMENT,
-  dubai: DUBAI_ENVIRONMENT,
-};
+/** How long each biome lasts before the next transition starts. */
+const BIOME_DURATION_MS = 60_000;
+
+/**
+ * Biome-relative time reported on second and later laps, so a revisited biome starts on
+ * its full obstacle roster instead of the gentle opening stages (the speed is high by then).
+ */
+const LATER_LAP_STAGE_MS = 30_000;
 
 /** Duration of a biome transition in 60fps dt units (~4 seconds). */
 const TRANSITION_DURATION = 240; // 4s at 60fps
@@ -51,12 +50,13 @@ export interface EnvUpdateResult {
 
 /**
  * Manages the active environment/biome and handles smooth transitions
- * between biomes based on elapsed time thresholds.
+ * between biomes: a new one every BIOME_DURATION_MS, looping through BIOME_CYCLE.
  *
  * During a transition getCurrentPalette() returns an interpolated palette.
  */
 export class EnvironmentManager {
   private currentEnv: EnvironmentDefinition;
+  /** Biomes entered so far this run, counting every lap (index into the cycle modulo its length). */
   private currentBiomeIndex = 0;
 
   // Transition state
@@ -84,28 +84,22 @@ export class EnvironmentManager {
 
     // Check if we should start a new transition
     if (!this.transitioning) {
-      const nextIndex = this.currentBiomeIndex + 1;
-      if (nextIndex < BIOME_THRESHOLDS.length) {
-        const threshold = BIOME_THRESHOLDS[nextIndex];
-        if (elapsedMs >= threshold.timeMs) {
-          const nextEnv = BIOME_REGISTRY[threshold.biomeId];
-          if (nextEnv) {
-            this.startTransition(nextEnv);
-            this.currentBiomeIndex = nextIndex;
+      const dueIndex = Math.floor(elapsedMs / BIOME_DURATION_MS);
+      if (dueIndex > this.currentBiomeIndex) {
+        this.currentBiomeIndex++;
+        const nextEnv = BIOME_CYCLE[this.currentBiomeIndex % BIOME_CYCLE.length];
+        this.startTransition(nextEnv);
+        result.biomeStarted = nextEnv.id;
 
-            result.biomeStarted = nextEnv.id;
+        // Signal Engine to append new biome buildings to the existing layer
+        result.appendBackground = { toEnv: nextEnv };
 
-            // Signal Engine to append new biome buildings to the existing layer
-            result.appendBackground = { toEnv: nextEnv };
-
-            // Signal Engine to crossfade music if track changed
-            if (nextEnv.musicTrack !== this.currentEnv.musicTrack) {
-              result.musicCrossfade = {
-                track: nextEnv.musicTrack,
-                durationMs: MUSIC_CROSSFADE_MS,
-              };
-            }
-          }
+        // Signal Engine to crossfade music if track changed
+        if (nextEnv.musicTrack !== this.fromEnv?.musicTrack) {
+          result.musicCrossfade = {
+            track: nextEnv.musicTrack,
+            durationMs: MUSIC_CROSSFADE_MS,
+          };
         }
       }
     }
@@ -140,7 +134,8 @@ export class EnvironmentManager {
 
   /** Returns elapsed time relative to when the current biome started. */
   getBiomeElapsedMs(elapsedMs: number): number {
-    return Math.max(0, elapsedMs - this.biomeStartMs);
+    const lapBonus = this.currentBiomeIndex >= BIOME_CYCLE.length ? LATER_LAP_STAGE_MS : 0;
+    return Math.max(0, elapsedMs - this.biomeStartMs) + lapBonus;
   }
 
   /**
@@ -178,18 +173,34 @@ export class EnvironmentManager {
     return this.currentEnv.backgroundDrawers;
   }
 
+  /**
+   * Far scenery bands to draw this frame. Across a transition the outgoing biome's
+   * band fades out while the incoming one fades in.
+   */
+  getSkylines(): SkylinePass[] {
+    if (this.transitioning && this.fromEnv && this.toEnv) {
+      const t = easeInOutCubic(Math.min(1, this.transitionProgress));
+      const passes: SkylinePass[] = [];
+      if (this.fromEnv.skyline) passes.push({ draw: this.fromEnv.skyline, alpha: 1 - t });
+      if (this.toEnv.skyline) passes.push({ draw: this.toEnv.skyline, alpha: t });
+      return passes;
+    }
+    return this.currentEnv.skyline ? [{ draw: this.currentEnv.skyline, alpha: 1 }] : [];
+  }
+
+  /** Biome kit for the rider; switches halfway through a transition, with the buildings. */
+  getRiderGear(): RiderGear | undefined {
+    return this.getCurrentEnvironment().riderGear;
+  }
+
   /** Force an immediate transition to the next biome (debug only). */
   forceNextBiome(): EnvUpdateResult {
     const result: EnvUpdateResult = {};
-    const nextIndex = this.currentBiomeIndex + 1;
-    if (nextIndex >= BIOME_THRESHOLDS.length) return result;
-    const threshold = BIOME_THRESHOLDS[nextIndex];
-    const nextEnv = BIOME_REGISTRY[threshold.biomeId];
-    if (!nextEnv) return result;
+    this.currentBiomeIndex++;
+    const nextEnv = BIOME_CYCLE[this.currentBiomeIndex % BIOME_CYCLE.length];
     this.startTransition(nextEnv);
-    this.currentBiomeIndex = nextIndex;
     result.biomeStarted = nextEnv.id;
-    if (nextEnv.musicTrack !== this.currentEnv.musicTrack) {
+    if (nextEnv.musicTrack !== this.fromEnv?.musicTrack) {
       result.musicCrossfade = {
         track: nextEnv.musicTrack,
         durationMs: MUSIC_CROSSFADE_MS,

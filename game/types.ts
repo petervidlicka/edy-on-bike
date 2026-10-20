@@ -57,6 +57,19 @@ export enum ObstacleType {
   ROLLS_ROYCE_PHANTOM = "ROLLS_ROYCE_PHANTOM",
   PORSCHE_911 = "PORSCHE_911",
   DUBAI_BILLBOARD = "DUBAI_BILLBOARD",
+
+  // Austria biome obstacles
+  SNOWMAN = "SNOWMAN",
+  FROZEN_LAKE = "FROZEN_LAKE",
+  RED_DEER = "RED_DEER",
+  BEER_CRATES = "BEER_CRATES",
+  BEER_CRATE_WALL = "BEER_CRATE_WALL",
+  SNOW_CAT = "SNOW_CAT",
+  SNOW_KICKER = "SNOW_KICKER",
+  FREERIDE_SKIER = "FREERIDE_SKIER",
+  RACE_SKIER = "RACE_SKIER",
+  SNOWBOARDER = "SNOWBOARDER",
+  SNOW_SCOOTER = "SNOW_SCOOTER",
 }
 
 export enum TrickType {
@@ -117,6 +130,22 @@ export interface ObstacleInstance {
   rideable: boolean;
   /** True for ramp obstacles — player rides over them, never crashes. */
   ramp: boolean;
+  /** Set for obstacles that travel on their own (skiers, snow scooters); absent for static ones. */
+  motion?: ObstacleMotion;
+}
+
+/**
+ * Self-propulsion of a moving obstacle. Its travel is capped so it can only shift a
+ * bounded distance from where a static obstacle would be; spawn gaps are padded by
+ * that cap, so moving obstacles never bunch up into an unjumpable pair.
+ */
+export interface ObstacleMotion {
+  /** World speed in px per 60fps frame: positive moves with the rider (approaches slower), negative comes towards the rider. */
+  vx: number;
+  /** Distance travelled so far (px, always positive). */
+  travelled: number;
+  /** Travel stops here; the obstacle then scrolls like a static one. */
+  maxTravel: number;
 }
 
 export interface BackgroundLayer {

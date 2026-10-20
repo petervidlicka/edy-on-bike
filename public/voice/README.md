@@ -41,7 +41,8 @@ Playing rules live in `game/voiceLines.ts` (chance, priority) and `game/VoiceMan
 | `new-best-<n>` | New personal best at game over | 100 % | "New record!" |
 | `skin-unlocked-<n>` | A bike unlocks mid-run | 100 % | "New bike!" |
 | `biome-dubai-<n>` | Dubai starts | 100 % | "Dubai!" |
-| `biome-<id>-<n>` | Another biome starts (`snow`, `desert`, ...) | 100 % | "Snow!" |
+| `biome-austria-<n>` | Snowy Austria starts | 100 % | "Servus, Austria!" |
+| `biome-<id>-<n>` | Another biome starts (`suburban` on a new lap, ...) | 100 % | "Back home!" |
 | `grind-<n>` | A long grind ends (optional) | 40 % | "Grind!" |
 
 A `crash-<variant>-<n>` set, when present, is used for that crash type; otherwise the generic

@@ -41,7 +41,7 @@ import {
 } from "./rendering";
 import type { Particle, ConfettiPiece, Spark } from "./rendering";
 import type { ParticleOverlayConfig } from "./environments/types";
-import { spawnObstacle, createObstacle, nextSpawnGap, getGrindLabel } from "./Obstacle";
+import { spawnObstacle, createObstacle, nextSpawnGap, getGrindLabel, moveObstacle, spawnGapPadding } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
@@ -392,7 +392,7 @@ export class Engine {
 
     // Move obstacles and cull off-screen ones
     for (const obs of this.obstacles) {
-      obs.x -= this.speed * dt;
+      moveObstacle(obs, this.speed, dt);
     }
     this.obstacles = this.obstacles.filter((obs) => obs.x + obs.width > 0);
 
@@ -402,17 +402,14 @@ export class Engine {
     if (this.distanceSinceLastObstacle >= gap) {
       if (this.debugSequence) {
         const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
-        this.obstacles.push(createObstacle(type, this.canvasW, this.groundY));
+        this.obstacles.push(createObstacle(type, this.canvasW, this.groundY, this.speed));
         this.debugIndex++;
       } else {
-        this.obstacles.push(
-          spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.rng.random.bind(this.rng))
-        );
+        const spawned = spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.speed, this.rng.random.bind(this.rng));
+        this.obstacles.push(spawned);
+        this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng)) + spawnGapPadding(spawned);
       }
       this.distanceSinceLastObstacle = 0;
-      if (!this.debugSequence) {
-        this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng));
-      }
     }
 
     // Ramp interaction (before collision checks)
@@ -708,6 +705,7 @@ export class Engine {
     const { ctx, canvasW, canvasH, groundY } = this;
     const palette = this.envManager.getCurrentPalette();
     const drawers = this.envManager.getBackgroundDrawers();
+    const riderGear = this.envManager.getRiderGear();
     ctx.clearRect(0, 0, canvasW, canvasH);
 
     const crashing = this.state === GameState.CRASHING;
@@ -716,7 +714,7 @@ export class Engine {
       ctx.translate(this.crashState.shakeOffsetX, this.crashState.shakeOffsetY);
     }
 
-    drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
+    drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers, this.envManager.getSkylines());
     if (this.particleConfig && this.particles.length > 0) {
       drawParticles(ctx, this.particles, this.particleConfig);
     }
@@ -728,7 +726,7 @@ export class Engine {
     if (this.multiplayer) {
       const ghosts = this.multiplayer.getGhostPlayers();
       for (const ghost of ghosts) {
-        drawGhostPlayer(ctx, ghost, this.groundY, this.canvasW);
+        drawGhostPlayer(ctx, ghost, this.groundY, this.canvasW, riderGear);
       }
     }
 
@@ -739,7 +737,7 @@ export class Engine {
     if (crashing || ambulancePreRevive || this.state === GameState.GAME_OVER) {
       drawCrash(ctx, this.crashState, { skin: this.skin, palette, groundY });
     } else {
-      drawPlayer(ctx, this.player, this.skin);
+      drawPlayer(ctx, this.player, this.skin, riderGear);
       drawSparks(ctx, this.sparks);
     }
 

@@ -4,6 +4,7 @@
  */
 import type { SkinId, TrickType } from "../game/types";
 import { MAX_NAME_LENGTH, MAX_PLAYERS } from "../game/multiplayer/protocol";
+import { MAX_CHAIN_LANDING_BONUS } from "../game/constants";
 import type { GhostSnapshot } from "../game/multiplayer/protocol";
 
 /** Largest client message we accept. Real snapshots are ~250 chars of JSON. */
@@ -30,15 +31,24 @@ const TRICK_TYPES: ReadonlySet<string> = new Set(
 
 /**
  * Score plausibility. Distance scoring tops out at ~30 pts/s (max speed 10px/frame
- * at 60fps, 20px per point); the biggest single trick is a triple Superman (380),
- * and tricks need airtime, so they can't land back-to-back every frame.
+ * at 60fps, 20px per point). A single trick landing can pay up to
+ * MAX_CHAIN_LANDING_BONUS (the biggest pose+flip combo times the full chain
+ * multiplier, derived from game/constants.ts so it follows trick tuning); tricks need
+ * airtime, so they can't land back-to-back every frame.
  * Bounds carry headroom so legitimate runs are never clamped.
  */
 const MAX_DISTANCE_POINTS_PER_SEC = 45;
-/** Trick bonus that may land at once (a 380 triple plus margin). */
-const MAX_BONUS_BURST = 600;
-/** Sustained trick bonus rate — refills the burst budget. */
-const BONUS_REFILL_PER_SEC = 250;
+/** Extra room on top of the computed maximum, for rounding and future small tweaks. */
+const BONUS_MARGIN = 1.25;
+/** Trick bonus that may land at once. */
+const MAX_BONUS_BURST = Math.ceil(MAX_CHAIN_LANDING_BONUS * BONUS_MARGIN);
+/**
+ * Three flips need at least ~1.75s of rotation time (0.18 rad/frame at 60fps), so two
+ * seconds is a safe floor between maximum landings; the refill rate follows from it.
+ */
+const MIN_SECONDS_BETWEEN_MAX_LANDINGS = 2;
+/** Sustained trick bonus rate; refills the burst budget so long chains aren't clamped. */
+const BONUS_REFILL_PER_SEC = Math.ceil(MAX_CHAIN_LANDING_BONUS / MIN_SECONDS_BETWEEN_MAX_LANDINGS);
 /** Same ceiling as the leaderboard API. */
 const MAX_SCORE = 99_999;
 

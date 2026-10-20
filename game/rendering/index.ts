@@ -2,7 +2,15 @@ export { drawBackground, SUBURBAN_BACKGROUND_DRAWERS, DUBAI_BACKGROUND_DRAWERS }
 export { drawPlayer, drawSkinPreview } from "./PlayerRenderer";
 export { drawObstacle } from "./obstacles";
 export { drawFloatingText } from "./FloatingTextRenderer";
-export { drawCrashBike, drawCrashRider } from "./CrashRenderer";
+export { drawCrashBike, drawRiderFigure, crashFadeAlpha, UPRIGHT_SHOULDER } from "./CrashRenderer";
+export type { RiderPose, Offset } from "./CrashRenderer";
 export { createParticles, updateParticles, drawParticles } from "./ParticleRenderer";
 export type { Particle } from "./ParticleRenderer";
 export { drawAmbulance, drawReviveFlash } from "./AmbulanceRenderer";
+export { createConfettiBurst, updateConfetti, drawConfetti } from "./ConfettiRenderer";
+export type { ConfettiPiece } from "./ConfettiRenderer";
+export { getRearWheelContact, emitSparks, updateSparks, drawSparks } from "./SparkRenderer";
+export type { Spark } from "./SparkRenderer";
+export { createComboFx, triggerComboFx, clearComboFx, updateComboFx } from "./ComboEffects";
+export type { ComboFx } from "./ComboEffects";
+export { drawComboMeter, drawComboFlash, resolveDisplayFont } from "./ComboRenderer";

@@ -1,5 +1,8 @@
 import { INITIAL_SPEED } from "@/game/constants";
+import { formatMultiplier } from "@/game/ComboChain";
 import type { TrickFeedbackData } from "@/hooks/useGameEngine";
+import { useCanVibrate } from "@/hooks/useHapticFeedback";
+import { useGamepadConnected } from "@/hooks/useGamepad";
 
 /** Guards against browsers firing both onTouchStart and onClick. */
 let lastTouchTime = 0;
@@ -10,11 +13,16 @@ const TRICK_COLOR_SKETCHY = "#d97706";
 interface HUDProps {
   score: number;
   speed: number;
-  trickFeedback: { name: string; points: number; sketchy?: boolean } | null;
+  trickFeedback: TrickFeedbackData | null;
   musicMuted: boolean;
   sfxMuted: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  /** Vibration setting; the toggle only shows on devices that can vibrate. */
+  vibrationOn: boolean;
+  onToggleVibration: () => void;
+  /** Pauses the run; shows a pause button next to the audio toggles. */
+  onPause?: () => void;
   onJump: () => void;
   onBackflip: () => void;
   onFrontflip: () => void;
@@ -75,6 +83,34 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   );
 }
 
+function VibrationIcon({ off }: { off: boolean }) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="8" y="4" width="8" height="16" rx="1.5" />
+      <path d="M4 8v8M20 8v8" />
+      {off && <line x1="3" y1="3" x2="21" y2="21" strokeWidth="2.5" />}
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+    </svg>
+  );
+}
+
 /** Shared glass style for small HUD buttons, so screens composing HUD pieces match. */
 export const btnStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.22)",
@@ -116,7 +152,7 @@ function ArrowSVG({ points }: { points: string }) {
 }
 
 /**
- * Music/SFX toggles, top left. Extracted so the multiplayer race screen can reuse
+ * Music/SFX/vibration toggles, top left (vibration only where the device can vibrate). Extracted so the multiplayer race screen can reuse
  * them and append its own buttons (e.g. LEAVE) via children.
  */
 export function AudioControls({
@@ -124,15 +160,20 @@ export function AudioControls({
   sfxMuted,
   onToggleMusic,
   onToggleSfx,
+  vibrationOn,
+  onToggleVibration,
   children,
 }: {
   musicMuted: boolean;
   sfxMuted: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  vibrationOn: boolean;
+  onToggleVibration: () => void;
   /** Extra buttons appended to the same top-left row (e.g. multiplayer's Leave). */
   children?: React.ReactNode;
 }) {
+  const canVibrate = useCanVibrate();
   return (
     <div
       style={{
@@ -157,12 +198,21 @@ export function AudioControls({
       >
         <SpeakerIcon muted={sfxMuted} />
       </button>
+      {canVibrate && (
+        <button
+          onClick={onToggleVibration}
+          title={vibrationOn ? "Vibration off" : "Vibration on"}
+          style={btnStyle}
+        >
+          <VibrationIcon off={!vibrationOn} />
+        </button>
+      )}
       {children}
     </div>
   );
 }
 
-/** "Backflip +50"-style feedback; renders nothing when there's no recent trick. */
+/** "Backflip +75 (×1.5)"-style feedback; renders nothing when there's no recent trick. */
 export function TrickFeedbackPopup({
   trickFeedback,
 }: {
@@ -180,11 +230,15 @@ export function TrickFeedbackPopup({
       }}
     >
       {trickFeedback.name} +{trickFeedback.points}
+      {trickFeedback.multiplier > 1 && ` (\u00d7${formatMultiplier(trickFeedback.multiplier)})`}
     </span>
   );
 }
 
-/** Touch D-pad for tricks (bottom right), shared by single-player and multiplayer. */
+/**
+ * Touch D-pad for tricks (bottom right), shared by single-player and multiplayer.
+ * Hidden while a gamepad is connected, since the controller's own D-pad does the job.
+ */
 export function TrickDpad({
   onBackflip,
   onFrontflip,
@@ -196,6 +250,9 @@ export function TrickDpad({
   onSuperman: () => void;
   onNoHander: () => void;
 }) {
+  const hasGamepad = useGamepadConnected();
+  if (hasGamepad) return null;
+
   return (
     <div
       style={{
@@ -260,6 +317,9 @@ export default function HUD({
   sfxMuted,
   onToggleMusic,
   onToggleSfx,
+  vibrationOn,
+  onToggleVibration,
+  onPause,
   onJump,
   onBackflip,
   onFrontflip,
@@ -267,6 +327,7 @@ export default function HUD({
   onNoHander,
 }: HUDProps) {
   const multiplier = (speed / INITIAL_SPEED).toFixed(1);
+  const hasGamepad = useGamepadConnected();
 
   return (
     <>
@@ -313,10 +374,18 @@ export default function HUD({
         sfxMuted={sfxMuted}
         onToggleMusic={onToggleMusic}
         onToggleSfx={onToggleSfx}
-      />
+        vibrationOn={vibrationOn}
+        onToggleVibration={onToggleVibration}
+      >
+        {onPause && (
+          <button onClick={onPause} title="Pause (Esc or P)" style={btnStyle}>
+            <PauseIcon />
+          </button>
+        )}
+      </AudioControls>
 
-      {/* Jump button — bottom left */}
-      <button
+      {/* Jump button — bottom left; a connected gamepad's A button replaces it */}
+      {!hasGamepad && <button
         onTouchStart={(e) => { e.preventDefault(); lastTouchTime = Date.now(); onJump(); }}
         onClick={() => { if (Date.now() - lastTouchTime < 500) return; onJump(); }}
         title="Jump (tap or space)"
@@ -341,7 +410,7 @@ export default function HUD({
       >
         <ArrowSVG points="6 15 12 9 18 15" />
         <span style={{ fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
-      </button>
+      </button>}
 
       <TrickDpad
         onBackflip={onBackflip}

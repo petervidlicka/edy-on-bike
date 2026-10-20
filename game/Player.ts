@@ -1,5 +1,5 @@
 import { PlayerState, TrickType } from "./types";
-import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, RAMP_GRAVITY_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED, MAX_FLIP_COUNT } from "./constants";
+import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT, GRAVITY, JUMP_FORCE, RIDEABLE_JUMP_MULTIPLIER, BACKFLIP_SPEED, RAMP_HEIGHT_MULTIPLIER, RAMP_GRAVITY_MULTIPLIER, SUPERMAN_SPEED, NO_HANDER_SPEED, MAX_FLIP_COUNT, GRIND_BIKE_TILT, GRIND_RIDER_CROUCH } from "./constants";
 
 export function createPlayer(groundY: number, canvasWidth: number): PlayerState {
   return {
@@ -159,10 +159,11 @@ export function updatePlayer(
   // If riding an obstacle, skip normal physics (Engine manages Y position)
   if (player.ridingObstacle) {
     player.wheelRotation += speed * dt * 0.08;
-    // Smoothly return animation to neutral
-    player.bikeTilt += (0 - player.bikeTilt) * 0.25 * dt;
+    // Grind pose: ease into a low crouch with the nose slightly down so riding a
+    // surface reads differently from rolling on the ground; the rest returns to neutral
+    player.bikeTilt += (GRIND_BIKE_TILT - player.bikeTilt) * 0.25 * dt;
     player.riderLean += (0 - player.riderLean) * 0.2 * dt;
-    player.riderCrouch += (0 - player.riderCrouch) * 0.2 * dt;
+    player.riderCrouch += (GRIND_RIDER_CROUCH - player.riderCrouch) * 0.2 * dt;
     player.legTuck += (0 - player.legTuck) * 0.2 * dt;
     return;
   }

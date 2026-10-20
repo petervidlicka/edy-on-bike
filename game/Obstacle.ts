@@ -41,6 +41,24 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.DUBAI_BILLBOARD]:    { width: 309, height: 92 },
 };
 
+/** Trick name shown when the rider grinds along the top of each rideable obstacle. */
+const GRIND_LABELS: Partial<Record<ObstacleType, string>> = {
+  [ObstacleType.SHIPPING_CONTAINER]: "Container Grind",
+  [ObstacleType.CONTAINER_WITH_RAMP]: "Container Grind",
+  [ObstacleType.BUS_STOP]: "Bus Stop Grind",
+  [ObstacleType.DUBAI_BILLBOARD]: "Billboard Grind",
+  [ObstacleType.DUBAI_CHOCOLATE]: "Chocolate Grind \u{1F36B}",
+};
+
+/**
+ * Names a grind after the obstacle it happened on, so each rideable feels like its own trick.
+ * @param type - The obstacle that was ridden.
+ * @returns The label, or a generic "Grind" for a rideable without a dedicated name.
+ */
+export function getGrindLabel(type: ObstacleType): string {
+  return GRIND_LABELS[type] ?? "Grind";
+}
+
 function weightedRandom(types: WeightedType[], rng: () => number = Math.random): ObstacleType {
   const total = types.reduce((sum, t) => sum + t.weight, 0);
   let rand = rng() * total;

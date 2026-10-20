@@ -16,9 +16,9 @@ const MAX_OFFSET = BOOST_MAX_X_RATIO - PLAYER_X_RATIO;
 
 /** Every landed trick moves the rider at least this far forward (fraction of canvas width). */
 const MIN_GAIN = 0.05;
-/** Extra push for big tricks, scaled by points up to BIG_TRICK_POINTS (combos land here). */
+/** Extra push for big tricks, scaled by points up to FULL_GAIN_POINTS (combos land here). */
 const EXTRA_GAIN = 0.09;
-const BIG_TRICK_POINTS = 300;
+const FULL_GAIN_POINTS = 300;
 /** Sketchy landings earn half the push. */
 const SKETCHY_GAIN_FACTOR = 0.5;
 
@@ -48,7 +48,7 @@ export class TrickBoost {
    * @param sketchy - Landed sketchy; earns a smaller push.
    */
   onTrick(points: number, sketchy: boolean): void {
-    const gain = (MIN_GAIN + EXTRA_GAIN * Math.min(1, Math.max(0, points) / BIG_TRICK_POINTS))
+    const gain = (MIN_GAIN + EXTRA_GAIN * Math.min(1, Math.max(0, points) / FULL_GAIN_POINTS))
       * (sketchy ? SKETCHY_GAIN_FACTOR : 1);
     this.target = Math.min(MAX_OFFSET, this.target + gain);
     this.holdMs = BOOST_HOLD_MS;

@@ -1,4 +1,10 @@
-import { CrashState, SkinDefinition } from "../types";
+/**
+ * Drawing primitives shared by every crash variant: the tumbling bike and the
+ * stick-figure rider. Both are built from the same part helpers as the riding
+ * pose in PlayerRenderer, so every skin works in every crash.
+ */
+import { SkinDefinition } from "../types";
+import type { CrashState } from "../crashes/types";
 import {
   getBikeGeometry,
   getWheelParams,
@@ -9,6 +15,26 @@ import {
 } from "./PlayerRenderer";
 import { PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
 
+/** Seconds at the end of a crash during which everything fades out. */
+const FADE_OUT_S = 0.3;
+
+/**
+ * Opacity of the crash scene: 1 until the last 0.3 s, then fading to 0.
+ * @param crash - Crash state whose clock decides the fade.
+ */
+export function crashFadeAlpha(crash: CrashState): number {
+  const fadeStart = crash.duration - FADE_OUT_S;
+  const alpha = crash.elapsed > fadeStart ? 1 - (crash.elapsed - fadeStart) / FADE_OUT_S : 1;
+  return Math.max(0, alpha);
+}
+
+/**
+ * Draws the crashed bike (wheels, frame, handlebars) around its own centre. The
+ * caller owns the fade (`globalAlpha`).
+ * @param ctx - Canvas context.
+ * @param crash - Crash state holding the bike position, angle and wheel spin.
+ * @param skin - Skin that colours and shapes the bike.
+ */
 export function drawCrashBike(
   ctx: CanvasRenderingContext2D,
   crash: CrashState,
@@ -17,15 +43,7 @@ export function drawCrashBike(
   const c = skin.colors;
   const glowWheels = skin.bikeStyle === "fixie";
 
-  // Fade-out in last 0.3s
-  const fadeStart = crash.duration - 0.3;
-  const alpha =
-    crash.elapsed > fadeStart
-      ? 1 - (crash.elapsed - fadeStart) / 0.3
-      : 1;
-
   ctx.save();
-  ctx.globalAlpha = Math.max(0, alpha);
 
   // Position and rotate the bike around its center
   ctx.translate(crash.bikeX, crash.bikeY);
@@ -51,73 +69,79 @@ export function drawCrashBike(
   ctx.restore();
 }
 
-export function drawCrashRider(
+/** A point relative to the rider's hip; x runs forward, y runs down (while upright). */
+export type Offset = readonly [number, number];
+
+/** Where the rider's limbs are, relative to the hip. The torso and head follow from `shoulder`. */
+export interface RiderPose {
+  footL: Offset;
+  footR: Offset;
+  shoulder: Offset;
+  handL: Offset;
+  handR: Offset;
+  /** Draw crossed-out eyes instead of a normal one. */
+  dazed?: boolean;
+}
+
+/** Torso top of an upright rider; the default for `RiderPose.shoulder`. */
+export const UPRIGHT_SHOULDER: Offset = [2, -13];
+
+/**
+ * Draws the stick-figure rider with the hip at the origin: legs, torso, arms, hands,
+ * head, face and helmet. The caller positions and rotates the context and owns the
+ * fade, so one function serves every variant's pose.
+ * @param ctx - Canvas context, already translated/rotated to the rider's hip.
+ * @param skin - Skin that colours the rider and picks the helmet.
+ * @param pose - Limb end points relative to the hip.
+ */
+export function drawRiderFigure(
   ctx: CanvasRenderingContext2D,
-  crash: CrashState,
-  skin: SkinDefinition
+  skin: SkinDefinition,
+  pose: RiderPose
 ): void {
   const c = skin.colors;
-
-  // Fade-out in last 0.3s
-  const fadeStart = crash.duration - 0.3;
-  const alpha =
-    crash.elapsed > fadeStart
-      ? 1 - (crash.elapsed - fadeStart) / 0.3
-      : 1;
-
-  ctx.save();
-  ctx.globalAlpha = Math.max(0, alpha);
-
-  ctx.translate(crash.riderX, crash.riderY);
-  ctx.rotate(crash.riderAngle);
-
-  // Limb spread: compact → ragdoll over first 0.3s
-  const spread = Math.min(crash.elapsed / 0.3, 1);
-
-  // Proportions centered at hip (0,0)
-  const hipX = 0, hipY = 0;
-  const shoulderX = 2, shoulderY = -13;
+  const [shoulderX, shoulderY] = pose.shoulder;
   const headX = shoulderX + 1, headY = shoulderY - 7;
 
-  // Legs — spread outward
+  // Legs
   ctx.strokeStyle = c.pants;
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(hipX - 1, hipY + 2);
-  ctx.lineTo(hipX - 6 * spread, hipY + 12);
+  ctx.moveTo(-1, 2);
+  ctx.lineTo(pose.footL[0], pose.footL[1]);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(hipX + 2, hipY + 2);
-  ctx.lineTo(hipX + 8 * spread, hipY + 10);
+  ctx.moveTo(2, 2);
+  ctx.lineTo(pose.footR[0], pose.footR[1]);
   ctx.stroke();
 
   // Torso
   ctx.strokeStyle = c.shirt;
   ctx.lineWidth = 3.5;
   ctx.beginPath();
-  ctx.moveTo(hipX, hipY);
+  ctx.moveTo(0, 0);
   ctx.lineTo(shoulderX, shoulderY);
   ctx.stroke();
 
-  // Arms — flung outward
+  // Arms
   ctx.strokeStyle = c.shirt;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.moveTo(shoulderX, shoulderY);
-  ctx.lineTo(shoulderX - 10 * spread, shoulderY + 3);
+  ctx.lineTo(pose.handL[0], pose.handL[1]);
   ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(shoulderX, shoulderY);
-  ctx.lineTo(shoulderX + 8 * spread, shoulderY - 5 * spread);
+  ctx.lineTo(pose.handR[0], pose.handR[1]);
   ctx.stroke();
 
   // Hands
   ctx.fillStyle = c.skin;
   ctx.beginPath();
-  ctx.arc(shoulderX - 10 * spread, shoulderY + 3, 2, 0, Math.PI * 2);
+  ctx.arc(pose.handL[0], pose.handL[1], 2, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(shoulderX + 8 * spread, shoulderY - 5 * spread, 2, 0, Math.PI * 2);
+  ctx.arc(pose.handR[0], pose.handR[1], 2, 0, Math.PI * 2);
   ctx.fill();
 
   // Head
@@ -127,10 +151,21 @@ export function drawCrashRider(
   ctx.fill();
 
   // Eye
-  ctx.fillStyle = "#2e2e2e";
-  ctx.beginPath();
-  ctx.arc(headX + 3, headY, 1.2, 0, Math.PI * 2);
-  ctx.fill();
+  if (pose.dazed) {
+    ctx.strokeStyle = "#2e2e2e";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(headX + 1.8, headY - 1.4);
+    ctx.lineTo(headX + 4.2, headY + 1.4);
+    ctx.moveTo(headX + 4.2, headY - 1.4);
+    ctx.lineTo(headX + 1.8, headY + 1.4);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = "#2e2e2e";
+    ctx.beginPath();
+    ctx.arc(headX + 3, headY, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // Sunglasses for Shadow Ops
   if (skin.bikeStyle === "fatTire") {
@@ -142,6 +177,4 @@ export function drawCrashRider(
 
   // Helmet
   drawHelmet(ctx, headX, headY, skin.helmetStyle, c.helmet);
-
-  ctx.restore();
 }

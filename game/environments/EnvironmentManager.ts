@@ -10,6 +10,7 @@ import type {
 import { SUBURBAN_ENVIRONMENT } from "./suburban";
 import { DUBAI_ENVIRONMENT } from "./dubai";
 import { AUSTRIA_ENVIRONMENT } from "./austria";
+import { TOKYO_ENVIRONMENT } from "./tokyo";
 import { lerpPalette, easeInOutCubic } from "./colorLerp";
 
 // ── Biome cycle ──
@@ -20,6 +21,7 @@ const BIOME_CYCLE: EnvironmentDefinition[] = [
   SUBURBAN_ENVIRONMENT,
   DUBAI_ENVIRONMENT,
   AUSTRIA_ENVIRONMENT,
+  TOKYO_ENVIRONMENT,
 ];
 
 /** How long each biome lasts before the next transition starts. */
@@ -185,6 +187,11 @@ export class EnvironmentManager {
    */
   getSkylines(): readonly SkylinePass[] {
     return this.fadedPasses((env) => env.skyline);
+  }
+
+  /** Road overlays (e.g. wet-road neon reflections), faded across a transition like skylines. */
+  getRoadOverlays(): readonly SkylinePass[] {
+    return this.fadedPasses((env) => env.roadOverlay);
   }
 
   /** Biome kit for the rider; switches halfway through a transition, with the buildings. */

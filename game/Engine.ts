@@ -745,7 +745,7 @@ export class Engine {
     const view = getViewBounds(this.camera.zoom, canvasW, canvasH, groundY);
     ctx.save();
     this.camera.apply(ctx, canvasW, groundY);
-    drawBackground(ctx, this.layers, canvasW, view, groundY, palette, drawers, this.envManager.getSkylines());
+    drawBackground(ctx, this.layers, canvasW, view, groundY, palette, drawers, this.envManager.getSkylines(), this.envManager.getRoadOverlays());
     ctx.restore();
     if (this.particleConfig && this.particles.length > 0) {
       drawParticles(ctx, this.particles, this.particleConfig);

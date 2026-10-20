@@ -52,13 +52,28 @@ export const OBSTACLE_SPECS: Record<ObstacleType, { width: number; height: numbe
   [ObstacleType.RACE_SKIER]:      { width: 44, height: 34 },   // tucked low
   [ObstacleType.SNOWBOARDER]:     { width: 40, height: 48 },
   [ObstacleType.SNOW_SCOOTER]:    { width: 66, height: 42 },
+
+  // Tokyo biome obstacles
+  [ObstacleType.KEI_CAR]:         { width: 60, height: 42 },   // tall-roof box on tiny wheels
+  [ObstacleType.KEI_TRUCK]:       { width: 72, height: 40 },
+  [ObstacleType.JAPAN_TAXI]:      { width: 78, height: 42 },   // roof lamp included
+  [ObstacleType.SAMURAI]:         { width: 36, height: 58 },   // katana raised
+  [ObstacleType.SUSHI_ROLLS]:     { width: 150, height: 50 },  // maki on a wooden board — rideable
+  [ObstacleType.VENDING_MACHINE]: { width: 32, height: 62 },   // tall, glowing
+  [ObstacleType.SAKE_BARRELS]:    { width: 124, height: 56 },  // two rows of taru — rideable
+  [ObstacleType.DELIVERY_SCOOTER]:{ width: 52, height: 46 },
+  [ObstacleType.UMBRELLA_CYCLIST]:{ width: 46, height: 60 },   // mamachari plus umbrella
+  [ObstacleType.KAWAII_BARRIER]:  { width: 64, height: 34 },
+  [ObstacleType.MANEKI_NEKO]:     { width: 32, height: 40 },
+  [ObstacleType.RAMEN_BOWL]:      { width: 46, height: 30 },
+  [ObstacleType.SHIBA_INU]:       { width: 38, height: 28 },
 };
 
 /**
  * Obstacles that travel on their own, as how far they end up from where a static obstacle
  * would be by the time they reach the rider (px; + moves with the rider and arrives late,
- * − comes towards it and arrives early). Racers and scooters come at the rider, freeriders
- * and boarders cruise the same way. Each mover's own speed is `speed · offset / MOTION_RANGE`,
+ * − comes towards it and arrives early). Racers, snow scooters and umbrella cyclists come
+ * at the rider; freeriders, boarders and delivery scooters cruise the same way. Each mover's own speed is `speed · offset / MOTION_RANGE`,
  * so it scales with the world speed.
  */
 const MOTION_OFFSET: Partial<Record<ObstacleType, number>> = {
@@ -66,6 +81,8 @@ const MOTION_OFFSET: Partial<Record<ObstacleType, number>> = {
   [ObstacleType.SNOWBOARDER]: 400,
   [ObstacleType.RACE_SKIER]: -720,
   [ObstacleType.SNOW_SCOOTER]: -560,
+  [ObstacleType.DELIVERY_SCOOTER]: 480,
+  [ObstacleType.UMBRELLA_CYCLIST]: -620,
 };
 
 /**
@@ -95,6 +112,8 @@ const RIDEABLE_TYPES = new Set<ObstacleType>([
   ObstacleType.DUBAI_BILLBOARD,
   ObstacleType.BEER_CRATE_WALL,
   ObstacleType.SNOW_CAT,
+  ObstacleType.SUSHI_ROLLS,
+  ObstacleType.SAKE_BARRELS,
 ]);
 
 const RAMP_TYPES = new Set<ObstacleType>([
@@ -112,6 +131,8 @@ const GRIND_LABELS: Partial<Record<ObstacleType, string>> = {
   [ObstacleType.DUBAI_CHOCOLATE]: "Chocolate Grind \u{1F36B}",
   [ObstacleType.BEER_CRATE_WALL]: "Crate Grind \u{1F37A}",
   [ObstacleType.SNOW_CAT]: "Pistenbully Grind",
+  [ObstacleType.SUSHI_ROLLS]: "Sushi Grind \u{1F363}",
+  [ObstacleType.SAKE_BARRELS]: "Sake Grind \u{1F376}",
 };
 
 /**

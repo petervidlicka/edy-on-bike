@@ -73,7 +73,8 @@ export function drawBackground(
   groundY: number,
   palette: EnvironmentPalette,
   drawers: Record<string, BackgroundDrawFn>,
-  skylines: readonly SkylinePass[] = []
+  skylines: readonly SkylinePass[] = [],
+  roadOverlays: readonly SkylinePass[] = []
 ) {
   drawSky(ctx, view, groundY, palette);
 
@@ -116,6 +117,15 @@ export function drawBackground(
 
   // Layer 2: ground + road
   drawGround(ctx, view, groundY, layers[2].offset, palette);
+
+  // Road overlays (wet-road reflections) scroll with the road
+  for (const pass of roadOverlays) {
+    if (pass.alpha <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = pass.alpha;
+    pass.draw(ctx, view, groundY, layers[2].offset, palette);
+    ctx.restore();
+  }
 }
 
 // --- Pedestrians (shared across biomes) ---

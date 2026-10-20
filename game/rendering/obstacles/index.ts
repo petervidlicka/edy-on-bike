@@ -18,6 +18,11 @@ import {
   drawSnowCat, drawSnowKicker, drawFreerideSkier, drawRaceSkier, drawSnowboarder, drawSnowScooter,
 } from "./austriaObstacles";
 
+import {
+  drawKeiCar, drawKeiTruck, drawJapanTaxi, drawSamurai, drawSushiRolls, drawVendingMachine, drawSakeBarrels,
+  drawDeliveryScooter, drawUmbrellaCyclist, drawKawaiiBarrier, drawManekiNeko, drawRamenBowl, drawShibaInu,
+} from "./tokyoObstacles";
+
 /**
  * Motor vehicles are oncoming traffic. Their art is authored facing right, but the world
  * scrolls left, so drawn as-is they read as reversing towards the rider — mirror them.
@@ -26,7 +31,7 @@ const ONCOMING_VEHICLES: ReadonlySet<ObstacleType> = new Set([
   ObstacleType.CAR, ObstacleType.SUV, ObstacleType.DELIVERY_VAN,
   ObstacleType.LAND_CRUISER, ObstacleType.PINK_G_CLASS, ObstacleType.LAMBORGHINI_HURACAN,
   ObstacleType.FERRARI_458, ObstacleType.CONVERTIBLE, ObstacleType.ROLLS_ROYCE_PHANTOM,
-  ObstacleType.PORSCHE_911,
+  ObstacleType.PORSCHE_911, ObstacleType.KEI_CAR, ObstacleType.KEI_TRUCK, ObstacleType.JAPAN_TAXI,
 ]);
 
 export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette) {
@@ -81,5 +86,18 @@ function drawObstacleArt(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstan
     case ObstacleType.RACE_SKIER:         drawRaceSkier(ctx, x, y, w, h, palette); break;
     case ObstacleType.SNOWBOARDER:        drawSnowboarder(ctx, x, y, w, h); break;
     case ObstacleType.SNOW_SCOOTER:       drawSnowScooter(ctx, x, y, w, h); break;
+    case ObstacleType.KEI_CAR:            drawKeiCar(ctx, x, y, w, h, palette); break;
+    case ObstacleType.KEI_TRUCK:          drawKeiTruck(ctx, x, y, w, h, palette); break;
+    case ObstacleType.JAPAN_TAXI:         drawJapanTaxi(ctx, x, y, w, h, palette); break;
+    case ObstacleType.SAMURAI:            drawSamurai(ctx, x, y, w, h); break;
+    case ObstacleType.SUSHI_ROLLS:        drawSushiRolls(ctx, x, y, w, h); break;
+    case ObstacleType.VENDING_MACHINE:    drawVendingMachine(ctx, x, y, w, h); break;
+    case ObstacleType.SAKE_BARRELS:       drawSakeBarrels(ctx, x, y, w, h); break;
+    case ObstacleType.DELIVERY_SCOOTER:   drawDeliveryScooter(ctx, x, y, w, h); break;
+    case ObstacleType.UMBRELLA_CYCLIST:   drawUmbrellaCyclist(ctx, x, y, w, h); break;
+    case ObstacleType.KAWAII_BARRIER:     drawKawaiiBarrier(ctx, x, y, w, h); break;
+    case ObstacleType.MANEKI_NEKO:        drawManekiNeko(ctx, x, y, w, h); break;
+    case ObstacleType.RAMEN_BOWL:         drawRamenBowl(ctx, x, y, w, h); break;
+    case ObstacleType.SHIBA_INU:          drawShibaInu(ctx, x, y, w, h, palette); break;
   }
 }

@@ -146,6 +146,8 @@ export class Engine {
   private debugSequence: ObstacleType[] | null = null;
   private debugIndex: number = 0;
   private debugGap: number = 500;
+  /** Padding the last debug-spawned mover needs before the next spawn (see spawnGapPadding). */
+  private nextDebugPadding = 0;
   private crashState = createCrashState();
   /**
    * Decided when the crash starts (not when it ends) so the player can skip a crash
@@ -223,6 +225,7 @@ export class Engine {
     this.distanceSinceLastObstacle = 0;
     this.nextObstacleGap = 0;
     this.debugIndex = 0;
+    this.nextDebugPadding = 0;
     this.obstacles = [];
     this.floatingTexts = [];
     this.chain = createChain();
@@ -410,7 +413,7 @@ export class Engine {
 
     // Move obstacles and cull off-screen ones
     for (const obs of this.obstacles) {
-      moveObstacle(obs, this.speed, dt);
+      moveObstacle(obs, this.speed, dt, this.player.x);
     }
     // Spawn and cull outside the widest zoomed-out view, so obstacles never pop in or out on screen
     const widestView = getViewBounds(MIN_CAMERA_ZOOM, this.canvasW, this.canvasH, this.groundY);
@@ -418,14 +421,16 @@ export class Engine {
 
     // Obstacle spawning
     this.distanceSinceLastObstacle += this.speed * dt;
-    const gap = this.debugSequence ? this.debugGap : this.nextObstacleGap;
+    const gap = this.debugSequence ? this.debugGap + this.nextDebugPadding : this.nextObstacleGap;
     if (this.distanceSinceLastObstacle >= gap) {
       if (this.debugSequence) {
         const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
-        this.obstacles.push(createObstacle(type, widestView.right, this.groundY, this.speed, this.player.x));
+        const spawned = createObstacle(type, widestView.right, this.groundY, this.player.x);
+        this.obstacles.push(spawned);
+        this.nextDebugPadding = spawnGapPadding(spawned);
         this.debugIndex++;
       } else {
-        const spawned = spawnObstacle(widestView.right, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.speed, this.player.x, this.rng.random.bind(this.rng));
+        const spawned = spawnObstacle(widestView.right, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.player.x, this.rng.random.bind(this.rng));
         this.obstacles.push(spawned);
         this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng)) + spawnGapPadding(spawned);
       }
@@ -935,6 +940,7 @@ export class Engine {
   setDebugObstacles(sequence: ObstacleType[] | null, gap?: number): void {
     this.debugSequence = sequence;
     this.debugIndex = 0;
+    this.nextDebugPadding = 0;
     if (gap !== undefined) this.debugGap = gap;
   }
 

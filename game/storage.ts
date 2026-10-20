@@ -4,6 +4,7 @@
  * which keeps prerendered pages hydration-safe and re-renders after writes.
  */
 import { SkinId, SkinUnlockState } from "./types";
+import { SKINS } from "./skins";
 
 const STORAGE_KEY = "edy-skin-state";
 
@@ -27,15 +28,24 @@ export function loadSkinState(): SkinUnlockState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SKIN_STATE };
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return { ...DEFAULT_SKIN_STATE };
+    const { selectedSkinId, bestScore, cheatUnlocked } = parsed as Record<string, unknown>;
+    // Field by field, so one bad value (hand-edited, older format) doesn't cost the rest
     return {
-      selectedSkinId: parsed.selectedSkinId ?? "default",
-      bestScore: parsed.bestScore ?? 0,
-      cheatUnlocked: parsed.cheatUnlocked ?? false,
+      selectedSkinId: isSkinId(selectedSkinId) ? selectedSkinId : DEFAULT_SKIN_STATE.selectedSkinId,
+      bestScore: typeof bestScore === "number" && Number.isFinite(bestScore) && bestScore >= 0
+        ? bestScore
+        : DEFAULT_SKIN_STATE.bestScore,
+      cheatUnlocked: typeof cheatUnlocked === "boolean" ? cheatUnlocked : DEFAULT_SKIN_STATE.cheatUnlocked,
     };
   } catch {
     return { ...DEFAULT_SKIN_STATE };
   }
+}
+
+function isSkinId(value: unknown): value is SkinId {
+  return typeof value === "string" && SKINS.some((skin) => skin.id === value);
 }
 
 /**

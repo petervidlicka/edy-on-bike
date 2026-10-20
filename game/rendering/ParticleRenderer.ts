@@ -42,12 +42,18 @@ export function updateParticles(
   }
 }
 
+/**
+ * Draws a weather overlay in screen space.
+ * @param alpha - Extra fade (0–1) on top of the config's opacity, for biome changes.
+ */
 export function drawParticles(
   ctx: CanvasRenderingContext2D,
   particles: Particle[],
-  config: ParticleOverlayConfig
+  config: ParticleOverlayConfig,
+  alpha = 1
 ): void {
-  ctx.globalAlpha = config.opacity;
+  if (alpha <= 0) return;
+  ctx.globalAlpha = config.opacity * alpha;
   if (config.type === "rain") {
     // Streaks along the fall direction, longer for the bigger (nearer) drops
     const len = Math.hypot(config.speed.x, config.speed.y) || 1;
@@ -63,12 +69,14 @@ export function drawParticles(
     }
     ctx.stroke();
   } else {
+    // One path for every flake: a fill per particle costs hundreds of draw calls a frame
     ctx.fillStyle = config.color;
+    ctx.beginPath();
     for (const p of particles) {
-      ctx.beginPath();
+      ctx.moveTo(p.x + p.size, p.y);
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
     }
+    ctx.fill();
   }
   ctx.globalAlpha = 1;
 }

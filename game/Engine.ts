@@ -28,20 +28,19 @@ import {
   createComboSummaryText,
   updateFloatingTexts,
   processTrickLanding,
+  resetAllTrickState,
   TrickContext
 } from "./TrickSystem";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
-import { createBackgroundLayers, updateLayers, getTotalLayerWidth } from "./Background";
+import { BiomeScenery } from "./BiomeScenery";
 import {
-  drawBackground, drawPlayer, drawObstacle, drawFloatingText,
-  createParticles, updateParticles, drawParticles, drawAmbulance, drawReviveFlash,
+  drawPlayer, drawObstacle, drawFloatingText, drawAmbulance, drawReviveFlash,
   createConfettiBurst, updateConfetti, drawConfetti,
   createComboFx, triggerComboFx, clearComboFx, updateComboFx,
   drawComboMeter, drawComboFlash, resolveDisplayFont,
   getRearWheelContact, emitSparks, updateSparks, drawSparks,
 } from "./rendering";
-import type { Particle, ConfettiPiece, Spark } from "./rendering";
-import type { ParticleOverlayConfig } from "./environments/types";
+import type { ConfettiPiece, Spark } from "./rendering";
 import { spawnObstacle, createObstacle, nextSpawnGap, getGrindLabel, moveObstacle, spawnGapPadding } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
@@ -109,7 +108,8 @@ export class Engine {
   private state: GameState = GameState.IDLE;
   private envManager = new EnvironmentManager();
   private player = createPlayer(0, 0);
-  private layers = createBackgroundLayers(0, 0, this.envManager.getCurrentEnvironment());
+  /** Parallax layers and weather, including the hand-off between biomes. */
+  private scenery = new BiomeScenery(this.envManager.getCurrentEnvironment(), 0, 0, 0);
   private obstacles: ObstacleInstance[] = [];
   private speed: number = INITIAL_SPEED;
   private score: number = 0;
@@ -154,8 +154,6 @@ export class Engine {
    * animation that no ambulance follows; an ambulance, once rolled, always plays.
    */
   private ambulancePending = false;
-  private particles: Particle[] = [];
-  private particleConfig: ParticleOverlayConfig | null = null;
   private rng: { random(): number } = { random: Math.random };
   private multiplayer: MultiplayerAdapter | null = null;
   /** Zooms out for big air so the rider never leaves the screen. Render-only. */
@@ -178,16 +176,22 @@ export class Engine {
   }
 
   resize(w: number, h: number): void {
+    const prevGroundY = this.groundY;
     this.canvasW = w;
     this.canvasH = h;
     this.groundY = Math.floor(h * GROUND_RATIO);
     this.canvas.width = w;
     this.canvas.height = h;
-    this.layers = createBackgroundLayers(w, this.groundY, this.envManager.getCurrentEnvironment());
+    // Rebuilt for the new size; mid-transition it jumps straight to the incoming biome
+    this.scenery.reset(this.envManager.getTargetEnvironment(), w, h, this.groundY);
     if (this.state !== GameState.RUNNING && this.state !== GameState.AMBULANCE) {
       this.player = createPlayer(this.groundY, w);
     } else {
-      this.player.y = Math.min(this.player.y, this.groundY - this.player.height);
+      // Everything standing on the road moves with it, so nothing floats or sinks
+      const dy = this.groundY - prevGroundY;
+      this.player.y = Math.min(this.player.y + dy, this.groundY - this.player.height);
+      for (const obs of this.obstacles) obs.y += dy;
+      if (this.ambulance) this.ambulance.y += dy;
     }
     // The loop is stopped while paused; setting the canvas size cleared it, so redraw the frozen frame.
     if (this.isPaused()) this.render();
@@ -232,12 +236,10 @@ export class Engine {
     clearComboFx(this.comboFx);
     this.confetti = [];
     this.envManager.reset();
-    this.particles = [];
-    this.particleConfig = null;
     this.boost?.reset();
     this.camera.reset();
     this.player = createPlayer(this.groundY, this.canvasW);
-    this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
+    this.scenery.reset(this.envManager.getCurrentEnvironment(), this.canvasW, this.canvasH, this.groundY);
     this.callbacks.onScoreUpdate(0);
     this.callbacks.onStateChange(this.state);
     if (wasPaused && !this.isPaused()) {
@@ -293,17 +295,19 @@ export class Engine {
     // Normalize to 60fps units — dt=1 at 60fps, capped to avoid spiral on tab switch
     const dt = Math.min(rawDt / (1000 / 60), 3);
 
-    if (this.state === GameState.RUNNING) {
+    const frameState = this.state;
+    if (frameState === GameState.RUNNING) {
       this.update(dt, rawDt);
-    } else if (this.state === GameState.CRASHING) {
+    } else if (frameState === GameState.CRASHING) {
       this.updateCrash(dt, rawDt);
-    } else if (this.state === GameState.AMBULANCE) {
+    } else if (frameState === GameState.AMBULANCE) {
       this.updateAmbulance(dt, rawDt);
     }
 
-    // Continue driving out ambulance after game resumes
-    if (this.state === GameState.RUNNING && this.ambulance) {
-      this.updateAmbulance(dt, rawDt);
+    // After the revive the ambulance drives off on its own, even if the rider crashes
+    // again meanwhile (skipped on the frame it already ran above)
+    if (frameState !== GameState.AMBULANCE && this.ambulance) {
+      if (updateAmbulanceLogic(this.ambulance, dt, rawDt) === AmbulanceAction.REMOVE) this.ambulance = null;
     }
 
     this.camera.update(rawDt, this.state === GameState.RUNNING ? this.player.y : null, this.groundY);
@@ -324,30 +328,15 @@ export class Engine {
     if (envResult.musicCrossfade) {
       this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
     }
+    // Spawning, culling and scenery all work to the widest zoomed-out view, so nothing pops in or out on screen
+    const widestView = getViewBounds(MIN_CAMERA_ZOOM, this.canvasW, this.canvasH, this.groundY);
     if (envResult.appendBackground) {
-      // Append new biome buildings to the end of the existing layer so they scroll in naturally
-      const toEnv = envResult.appendBackground.toEnv;
-      const buildingLayer = this.layers[1];
-      const totalWidth = getTotalLayerWidth(buildingLayer, this.canvasW);
-      const gap = 300;
-      const newElements = toEnv.background.generateElements(this.canvasW, this.groundY, toEnv.palette);
-      for (const el of newElements) {
-        el.x += totalWidth + gap;
-      }
-      buildingLayer.elements.push(...newElements);
+      const { fromEnv, toEnv } = envResult.appendBackground;
+      const scrollPx = this.scenery.beginBiomeChange(fromEnv, toEnv, widestView);
+      // Time the colour blend to the buildings arriving, at the current scroll speed
+      this.envManager.setTransitionDuration(scrollPx / (this.speed * toEnv.background.buildingSpeedRatio));
     }
-    if (envResult.regenerateBackground) {
-      this.layers = createBackgroundLayers(this.canvasW, this.groundY, envResult.regenerateBackground);
-      // Initialize particles if the new biome has a particle overlay
-      const overlay = envResult.regenerateBackground.particleOverlay;
-      if (overlay) {
-        this.particleConfig = overlay;
-        this.particles = createParticles(this.canvasW, this.canvasH, overlay);
-      } else {
-        this.particleConfig = null;
-        this.particles = [];
-      }
-    }
+    if (envResult.regenerateBackground) this.scenery.endBiomeChange();
 
     // Speed progression
     this.speedTimer += rawDt;
@@ -370,6 +359,7 @@ export class Engine {
 
     // Update player and background
     const wasAirborne = !this.player.isOnGround;
+    const prevPlayerY = this.player.y;
     const wasBackflipping = this.player.isBackflipping;
     const prevBackflipAngle = this.player.backflipAngle;
     const prevFlipDirection = this.player.flipDirection;
@@ -378,10 +368,7 @@ export class Engine {
       this.boost.update(rawDt);
       this.player.x = this.canvasW * (PLAYER_X_RATIO + this.boost.offset);
     }
-    updateLayers(this.layers, this.speed, dt);
-    if (this.particleConfig && this.particles.length > 0) {
-      updateParticles(this.particles, this.particleConfig, dt, this.canvasW, this.canvasH);
-    }
+    this.scenery.update(this.speed, dt, widestView.left);
 
     const FULL_FLIP = Math.PI * 2;
     // Where a botched landing plants the rider: the road, or the top of the obstacle landed on
@@ -415,8 +402,6 @@ export class Engine {
     for (const obs of this.obstacles) {
       moveObstacle(obs, this.speed, dt, this.player.x);
     }
-    // Spawn and cull outside the widest zoomed-out view, so obstacles never pop in or out on screen
-    const widestView = getViewBounds(MIN_CAMERA_ZOOM, this.canvasW, this.canvasH, this.groundY);
     this.obstacles = this.obstacles.filter((obs) => obs.x + obs.width > widestView.left);
 
     // Obstacle spawning
@@ -438,7 +423,7 @@ export class Engine {
     }
 
     // Ramp interaction (before collision checks)
-    processRampInteractions(this.player, this.obstacles, this.groundY);
+    processRampInteractions(this.player, this.obstacles, this.groundY, dt);
     processRidingState(this.player);
     this.updateGrind(dtMs, dt);
 
@@ -448,7 +433,7 @@ export class Engine {
       if (obs.ramp) continue; // ramps never crash
 
       if (obs.rideable) {
-        const result = checkRideableCollision(this.player, obs);
+        const result = checkRideableCollision(this.player, obs, prevPlayerY);
         if (result === "crash") {
           this.startCrash({ kind: "obstacle", obstacle: obs });
           return;
@@ -590,8 +575,11 @@ export class Engine {
     this.player.riderCrouch = 0;
     this.player.legTuck = 0;
     this.player.ridingObstacle = null;
-    this.player.backflipAngle = 0;
-    this.player.isBackflipping = false;
+    // A crash mid-air skips the landing that normally clears these, and a leftover pose or
+    // ramp boost would carry into the next hop (free trick bonus, boosted jump)
+    resetAllTrickState(this.player);
+    this.player.rampBoost = null;
+    this.player.rampSurfaceAngle = 0;
 
     // Mercy slowdown
     this.speed *= 0.85;
@@ -731,7 +719,7 @@ export class Engine {
   private render(): void {
     const { ctx, canvasW, canvasH, groundY } = this;
     const palette = this.envManager.getCurrentPalette();
-    const drawers = this.envManager.getBackgroundDrawers();
+    const biomeFade = this.envManager.getTransitionFade();
     const riderGear = this.envManager.getRiderGear();
     ctx.clearRect(0, 0, canvasW, canvasH);
 
@@ -745,11 +733,9 @@ export class Engine {
     const view = getViewBounds(this.camera.zoom, canvasW, canvasH, groundY);
     ctx.save();
     this.camera.apply(ctx, canvasW, groundY);
-    drawBackground(ctx, this.layers, canvasW, view, groundY, palette, drawers, this.envManager.getSkylines(), this.envManager.getRoadOverlays());
+    this.scenery.drawWorld(ctx, view, palette, this.envManager.getSkylines(), this.envManager.getRoadOverlays(), biomeFade);
     ctx.restore();
-    if (this.particleConfig && this.particles.length > 0) {
-      drawParticles(ctx, this.particles, this.particleConfig);
-    }
+    this.scenery.drawWeather(ctx, biomeFade);
     ctx.save();
     this.camera.apply(ctx, canvasW, groundY);
     for (const obs of this.obstacles) {
@@ -950,17 +936,8 @@ export class Engine {
     if (result.musicCrossfade) {
       this.sound.crossfadeTo(result.musicCrossfade.track, result.musicCrossfade.durationMs);
     }
-    // Immediately regenerate background with the target environment
-    const env = this.envManager.getCurrentEnvironment();
-    this.layers = createBackgroundLayers(this.canvasW, this.groundY, env);
-    const overlay = env.particleOverlay;
-    if (overlay) {
-      this.particleConfig = overlay;
-      this.particles = createParticles(this.canvasW, this.canvasH, overlay);
-    } else {
-      this.particleConfig = null;
-      this.particles = [];
-    }
+    // Debug skip: swap the scenery straight to the biome being entered
+    this.scenery.reset(this.envManager.getTargetEnvironment(), this.canvasW, this.canvasH, this.groundY);
   }
 
   destroy(): void {

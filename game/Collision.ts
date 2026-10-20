@@ -11,8 +11,9 @@ const CONTAINER_RAMP_H = 36;
  */
 export const HITBOX_PADDING = 8;
 
-// How many pixels from the obstacle top counts as "landing on top".
-// Must be larger than the max fall distance per frame (~18px at peak velocity).
+// How many pixels below the obstacle top still count as "landing on top" when the
+// previous position isn't known. Covers ~18px of fall per frame at 60fps; slower frames
+// fall further, which the swept check in checkRideableCollision handles.
 const TOP_LANDING_TOLERANCE = 35;
 
 export function checkCollision(player: PlayerState, obstacle: ObstacleInstance): boolean {
@@ -26,9 +27,15 @@ export function checkCollision(player: PlayerState, obstacle: ObstacleInstance):
 
 export type RideableCollisionResult = "none" | "crash" | "land_on_top";
 
+/**
+ * Classifies an overlap with a rideable obstacle as a landing on top or a crash.
+ * @param prevY - The rider's y before this frame's movement. A rider whose bottom was
+ *   above the top last frame landed on it, however far they fell in one (slow) frame.
+ */
 export function checkRideableCollision(
   player: PlayerState,
-  obstacle: ObstacleInstance
+  obstacle: ObstacleInstance,
+  prevY: number = player.y
 ): RideableCollisionResult {
   const px1 = player.x + HITBOX_PADDING;
   const px2 = player.x + player.width - HITBOX_PADDING;
@@ -74,10 +81,12 @@ export function checkRideableCollision(
   const isLeaving = px2 > ox2;
   const requiredOverlapRatio = isLeaving ? 0 : 0.25;
 
+  const prevBottom = prevY + player.height - HITBOX_PADDING;
+  const crossedTop = prevBottom <= obstacleTop + TOP_LANDING_TOLERANCE;
   if (
     player.velocityY > 0 &&
     playerBottom >= obstacleTop &&
-    playerBottom <= obstacleTop + TOP_LANDING_TOLERANCE &&
+    (playerBottom <= obstacleTop + TOP_LANDING_TOLERANCE || crossedTop) &&
     overlapWidth / playerWidth >= requiredOverlapRatio
   ) {
     return "land_on_top";

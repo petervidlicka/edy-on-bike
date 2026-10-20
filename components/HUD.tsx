@@ -117,14 +117,25 @@ function PauseIcon() {
   );
 }
 
-/** Touch trick button: big enough to hit mid-jump, labelled so the move is clear without knowing the arrow keys. */
+/** Which arm of the D-pad a trick sits on; rounds only that arm's outer end so the four join into one plus. */
+type DpadArm = "up" | "down" | "left" | "right";
+
+const ARM_RADIUS: Record<DpadArm, string> = {
+  up: `${radius.md} ${radius.md} 0 0`,
+  down: `0 0 ${radius.md} ${radius.md}`,
+  left: `${radius.md} 0 0 ${radius.md}`,
+  right: `0 ${radius.md} ${radius.md} 0`,
+};
+
+/** Fill shared by the arms and the hub, so the pad reads as one piece. */
+const DPAD_FILL = "rgba(255,255,255,0.8)";
+
+/** One arm of the touch D-pad: big enough to hit mid-jump, labelled so the move is clear without knowing the arrow keys. */
 const trickBtnStyle: React.CSSProperties = {
-  width: "56px",
-  height: "56px",
-  borderRadius: radius.md,
-  background: "rgba(255,255,255,0.75)",
-  border: "1px solid rgba(30,41,59,0.12)",
-  boxShadow: "0 4px 16px rgba(15,23,42,0.1)",
+  width: "58px",
+  height: "58px",
+  background: DPAD_FILL,
+  border: "none",
   color: color.ink,
   cursor: "pointer",
   display: "flex",
@@ -144,13 +155,13 @@ const TRICK_ICONS = {
   noHander: "M6 4l6 8 6-8M12 12v8",
 } as const;
 
-function TrickButton({ label, title, icon, onPress }: { label: string; title: string; icon: string; onPress: () => void }) {
+function TrickButton({ arm, label, title, icon, onPress }: { arm: DpadArm; label: string; title: string; icon: string; onPress: () => void }) {
   return (
     <button
       onTouchStart={(e) => { e.preventDefault(); onPress(); }}
       title={title}
       aria-label={title}
-      style={trickBtnStyle}
+      style={{ ...trickBtnStyle, borderRadius: ARM_RADIUS[arm] }}
     >
       <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d={icon} />
@@ -269,7 +280,7 @@ export function TrickDpad({
   const hasGamepad = useGamepadConnected();
   if (hasGamepad) return null;
 
-  // Cross layout mirrors the arrow keys and gamepad D-pad (↑ front, ↓ back, ← superman, → no-hander)
+  // A D-pad, laid out like the arrow keys and a gamepad's pad (↑ front, ↓ back, ← superman, → no-hander)
   return (
     <div
       style={{
@@ -277,19 +288,22 @@ export function TrickDpad({
         bottom: "1.5rem",
         right: "1.5rem",
         display: "grid",
-        gridTemplateColumns: "56px 56px 56px",
-        gridTemplateRows: "56px 56px 56px",
-        gap: "6px",
+        gridTemplateColumns: "58px 58px 58px",
+        gridTemplateRows: "58px 58px 58px",
+        // One shadow around the whole plus instead of one per arm
+        filter: "drop-shadow(0 4px 12px rgba(15,23,42,0.18))",
       }}
     >
       <div />
-      <TrickButton label="Front" title="Frontflip (↑)" icon={TRICK_ICONS.frontflip} onPress={onFrontflip} />
+      <TrickButton arm="up" label="Front" title="Frontflip (↑)" icon={TRICK_ICONS.frontflip} onPress={onFrontflip} />
       <div />
-      <TrickButton label="Superman" title="Superman (←)" icon={TRICK_ICONS.superman} onPress={onSuperman} />
+      <TrickButton arm="left" label="Superman" title="Superman (←)" icon={TRICK_ICONS.superman} onPress={onSuperman} />
+      <div aria-hidden="true" style={{ background: DPAD_FILL, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 18, height: 18, borderRadius: "50%", background: "rgba(30,41,59,0.1)" }} />
+      </div>
+      <TrickButton arm="right" label="No hands" title="No hander (→)" icon={TRICK_ICONS.noHander} onPress={onNoHander} />
       <div />
-      <TrickButton label="No hands" title="No hander (→)" icon={TRICK_ICONS.noHander} onPress={onNoHander} />
-      <div />
-      <TrickButton label="Back" title="Backflip (↓)" icon={TRICK_ICONS.backflip} onPress={onBackflip} />
+      <TrickButton arm="down" label="Back" title="Backflip (↓)" icon={TRICK_ICONS.backflip} onPress={onBackflip} />
       <div />
     </div>
   );

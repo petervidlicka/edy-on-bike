@@ -35,6 +35,8 @@ import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
 import type { GhostSnapshot } from "./multiplayer/protocol";
 import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
 import { TrickBoost } from "./multiplayer/TrickBoost";
+import { Camera, MIN_CAMERA_ZOOM, getViewBounds } from "./Camera";
+import { drawHeightMarker } from "./rendering/HeightMarker";
 
 export type EngineCallbacks = {
   onScoreUpdate: (score: number) => void;
@@ -99,6 +101,8 @@ export class Engine {
   private particleConfig: ParticleOverlayConfig | null = null;
   private rng: { random(): number } = { random: Math.random };
   private multiplayer: MultiplayerAdapter | null = null;
+  /** Zooms out for big air so the rider never leaves the screen. Render-only. */
+  private camera = new Camera();
   /** Multiplayer only: landed tricks push the rider forward so the leader stands out from the ghosts. */
   private boost: TrickBoost | null = null;
 
@@ -160,6 +164,7 @@ export class Engine {
     this.particles = [];
     this.particleConfig = null;
     this.boost?.reset();
+    this.camera.reset();
     this.player = createPlayer(this.groundY, this.canvasW);
     this.layers = createBackgroundLayers(this.canvasW, this.groundY, this.envManager.getCurrentEnvironment());
     this.callbacks.onScoreUpdate(0);
@@ -220,6 +225,7 @@ export class Engine {
       this.updateAmbulance(dt, rawDt);
     }
 
+    this.camera.update(rawDt, this.state === GameState.RUNNING ? this.player.y : null, this.groundY);
     this.render();
     this.rafId = requestAnimationFrame(this.loop);
   }
@@ -316,7 +322,9 @@ export class Engine {
     for (const obs of this.obstacles) {
       obs.x -= this.speed * dt;
     }
-    this.obstacles = this.obstacles.filter((obs) => obs.x + obs.width > 0);
+    // Spawn and cull outside the widest zoomed-out view, so obstacles never pop in or out on screen
+    const widestView = getViewBounds(MIN_CAMERA_ZOOM, this.canvasW, this.canvasH, this.groundY);
+    this.obstacles = this.obstacles.filter((obs) => obs.x + obs.width > widestView.left);
 
     // Obstacle spawning
     this.distanceSinceLastObstacle += this.speed * dt;
@@ -324,11 +332,11 @@ export class Engine {
     if (this.distanceSinceLastObstacle >= gap) {
       if (this.debugSequence) {
         const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
-        this.obstacles.push(createObstacle(type, this.canvasW, this.groundY));
+        this.obstacles.push(createObstacle(type, widestView.right, this.groundY));
         this.debugIndex++;
       } else {
         this.obstacles.push(
-          spawnObstacle(this.canvasW, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.rng.random.bind(this.rng))
+          spawnObstacle(widestView.right, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.rng.random.bind(this.rng))
         );
       }
       this.distanceSinceLastObstacle = 0;
@@ -500,10 +508,17 @@ export class Engine {
       ctx.translate(this.crashState.shakeOffsetX, this.crashState.shakeOffsetY);
     }
 
-    drawBackground(ctx, this.layers, canvasW, canvasH, groundY, palette, drawers);
+    // World layers draw under the camera zoom; particles are a screen-space weather overlay
+    const view = getViewBounds(this.camera.zoom, canvasW, canvasH, groundY);
+    ctx.save();
+    this.camera.apply(ctx, canvasW, groundY);
+    drawBackground(ctx, this.layers, canvasW, view, groundY, palette, drawers);
+    ctx.restore();
     if (this.particleConfig && this.particles.length > 0) {
       drawParticles(ctx, this.particles, this.particleConfig);
     }
+    ctx.save();
+    this.camera.apply(ctx, canvasW, groundY);
     for (const obs of this.obstacles) {
       drawObstacle(ctx, obs, palette);
     }
@@ -530,14 +545,21 @@ export class Engine {
       drawPlayer(ctx, this.player, this.skin);
     }
 
-    if (this.ambulance) {
-      if (this.ambulance.reviveFlashOpacity > 0) {
-        drawReviveFlash(ctx, this.ambulance.reviveFlashOpacity, canvasW, canvasH);
-      }
-    }
-
     for (const ft of this.floatingTexts) {
       drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color);
+    }
+    ctx.restore();
+
+    if (this.ambulance && this.ambulance.reviveFlashOpacity > 0) {
+      drawReviveFlash(ctx, this.ambulance.reviveFlashOpacity, canvasW, canvasH);
+    }
+
+    // Launch higher than the zoomed-out camera can show: pin a height marker to the top edge
+    if (this.state === GameState.RUNNING) {
+      const top = this.camera.toScreen(this.player.x + this.player.width / 2, this.player.y, canvasW, groundY);
+      if (top.y < 0) {
+        drawHeightMarker(ctx, top.x, groundY - (this.player.y + this.player.height), canvasW);
+      }
     }
 
     if (crashing) {

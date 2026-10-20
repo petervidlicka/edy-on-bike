@@ -1,16 +1,18 @@
 import { BackgroundLayer } from "../../types";
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import { getTotalLayerWidth } from "../../Background";
+import type { ViewBounds } from "../../Camera";
 import { decodePedestrianVariant, SKIN_TONES, HAIR_COLORS } from "../../environments/pedestrians";
 
 // --- Sky ---
 
-function drawSky(ctx: CanvasRenderingContext2D, w: number, groundY: number, palette: EnvironmentPalette) {
+function drawSky(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, palette: EnvironmentPalette) {
+  // Gradient stays pinned to the unzoomed sky; above it (zoomed out) the top colour just continues
   const gradient = ctx.createLinearGradient(0, 0, 0, groundY);
   gradient.addColorStop(0, palette.sky);
   gradient.addColorStop(1, palette.skyBottom);
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, w, groundY);
+  ctx.fillRect(view.left, view.top, view.right - view.left, groundY - view.top);
 }
 
 // --- Clouds ---
@@ -30,42 +32,49 @@ function drawCloud(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 // --- Ground ---
 
-function drawGround(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, groundY: number, offset: number, palette: EnvironmentPalette) {
+function drawGround(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, offset: number, palette: EnvironmentPalette) {
+  const w = view.right - view.left;
+
   // Grass verge — sits above the road, grounds the buildings
   ctx.fillStyle = palette.ground;
-  ctx.fillRect(0, groundY - 22, canvasW, 22);
+  ctx.fillRect(view.left, groundY - 22, w, 22);
 
-  // Ground fill — stretches to bottom of canvas
-  ctx.fillRect(0, groundY, canvasW, canvasH - groundY);
+  // Ground fill — stretches to the bottom of the view
+  ctx.fillRect(view.left, groundY, w, view.bottom - groundY);
 
   // Road surface
   ctx.fillStyle = palette.road;
-  ctx.fillRect(0, groundY, canvasW, 20);
+  ctx.fillRect(view.left, groundY, w, 20);
 
-  // Dashed road markings
+  // Dashed road markings. Dashes are measured from the path start, so shift the
+  // offset by it to keep them fixed to the road while the view widens.
   ctx.strokeStyle = palette.roadLine;
   ctx.lineWidth = 2;
   ctx.setLineDash([20, 15]);
-  ctx.lineDashOffset = offset;
+  ctx.lineDashOffset = offset + view.left;
   ctx.beginPath();
-  ctx.moveTo(0, groundY + 10);
-  ctx.lineTo(canvasW, groundY + 10);
+  ctx.moveTo(view.left, groundY + 10);
+  ctx.lineTo(view.right, groundY + 10);
   ctx.stroke();
   ctx.setLineDash([]);
 }
 
 // --- Background layers ---
 
+/**
+ * Draws sky, parallax layers and road covering `view` — the world rectangle on screen,
+ * which grows beyond the canvas while the big-air camera is zoomed out.
+ */
 export function drawBackground(
   ctx: CanvasRenderingContext2D,
   layers: BackgroundLayer[],
   canvasW: number,
-  canvasH: number,
+  view: ViewBounds,
   groundY: number,
   palette: EnvironmentPalette,
   drawers: Record<string, BackgroundDrawFn>
 ) {
-  drawSky(ctx, canvasW, groundY, palette);
+  drawSky(ctx, view, groundY, palette);
 
   // Layer 0: clouds
   const cloudLayer = layers[0];
@@ -75,7 +84,7 @@ export function drawBackground(
     // Check both the natural scroll position and the wrapped copy
     for (const shift of [0, cloudWidth, -cloudWidth]) {
       const drawX = el.x - cloudNorm + shift;
-      if (drawX + el.width < 0 || drawX > canvasW) continue;
+      if (drawX + el.width < view.left || drawX > view.right) continue;
       drawCloud(ctx, drawX, el.y, el.width, el.height, el.color);
     }
   }
@@ -87,7 +96,7 @@ export function drawBackground(
   for (const el of buildingLayer.elements) {
     for (const shift of [0, buildingWidth, -buildingWidth]) {
       const drawX = el.x - buildingNorm + shift;
-      if (drawX + el.width < 0 || drawX > canvasW) continue;
+      if (drawX + el.width < view.left || drawX > view.right) continue;
       const drawFn = drawers[el.type];
       if (drawFn) {
         drawFn(ctx, drawX, el.y, el.width, el.height, el.color, palette, el.roofColor, el.variant);
@@ -96,7 +105,7 @@ export function drawBackground(
   }
 
   // Layer 2: ground + road
-  drawGround(ctx, canvasW, canvasH, groundY, layers[2].offset, palette);
+  drawGround(ctx, view, groundY, layers[2].offset, palette);
 }
 
 // --- Pedestrians (shared across biomes) ---

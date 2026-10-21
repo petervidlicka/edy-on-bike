@@ -5,6 +5,7 @@
  */
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
+import { EASING_OUT, stagedPool } from "./stages";
 import { AUSTRIA_BACKGROUND_DRAWERS, drawAlpineRange } from "../rendering";
 import type {
   EnvironmentDefinition,
@@ -246,40 +247,21 @@ function generateAustriaElements(
 
 // biomeMs = biome-relative elapsed time (0 = when this biome started, not game start)
 function austriaWeightedTypes(biomeMs: number): WeightedType[] {
-  const earlyWeight = biomeMs >= 30_000 ? 0.4 : biomeMs >= 15_000 ? 0.7 : 1.0;
-
-  const types: WeightedType[] = [
+  return stagedPool(biomeMs, [
     // Stage 1: village obstacles + a first cruising freerider
-    { type: ObstacleType.SNOWMAN, weight: earlyWeight },
-    { type: ObstacleType.FROZEN_LAKE, weight: earlyWeight },
-    { type: ObstacleType.RED_DEER, weight: 0.8 },
-    { type: ObstacleType.BEER_CRATES, weight: 0.7 },
-    { type: ObstacleType.FREERIDE_SKIER, weight: 0.4 },
-  ];
-  // Stage 2 (15s into Austria): kickers, rideables and the rest of the moving crowd
-  if (biomeMs >= 15_000) {
-    types.push({ type: ObstacleType.SNOW_KICKER, weight: 0.6 });
-    types.push({ type: ObstacleType.SNOW_CAT, weight: 0.5 });
-    types.push({ type: ObstacleType.BEER_CRATE_WALL, weight: 0.5 });
-    types.push({ type: ObstacleType.SNOWBOARDER, weight: 0.5 });
-    types.push({ type: ObstacleType.RACE_SKIER, weight: 0.4 });
-    types.push({ type: ObstacleType.SNOW_SCOOTER, weight: 0.4 });
-    for (const t of types) {
-      if (t.type === ObstacleType.FREERIDE_SKIER) t.weight = 0.6;
-    }
-  }
-  // Stage 3 (30s into Austria): full roster, max weights
-  if (biomeMs >= 30_000) {
-    for (const t of types) {
-      if (t.type === ObstacleType.SNOW_CAT) t.weight = 0.7;
-      if (t.type === ObstacleType.BEER_CRATE_WALL) t.weight = 0.7;
-      if (t.type === ObstacleType.RACE_SKIER) t.weight = 0.7;
-      if (t.type === ObstacleType.SNOW_SCOOTER) t.weight = 0.6;
-      if (t.type === ObstacleType.SNOWBOARDER) t.weight = 0.7;
-      if (t.type === ObstacleType.FREERIDE_SKIER) t.weight = 0.8;
-    }
-  }
-  return types;
+    [ObstacleType.SNOWMAN, EASING_OUT],
+    [ObstacleType.FROZEN_LAKE, EASING_OUT],
+    [ObstacleType.RED_DEER, [0.8, 0.8, 0.8]],
+    [ObstacleType.BEER_CRATES, [0.7, 0.7, 0.7]],
+    [ObstacleType.FREERIDE_SKIER, [0.4, 0.6, 0.8]],
+    // Stage 2 (15s into Austria): kickers, rideables and the rest of the moving crowd
+    [ObstacleType.SNOW_KICKER, [null, 0.6, 0.6]],
+    [ObstacleType.SNOW_CAT, [null, 0.5, 0.7]],
+    [ObstacleType.BEER_CRATE_WALL, [null, 0.5, 0.7]],
+    [ObstacleType.SNOWBOARDER, [null, 0.5, 0.7]],
+    [ObstacleType.RACE_SKIER, [null, 0.4, 0.7]],
+    [ObstacleType.SNOW_SCOOTER, [null, 0.4, 0.6]],
+  ]);
 }
 
 // ── Full environment definition ──

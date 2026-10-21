@@ -88,7 +88,7 @@ Set `NEXT_PUBLIC_MULTIPLAYER_HOST` in the Vercel project's environment variables
 
 ### Native apps (Capacitor)
 
-The mobile build is a static export, so pass the host when building:
+The mobile build is a static export, so the host is baked in at build time. Uncomment `NEXT_PUBLIC_MULTIPLAYER_HOST` in `.env.capacitor` (which `build:mobile` loads), or pass it for one build:
 
 ```bash
 NEXT_PUBLIC_MULTIPLAYER_HOST=edy-on-bike-multiplayer.<your-subdomain>.workers.dev npm run build:mobile

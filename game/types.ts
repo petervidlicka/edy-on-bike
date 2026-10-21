@@ -6,9 +6,6 @@ export enum GameState {
   GAME_OVER = "GAME_OVER",
 }
 
-// The crash animation state lives with the crash variants; re-exported so existing imports keep working.
-export type { CrashState } from "./crashes/types";
-
 export enum AmbulancePhase {
   DRIVING_IN = "DRIVING_IN",
   STOPPED = "STOPPED",

@@ -10,6 +10,17 @@ import { color, font, glassSurfaceSmall, radius } from "./ui/tokens";
 /** Guards against browsers firing both onTouchStart and onClick. */
 let lastTouchTime = 0;
 
+/**
+ * Corner offsets that clear the notch and rounded corners: the app draws edge to edge
+ * (viewportFit "cover", status bar over the web view), so landscape iPhones need the insets.
+ */
+const SAFE = {
+  top: "calc(1rem + env(safe-area-inset-top, 0px))",
+  right: "calc(1.5rem + env(safe-area-inset-right, 0px))",
+  bottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))",
+  left: "calc(1.5rem + env(safe-area-inset-left, 0px))",
+} as const;
+
 const TRICK_COLOR_CLEAN = color.success;
 const TRICK_COLOR_SKETCHY = color.caution;
 
@@ -198,8 +209,8 @@ export function AudioControls({
     <div
       style={{
         position: "fixed",
-        top: "1rem",
-        left: "1.5rem",
+        top: SAFE.top,
+        left: SAFE.left,
         display: "flex",
         gap: "0.5rem",
       }}
@@ -285,8 +296,8 @@ export function TrickDpad({
     <div
       style={{
         position: "fixed",
-        bottom: "1.5rem",
-        right: "1.5rem",
+        bottom: SAFE.bottom,
+        right: SAFE.right,
         display: "grid",
         gridTemplateColumns: "58px 58px 58px",
         gridTemplateRows: "58px 58px 58px",
@@ -309,7 +320,7 @@ export function TrickDpad({
   );
 }
 
-export default function HUD({
+export function HUD({
   score,
   speed,
   trickFeedback,
@@ -335,8 +346,8 @@ export default function HUD({
       <div
         style={{
           position: "fixed",
-          top: "1rem",
-          right: "1.5rem",
+          top: SAFE.top,
+          right: SAFE.right,
           display: "flex",
           flexDirection: "column",
           alignItems: "flex-end",
@@ -376,8 +387,8 @@ export default function HUD({
         style={{
           ...glassSurfaceSmall,
           position: "fixed",
-          bottom: "1.5rem",
-          left: "1.5rem",
+          bottom: SAFE.bottom,
+          left: SAFE.left,
           width: "80px",
           height: "80px",
           borderRadius: "50%",

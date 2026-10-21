@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "build:mobile": "CAPACITOR_BUILD=1 NEXT_PUBLIC_API_URL=https://edyonbike.com next build && npx cap sync",
+    "build:mobile": "set -a && . ./.env.capacitor && set +a && next build && npx cap sync",
     "cap:ios": "npx cap open ios",
     "cap:android": "npx cap open android",
     "voice:manifest": "node scripts/voice-manifest.mjs",
@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
-    "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.5.3",
@@ -29,6 +28,7 @@
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

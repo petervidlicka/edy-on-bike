@@ -1,5 +1,6 @@
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
+import { EASING_OUT, stagedPool } from "./stages";
 import { DUBAI_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
@@ -281,46 +282,24 @@ function generateDubaiElements(
 
 // biomeMs = biome-relative elapsed time (0 = when this biome started, not game start)
 function dubaiWeightedTypes(biomeMs: number): WeightedType[] {
-  const earlyWeight = biomeMs >= 30_000 ? 0.4 : biomeMs >= 15_000 ? 0.7 : 1.0;
-
-  const types: WeightedType[] = [
+  return stagedPool(biomeMs, [
     // Stage 1: core desert obstacles + vehicle previews
-    { type: ObstacleType.SAND_TRAP, weight: earlyWeight },
-    { type: ObstacleType.CACTUS, weight: earlyWeight },
-    { type: ObstacleType.CAMEL, weight: 0.8 },
-    { type: ObstacleType.LAND_CRUISER, weight: 0.3 },
-    { type: ObstacleType.PINK_G_CLASS, weight: 0.2 },
-  ];
-  // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + supercars + billboard
-  if (biomeMs >= 15_000) {
-    types.push({ type: ObstacleType.STRAIGHT_RAMP, weight: 0.4 });
-    types.push({ type: ObstacleType.CURVED_RAMP, weight: 0.4 });
-    types.push({ type: ObstacleType.DUBAI_CHOCOLATE, weight: 0.7 });
-    types.push({ type: ObstacleType.LAMBORGHINI_HURACAN, weight: 0.5 });
-    types.push({ type: ObstacleType.FERRARI_458, weight: 0.4 });
-    types.push({ type: ObstacleType.CONVERTIBLE, weight: 0.4 });
-    types.push({ type: ObstacleType.ROLLS_ROYCE_PHANTOM, weight: 0.3 });
-    types.push({ type: ObstacleType.PORSCHE_911, weight: 0.4 });
-    types.push({ type: ObstacleType.DUBAI_BILLBOARD, weight: 0.4 });
-    for (const t of types) {
-      if (t.type === ObstacleType.LAND_CRUISER) t.weight = 0.7;
-      if (t.type === ObstacleType.PINK_G_CLASS) t.weight = 0.5;
-    }
-  }
-  // Stage 3 (30s into Dubai): full roster, max weights
-  if (biomeMs >= 30_000) {
-    for (const t of types) {
-      if (t.type === ObstacleType.LAND_CRUISER) t.weight = 1.0;
-      if (t.type === ObstacleType.PINK_G_CLASS) t.weight = 0.7;
-      if (t.type === ObstacleType.LAMBORGHINI_HURACAN) t.weight = 0.8;
-      if (t.type === ObstacleType.FERRARI_458) t.weight = 0.6;
-      if (t.type === ObstacleType.CONVERTIBLE) t.weight = 0.6;
-      if (t.type === ObstacleType.ROLLS_ROYCE_PHANTOM) t.weight = 0.5;
-      if (t.type === ObstacleType.PORSCHE_911) t.weight = 0.6;
-      if (t.type === ObstacleType.DUBAI_CHOCOLATE) t.weight = 1.0;
-    }
-  }
-  return types;
+    [ObstacleType.SAND_TRAP, EASING_OUT],
+    [ObstacleType.CACTUS, EASING_OUT],
+    [ObstacleType.CAMEL, [0.8, 0.8, 0.8]],
+    [ObstacleType.LAND_CRUISER, [0.3, 0.7, 1.0]],
+    [ObstacleType.PINK_G_CLASS, [0.2, 0.5, 0.7]],
+    // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + supercars + billboard
+    [ObstacleType.STRAIGHT_RAMP, [null, 0.4, 0.4]],
+    [ObstacleType.CURVED_RAMP, [null, 0.4, 0.4]],
+    [ObstacleType.DUBAI_CHOCOLATE, [null, 0.7, 1.0]],
+    [ObstacleType.LAMBORGHINI_HURACAN, [null, 0.5, 0.8]],
+    [ObstacleType.FERRARI_458, [null, 0.4, 0.6]],
+    [ObstacleType.CONVERTIBLE, [null, 0.4, 0.6]],
+    [ObstacleType.ROLLS_ROYCE_PHANTOM, [null, 0.3, 0.5]],
+    [ObstacleType.PORSCHE_911, [null, 0.4, 0.6]],
+    [ObstacleType.DUBAI_BILLBOARD, [null, 0.4, 0.4]],
+  ]);
 }
 
 // ── Full environment definition ──

@@ -2,7 +2,7 @@
 
 ## 1. Tech Stack & Project Identity
 * **Core:** Next.js (App Router, v16+), React (v19+), TypeScript.
-* **Styling:** Tailwind CSS (v4).
+* **Styling:** Inline styles built from the UI kit tokens in `components/ui/tokens.ts` (plus the `components/ui/` primitives). Tailwind CSS v4 is installed but only used for a few base classes in `app/layout.tsx`; don't add Tailwind-styled components.
 * **Backend/State:** Upstash (Redis/Rate Limiting) for leaderboards.
 * **Game Engine:** Custom HTML5 `<canvas>` rendering and custom physics. No external physics libraries are used.
 

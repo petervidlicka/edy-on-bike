@@ -116,7 +116,7 @@ function LockIcon() {
   );
 }
 
-export default function SkinPicker({
+export function SkinPicker({
   selectedSkinId,
   bestScore,
   cheatUnlocked,

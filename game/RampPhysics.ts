@@ -10,7 +10,8 @@ import { checkRampCollision } from "./Collision";
 export function processRampInteractions(
   player: PlayerState,
   obstacles: ObstacleInstance[],
-  groundY: number
+  groundY: number,
+  dt = 1
 ): { onAnyRamp: boolean } {
   let onAnyRamp = false;
 
@@ -42,8 +43,8 @@ export function processRampInteractions(
         }
       }
     }
-    // Smooth angle decay
-    player.rampSurfaceAngle *= 0.85;
+    // Smooth angle decay, per 60fps frame so it eases the same at any refresh rate
+    player.rampSurfaceAngle *= Math.pow(0.85, dt);
     if (Math.abs(player.rampSurfaceAngle) < 0.01) {
       player.rampSurfaceAngle = 0;
     }

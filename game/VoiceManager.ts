@@ -122,7 +122,8 @@ export class VoiceManager {
       this.preloadStarted = false;
       return;
     }
-    if (files.length === 0) return;
+    // Unmounted while the manifest loaded: getContext() would open a new AudioContext nobody closes
+    if (files.length === 0 || this.destroyed) return;
 
     const ctx = this.host.getContext();
     const skipped: string[] = [];

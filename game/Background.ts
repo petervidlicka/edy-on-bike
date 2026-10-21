@@ -22,6 +22,21 @@ function generateClouds(
   return clouds;
 }
 
+/** A biome's cloud layer, scrolled from `offset` (pass the outgoing layer's to keep skylines steady). */
+export function createCloudLayer(
+  canvasWidth: number,
+  groundY: number,
+  envDef: EnvironmentDefinition,
+  offset = 0
+): BackgroundLayer {
+  const bg = envDef.background;
+  return {
+    elements: generateClouds(canvasWidth, groundY, envDef.palette, bg.cloudCount),
+    speedRatio: bg.cloudSpeedRatio,
+    offset,
+  };
+}
+
 export function createBackgroundLayers(
   canvasWidth: number,
   groundY: number,
@@ -29,11 +44,7 @@ export function createBackgroundLayers(
 ): BackgroundLayer[] {
   const bg = envDef.background;
   return [
-    {
-      elements: generateClouds(canvasWidth, groundY, envDef.palette, bg.cloudCount),
-      speedRatio: bg.cloudSpeedRatio,
-      offset: 0,
-    },
+    createCloudLayer(canvasWidth, groundY, envDef),
     {
       elements: bg.generateElements(canvasWidth, groundY, envDef.palette),
       speedRatio: bg.buildingSpeedRatio,

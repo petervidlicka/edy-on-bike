@@ -94,7 +94,9 @@ export function useGameEngine(
           optionsRef.current.onGameOver?.(finalScore, engine);
         },
         onStateChange: (state) => {
-          if (state === GameState.RUNNING) setSpeed(INITIAL_SPEED);
+          // A fresh run starts at the base speed; a revive (back to RUNNING) keeps its own,
+          // which the engine has already reported through onSpeedUpdate
+          if (state === GameState.IDLE) setSpeed(INITIAL_SPEED);
           optionsRef.current.onStateChange?.(state);
         },
         onPauseChange: (paused, reasons) => optionsRef.current.onPauseChange?.(paused, reasons),

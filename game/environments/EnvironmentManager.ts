@@ -2,7 +2,6 @@ import type {
   BiomeId,
   EnvironmentDefinition,
   EnvironmentPalette,
-  BackgroundDrawFn,
   RiderGear,
   SkylineDrawFn,
   SkylinePass,
@@ -35,8 +34,11 @@ const LATER_LAP_STAGE_MS = 30_000;
 
 const NO_PASSES: readonly SkylinePass[] = [];
 
-/** Duration of a biome transition in 60fps dt units (~4 seconds). */
-const TRANSITION_DURATION = 240; // 4s at 60fps
+/**
+ * Shortest biome transition in 60fps dt units (~4 seconds). Engine stretches each one to
+ * however long the incoming buildings take to scroll across (see setTransitionDuration).
+ */
+const MIN_TRANSITION_DURATION = 240; // 4s at 60fps
 /** Duration of the music crossfade in milliseconds. */
 const MUSIC_CROSSFADE_MS = 3000;
 
@@ -47,9 +49,9 @@ export interface EnvUpdateResult {
   biomeStarted?: BiomeId;
   /** If set, Engine should crossfade music to the new track. */
   musicCrossfade?: { track: string; durationMs: number };
-  /** If set, Engine should append new biome buildings to the existing layer (transition start). */
-  appendBackground?: { toEnv: EnvironmentDefinition };
-  /** If set, Engine should fully replace background layers with this environment (transition end). */
+  /** If set, a transition just started: Engine queues the incoming biome's scenery behind the current one. */
+  appendBackground?: { fromEnv: EnvironmentDefinition; toEnv: EnvironmentDefinition };
+  /** If set, the transition into this environment just finished (outgoing clouds/weather are gone). */
   regenerateBackground?: EnvironmentDefinition;
 }
 
@@ -73,6 +75,8 @@ export class EnvironmentManager {
   private toEnv: EnvironmentDefinition | null = null;
   private transitionProgress = 0;
   private transitioning = false;
+  /** Length of the running transition, in 60fps dt units. */
+  private transitionDuration = MIN_TRANSITION_DURATION;
 
   // Biome-relative timing — tracks when the current biome started
   private biomeStartMs = 0;
@@ -95,11 +99,12 @@ export class EnvironmentManager {
     if (!this.transitioning) {
       if (elapsedMs >= this.nextBiomeAtMs) {
         this.nextBiomeAtMs += BIOME_DURATION_MS;
+        const fromEnv = this.currentEnv;
         const nextEnv = this.advanceBiome();
         result.biomeStarted = nextEnv.id;
 
-        // Signal Engine to append new biome buildings to the existing layer
-        result.appendBackground = { toEnv: nextEnv };
+        // Signal Engine to queue the new biome's scenery behind the current one
+        result.appendBackground = { fromEnv, toEnv: nextEnv };
 
         // Signal Engine to crossfade music if track changed
         if (nextEnv.musicTrack !== this.fromEnv?.musicTrack) {
@@ -113,7 +118,7 @@ export class EnvironmentManager {
 
     // Advance transition
     if (this.transitioning) {
-      this.transitionProgress += dt / TRANSITION_DURATION;
+      this.transitionProgress += dt / this.transitionDuration;
       if (this.transitionProgress >= 1) {
         const completedEnv = this.toEnv;
         this.completeTransition();
@@ -171,14 +176,22 @@ export class EnvironmentManager {
   }
 
   /**
-   * Returns background drawers for the current state.
-   * During transition, merges both biomes' drawers so elements from both can be rendered.
+   * Sets how long the transition that just started lasts, so colours, clouds and weather
+   * change while the incoming biome's buildings scroll in rather than ahead of them.
+   * @param frames - Duration in 60fps dt units; never shorter than ~4 seconds.
    */
-  getBackgroundDrawers(): Record<string, BackgroundDrawFn> {
-    if (this.transitioning && this.fromEnv && this.toEnv) {
-      return { ...this.fromEnv.backgroundDrawers, ...this.toEnv.backgroundDrawers };
-    }
-    return this.currentEnv.backgroundDrawers;
+  setTransitionDuration(frames: number): void {
+    this.transitionDuration = Math.max(MIN_TRANSITION_DURATION, frames);
+  }
+
+  /** The biome being moved to during a transition, otherwise the current one. */
+  getTargetEnvironment(): EnvironmentDefinition {
+    return this.toEnv ?? this.currentEnv;
+  }
+
+  /** Eased transition progress (0–1) for cross-fades, or null when no transition is running. */
+  getTransitionFade(): number | null {
+    return this.transitioning ? easeInOutCubic(Math.min(1, this.transitionProgress)) : null;
   }
 
   /**
@@ -257,6 +270,7 @@ export class EnvironmentManager {
     this.fromEnv = this.currentEnv;
     this.toEnv = toEnv;
     this.transitionProgress = 0;
+    this.transitionDuration = MIN_TRANSITION_DURATION;
     this.transitioning = true;
     this.biomeStartMs = this.lastElapsedMs;
   }

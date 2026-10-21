@@ -61,9 +61,17 @@ function drawGround(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: nu
 
 // --- Background layers ---
 
+/** A cloud layer leaving with the previous biome, drawn at `alpha` while it fades out. */
+export interface FadingCloudLayer {
+  layer: BackgroundLayer;
+  alpha: number;
+}
+
 /**
  * Draws sky, parallax layers and road covering `view` — the world rectangle on screen,
  * which grows beyond the canvas while the big-air camera is zoomed out.
+ * @param cloudAlpha - Opacity of the current cloud layer (below 1 while it fades in on a biome change).
+ * @param outgoingClouds - The previous biome's clouds while they fade out, or null.
  */
 export function drawBackground(
   ctx: CanvasRenderingContext2D,
@@ -74,7 +82,9 @@ export function drawBackground(
   palette: EnvironmentPalette,
   drawers: Record<string, BackgroundDrawFn>,
   skylines: readonly SkylinePass[] = [],
-  roadOverlays: readonly SkylinePass[] = []
+  roadOverlays: readonly SkylinePass[] = [],
+  cloudAlpha = 1,
+  outgoingClouds: FadingCloudLayer | null = null,
 ) {
   drawSky(ctx, view, groundY, palette);
 
@@ -87,25 +97,19 @@ export function drawBackground(
     ctx.restore();
   }
 
-  // Layer 0: clouds
-  const cloudLayer = layers[0];
-  const cloudWidth = getTotalLayerWidth(cloudLayer, canvasW);
-  const cloudNorm = cloudLayer.offset % cloudWidth;
-  for (const el of cloudLayer.elements) {
-    // Check both the natural scroll position and the wrapped copy
-    for (const shift of [0, cloudWidth, -cloudWidth]) {
-      const drawX = el.x - cloudNorm + shift;
-      if (drawX + el.width < view.left || drawX > view.right) continue;
-      drawCloud(ctx, drawX, el.y, el.width, el.height, el.color);
-    }
-  }
+  // Layer 0: clouds (plus the previous biome's, fading out). Coloured from the palette,
+  // so they follow its colour blend across a biome change.
+  if (outgoingClouds) drawCloudLayer(ctx, outgoingClouds.layer, canvasW, view, palette.cloud, outgoingClouds.alpha);
+  drawCloudLayer(ctx, layers[0], canvasW, view, palette.cloud, cloudAlpha);
 
   // Layer 1: buildings & nature — dispatched via drawers map
   const buildingLayer = layers[1];
   const buildingWidth = getTotalLayerWidth(buildingLayer, canvasW);
   const buildingNorm = buildingLayer.offset % buildingWidth;
+  // Each element is checked at its natural scroll position and both wrapped copies
+  const buildingShifts = [0, buildingWidth, -buildingWidth];
   for (const el of buildingLayer.elements) {
-    for (const shift of [0, buildingWidth, -buildingWidth]) {
+    for (const shift of buildingShifts) {
       const drawX = el.x - buildingNorm + shift;
       if (drawX + el.width < view.left || drawX > view.right) continue;
       const drawFn = drawers[el.type];
@@ -126,6 +130,31 @@ export function drawBackground(
     pass.draw(ctx, view, groundY, layers[2].offset, palette);
     ctx.restore();
   }
+}
+
+/** Draws one wrapping cloud layer at the given opacity. */
+function drawCloudLayer(
+  ctx: CanvasRenderingContext2D,
+  layer: BackgroundLayer,
+  canvasW: number,
+  view: ViewBounds,
+  color: string,
+  alpha: number,
+) {
+  if (alpha <= 0) return;
+  const width = getTotalLayerWidth(layer, canvasW);
+  const norm = layer.offset % width;
+  const shifts = [0, width, -width];
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  for (const el of layer.elements) {
+    for (const shift of shifts) {
+      const drawX = el.x - norm + shift;
+      if (drawX + el.width < view.left || drawX > view.right) continue;
+      drawCloud(ctx, drawX, el.y, el.width, el.height, color);
+    }
+  }
+  ctx.restore();
 }
 
 // --- Pedestrians (shared across biomes) ---

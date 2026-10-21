@@ -11,7 +11,8 @@
     "cap:ios": "npx cap open ios",
     "cap:android": "npx cap open android",
     "voice:manifest": "node scripts/voice-manifest.mjs",
-    "cap:assets": "npx @capacitor/assets generate --iconBackgroundColor '#18181b' --splashBackgroundColor '#18181b'"
+    "cap:assets": "npx @capacitor/assets generate --iconBackgroundColor '#18181b' --splashBackgroundColor '#18181b'",
+    "test": "vitest run"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
@@ -36,7 +37,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^3.2.4"
   },
   "overrides": {
     "minimatch": "^3.1.4",

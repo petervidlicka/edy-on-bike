@@ -5,6 +5,7 @@
  */
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
+import { AUSTRIA_OBSTACLE_COLORS } from "./obstacleColors";
 import { EASING_OUT, stagedPool } from "./stages";
 import { AUSTRIA_BACKGROUND_DRAWERS, drawAlpineRange } from "../rendering";
 import type {
@@ -97,20 +98,7 @@ export const AUSTRIA_PALETTE: EnvironmentPalette = {
     rampMetalDark: "#5a6a7a",
 
     // Austria-specific obstacle colours
-    snow: "#f6f9fc",
-    snowShadow: "#c6d6e6",
-    ice: "#a8d4ec",
-    iceHighlight: "#e4f4fc",
-    beerCrate: "#c8102e", // Stiegl red
-    beerCrateDark: "#8e0b20",
-    snowCat: "#d42a1c", // Pistenbully red
-    snowCatDark: "#9a1c12",
-    snowCatTrack: "#2e3236",
-    redDeer: "#8a5a36",
-    redDeerDark: "#5e3c22",
-    antler: "#d8c4a0",
-    skiRacer: "#d81e28",
-    skiRacerDark: "#9a141c",
+    ...AUSTRIA_OBSTACLE_COLORS,
   },
 };
 

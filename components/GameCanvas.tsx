@@ -7,7 +7,7 @@ import { getSkinById } from "@/game/skins";
 import { loadSkinState } from "@/game/storage";
 import { StartScreen } from "./StartScreen";
 import { HUD } from "./HUD";
-import GameOverScreen from "./GameOverScreen";
+import { GameOverScreen } from "./GameOverScreen";
 import { PauseMenu } from "./PauseMenu";
 import { UnlockToast } from "./UnlockToast";
 import { useHapticFeedback } from "@/hooks/useHapticFeedback";

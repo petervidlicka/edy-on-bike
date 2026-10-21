@@ -174,7 +174,7 @@ export function sanitizeSnapshot(raw: unknown): GhostSnapshot | null {
  * compound under flooding; a bucket keeps the total bounded by time.
  * @example
  * const guard = new ScoreGuard(Date.now());
- * guard.accept(1_000_000, Date.now() + 70); // → ~603, not a million
+ * guard.accept(1_000_000, Date.now() + 70); // → one trick burst (MAX_BONUS_BURST) plus ~3, not a million
  */
 export class ScoreGuard {
   private score = 0;

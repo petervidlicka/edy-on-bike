@@ -1,7 +1,7 @@
 /**
- * Small canvas helpers shared by the biome obstacle and backdrop renderers (Austria,
- * Tokyo): box mapping, polygons, rounded boxes, contact shadows, round-capped strokes,
- * soft glows and deterministic noise.
+ * Small canvas helpers shared across the renderers (biome obstacles and backdrops, the
+ * combo meter): box mapping, polygons, rounded boxes, contact shadows, round-capped
+ * strokes, soft glows and deterministic noise.
  */
 /** A canvas point as [x, y]. */
 export type Pt = [number, number];
@@ -22,12 +22,11 @@ export function fillPoly(ctx: CanvasRenderingContext2D, pts: Pt[], color: string
 }
 
 /**
- * Fills a rounded rectangle. Built from arcs rather than ctx.roundRect, which older
- * iOS WebViews lack.
+ * Starts a new path tracing a rounded rectangle (radius clamped to fit), ready to fill,
+ * stroke or clip. Built from arcs rather than ctx.roundRect, which older iOS WebViews lack.
  */
-export function fillRoundRect(ctx: CanvasRenderingContext2D, rx: number, ry: number, rw: number, rh: number, r: number, color: string) {
+export function traceRoundRect(ctx: CanvasRenderingContext2D, rx: number, ry: number, rw: number, rh: number, r: number) {
   const rad = Math.min(r, rw / 2, rh / 2);
-  ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(rx + rad, ry);
   ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, rad);
@@ -35,6 +34,12 @@ export function fillRoundRect(ctx: CanvasRenderingContext2D, rx: number, ry: num
   ctx.arcTo(rx, ry + rh, rx, ry, rad);
   ctx.arcTo(rx, ry, rx + rw, ry, rad);
   ctx.closePath();
+}
+
+/** Fills a rounded rectangle (see traceRoundRect). */
+export function fillRoundRect(ctx: CanvasRenderingContext2D, rx: number, ry: number, rw: number, rh: number, r: number, color: string) {
+  ctx.fillStyle = color;
+  traceRoundRect(ctx, rx, ry, rw, rh, r);
   ctx.fill();
 }
 
@@ -65,16 +70,45 @@ export function strokeLine(ctx: CanvasRenderingContext2D, pts: Pt[], color: stri
  * @param alpha - Opacity at the glow's centre, relative to the current globalAlpha.
  */
 export function glow(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string, alpha = 0.35) {
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  g.addColorStop(0, color);
-  g.addColorStop(1, "rgba(0,0,0,0)");
+  // A unit-radius gradient per colour, scaled into place: no gradient is created per frame
+  const g = cachedGradient(ctx, `radial|${color}`, () => {
+    const unit = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    unit.addColorStop(0, color);
+    unit.addColorStop(1, "rgba(0,0,0,0)");
+    return unit;
+  });
   ctx.save();
   ctx.globalAlpha *= alpha;
+  ctx.translate(cx, cy);
+  ctx.scale(r, r);
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.arc(0, 0, 1, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+}
+
+/** Gradients per context (a gradient belongs to the context that made it), keyed by look. */
+const gradientCache = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasGradient>>();
+
+/**
+ * Returns a gradient built once per context and key. Build it in unit space and position
+ * it with translate/scale, so one gradient serves every size and place.
+ * @example
+ * const fade = cachedGradient(ctx, `down|${color}`, () => { const g = ctx.createLinearGradient(0, 0, 0, 1); ... return g; });
+ */
+export function cachedGradient(ctx: CanvasRenderingContext2D, key: string, build: () => CanvasGradient): CanvasGradient {
+  let byKey = gradientCache.get(ctx);
+  if (!byKey) {
+    byKey = new Map();
+    gradientCache.set(ctx, byKey);
+  }
+  let gradient = byKey.get(key);
+  if (!gradient) {
+    gradient = build();
+    byKey.set(key, gradient);
+  }
+  return gradient;
 }
 
 /**

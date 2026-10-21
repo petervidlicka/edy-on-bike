@@ -5,12 +5,13 @@
  * train line, night sakura, street lamps, flags and pedestrians under umbrellas.
  *
  * Neon signs glow through shadowBlur, which is far too slow per frame on phones, so each
- * sign is drawn once into an offscreen canvas and reused (see getNeonSign).
+ * sign is drawn once into an offscreen canvas and reused (see getNeonSign). Tower bodies
+ * (walls and window grids, a few hundred rects each) are cached the same way.
  */
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
-import { glow, hash01 } from "../obstacles/drawHelpers";
+import { cachedGradient, glow, hash01 } from "../drawHelpers";
 
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
@@ -210,12 +211,20 @@ export function drawNeonReflections(ctx: CanvasRenderingContext2D, view: ViewBou
     const rx = i * cell - off + hash01(i, 22) * cell * 0.6;
     const color = NEON[Math.floor(hash01(i, 23) * NEON.length)];
     const len = 8 + hash01(i, 24) * 12;
-    const g = ctx.createLinearGradient(0, groundY, 0, groundY + len);
-    g.addColorStop(0, color);
-    g.addColorStop(1, "rgba(0,0,0,0)");
+    // Unit gradient per colour, stretched over the smear
+    const g = cachedGradient(ctx, `down|${color}`, () => {
+      const unit = ctx.createLinearGradient(0, 0, 0, 1);
+      unit.addColorStop(0, color);
+      unit.addColorStop(1, "rgba(0,0,0,0)");
+      return unit;
+    });
+    ctx.save();
     ctx.globalAlpha = fade * 0.35;
+    ctx.translate(rx, groundY);
+    ctx.scale(3 + hash01(i, 25) * 5, len);
     ctx.fillStyle = g;
-    ctx.fillRect(rx, groundY, 3 + hash01(i, 25) * 5, len);
+    ctx.fillRect(0, 0, 1, 1);
+    ctx.restore();
   }
   // White shimmer streaks along the wet surface.
   ctx.globalAlpha = fade * 0.18;
@@ -227,13 +236,12 @@ export function drawNeonReflections(ctx: CanvasRenderingContext2D, view: ViewBou
 
 // --- Neon building ---
 
-/**
- * A street tower at night: lit and dark windows, one or two vertical neon signs on the
- * side, sometimes a rooftop billboard, and an aviation light on the tall ones. `seed`
- * keeps the windows and signs the same while the building scrolls.
- */
-function drawNeonBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, wall: string, roof: string, seed: number) {
-  ctx.save();
+/** Cached tower bodies; bounded so a long run can't grow it without limit. */
+const towerCache = new Map<string, HTMLCanvasElement>();
+const MAX_CACHED_TOWERS = 64;
+
+/** Walls, roof edge and window grid of a tower: static, so drawn once and cached. */
+function drawTowerBody(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, wall: string, roof: string, seed: number) {
   ctx.fillStyle = wall;
   ctx.fillRect(x, y, w, h);
   ctx.fillStyle = roof;
@@ -252,6 +260,40 @@ function drawNeonBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, w
       ctx.fillRect(x + 3 + c * gx + gx * 0.2, y + 8 + r * 9, gx * 0.6, 5);
     }
   }
+}
+
+/**
+ * The tower body as an offscreen canvas, so drawing it each frame is one drawImage
+ * instead of a few hundred fillRects.
+ * @returns The cached body, or null where offscreen canvases aren't available.
+ */
+function getTowerBody(w: number, h: number, wall: string, roof: string, seed: number): HTMLCanvasElement | null {
+  const key = `${seed}|${w}|${h}|${wall}|${roof}`;
+  const cached = towerCache.get(key);
+  if (cached) return cached;
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(w);
+  canvas.height = Math.ceil(h);
+  const octx = canvas.getContext("2d");
+  if (!octx) return null;
+  drawTowerBody(octx, 0, 0, w, h, wall, roof, seed);
+  // Oldest first (Map keeps insertion order): towers from earlier stretches are long gone
+  if (towerCache.size >= MAX_CACHED_TOWERS) towerCache.delete(towerCache.keys().next().value as string);
+  towerCache.set(key, canvas);
+  return canvas;
+}
+
+/**
+ * A street tower at night: lit and dark windows, one or two vertical neon signs on the
+ * side, sometimes a rooftop billboard, and an aviation light on the tall ones. `seed`
+ * keeps the windows and signs the same while the building scrolls.
+ */
+function drawNeonBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, wall: string, roof: string, seed: number) {
+  ctx.save();
+  const body = getTowerBody(w, h, wall, roof, seed);
+  if (body) ctx.drawImage(body, x, y, w, h);
+  else drawTowerBody(ctx, x, y, w, h, wall, roof, seed);
 
   // Vertical signs hanging off one or both edges.
   const signs = hash01(seed, 31) < 0.4 ? 2 : 1;
@@ -563,6 +605,12 @@ function drawTorii(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 // --- Big-screen building ---
 
+const TICKER = "ようこそ東京へ  WELCOME TO TOKYO  ";
+/** Three copies, so the strip stays full while it scrolls one copy's width. */
+const TICKER_LOOP = TICKER.repeat(3);
+/** Ticker text width at its fixed font, measured on first draw. */
+let tickerWidth: number | null = null;
+
 /** A corner building with a huge video screen cycling colour and text (Shibuya-style). */
 function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, wall: string, seed: number) {
   const t = performance.now() / 1000;
@@ -607,10 +655,9 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.fillStyle = "#ffd23d";
   ctx.font = `bold 6px ${JP_FONT}`;
   ctx.textAlign = "left";
-  const ticker = "ようこそ東京へ  WELCOME TO TOKYO  ";
-  const tw = ctx.measureText(ticker).width;
+  const tw = (tickerWidth ??= ctx.measureText(TICKER).width);
   const tx = sx - ((t * 30) % tw);
-  ctx.fillText(ticker + ticker + ticker, tx, sy + sh + 8);
+  ctx.fillText(TICKER_LOOP, tx, sy + sh + 8);
   ctx.restore();
   aviationLight(ctx, x + w * 0.85, y - 1, seed);
   ctx.restore();

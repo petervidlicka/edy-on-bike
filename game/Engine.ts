@@ -11,37 +11,22 @@ import {
   AMBULANCE_CHANCE,
   PLAYER_X_RATIO,
   CRASH_SKIP_AFTER_S,
-  BIG_TRICK_POINTS,
-  COMBO_MIN_LINKS_FOR_SUMMARY,
-  COMBO_FLASH_MULTIPLIER,
-  COMBO_CONFETTI_MULTIPLIER,
-  COMBO_CONFETTI_COUNT,
-  GRIND_MIN_MS,
-  GRIND_BASE,
-  GRIND_PER_SEC,
 } from "./constants";
-import type { ComboEndReason, GameEvent } from "./events";
-import { createChain, addLink, tickChain, endChain } from "./ComboChain";
+import type { GameEvent } from "./events";
 import {
   FloatingText,
-  createTrickFloatingText,
-  createComboSummaryText,
   updateFloatingTexts,
   processTrickLanding,
   resetAllTrickState,
   TrickContext
 } from "./TrickSystem";
+import { TrickScoring } from "./TrickScoring";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { BiomeScenery } from "./BiomeScenery";
 import {
-  drawPlayer, drawObstacle, drawFloatingText, drawAmbulance, drawReviveFlash,
-  createConfettiBurst, updateConfetti, drawConfetti,
-  createComboFx, triggerComboFx, clearComboFx, updateComboFx,
-  drawComboMeter, drawComboFlash, resolveDisplayFont,
-  getRearWheelContact, emitSparks, updateSparks, drawSparks,
+  drawPlayer, drawObstacle, drawFloatingText, drawAmbulance, drawReviveFlash, resolveDisplayFont,
 } from "./rendering";
-import type { ConfettiPiece, Spark } from "./rendering";
-import { spawnObstacle, createObstacle, nextSpawnGap, getGrindLabel, moveObstacle, spawnGapPadding } from "./Obstacle";
+import { spawnObstacle, createObstacle, nextSpawnGap, moveObstacle, spawnGapPadding } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
@@ -58,16 +43,11 @@ import type { GhostSnapshot } from "./multiplayer/protocol";
 import { drawGhostPlayer } from "./multiplayer/GhostPlayerRenderer";
 import { TrickBoost } from "./multiplayer/TrickBoost";
 import { Camera, MIN_CAMERA_ZOOM, getViewBounds } from "./Camera";
+import type { ViewBounds } from "./Camera";
 import { drawHeightMarker } from "./rendering/HeightMarker";
 
 /** Milliseconds per 60fps frame; converts the capped `dt` into game time for the chain timers. */
 const FRAME_MS = 1000 / 60;
-
-/** An in-progress grind: the obstacle being ridden and how long (game time) it has been ridden. */
-interface GrindState {
-  obstacle: ObstacleInstance;
-  ms: number;
-}
 
 /**
  * Why the engine is paused. The loop runs only while no reason is held, so the
@@ -122,18 +102,10 @@ export class Engine {
   private rafId: number = 0;
   private pauseReasons = new Set<PauseReason>();
   private floatingTexts: FloatingText[] = [];
-  /** Trick chain across landings; ticked from update() so it freezes while paused. */
-  private chain = createChain();
-  private comboFx = createComboFx();
-  private confetti: ConfettiPiece[] = [];
-  /** Canvas font stack for the combo meter, resolved on first use (needs the mounted DOM). */
+  /** Combo chain, grinds and combo feedback (see TrickScoring). */
+  private scoring: TrickScoring;
+  /** Canvas font stack for the combo meter and pop words, resolved on first use (needs the mounted DOM). */
   private displayFont: string | null = null;
-  /**
-   * The ride in progress along a rideable obstacle, if any. Lives here rather than on
-   * PlayerState so multiplayer ghost snapshots stay unchanged.
-   */
-  private grind: GrindState | null = null;
-  private sparks: Spark[] = [];
   private canvasW: number = 0;
   private canvasH: number = 0;
   private groundY: number = 0;
@@ -170,6 +142,17 @@ export class Engine {
       this.multiplayer = options.multiplayer;
       this.boost = new TrickBoost();
     }
+    // Getters, not values: the player and canvas size are replaced on restart/resize
+    this.scoring = new TrickScoring({
+      player: () => this.player,
+      skin: () => this.skin,
+      canvasW: () => this.canvasW,
+      sound: this.sound,
+      boost: this.boost,
+      addPoints: (points) => this.addTrickPoints(points),
+      emit: (event) => this.emit(event),
+      addFloatingText: (text) => this.floatingTexts.push(text),
+    });
     this.loop = this.loop.bind(this);
     this.resize(window.innerWidth, window.innerHeight);
     this.rafId = requestAnimationFrame(this.loop);
@@ -213,7 +196,7 @@ export class Engine {
     const wasPaused = this.isPaused();
     const hadUserPause = this.pauseReasons.delete("user");
     this.sound.stopSiren();
-    this.cancelGrind();
+    this.scoring.reset();
     this.sound.reset();
     this.ambulance = null;
     this.ambulancePending = false;
@@ -232,9 +215,6 @@ export class Engine {
     this.nextDebugPadding = 0;
     this.obstacles = [];
     this.floatingTexts = [];
-    this.chain = createChain();
-    clearComboFx(this.comboFx);
-    this.confetti = [];
     this.envManager.reset();
     this.boost?.reset();
     this.camera.reset();
@@ -262,7 +242,7 @@ export class Engine {
         this.sound.playJump(prevCount === 1);
       }
       // Jumping off the top ends the grind right away rather than on the next frame
-      if (this.grind && !this.player.ridingObstacle) this.endGrind();
+      if (this.scoring.grinding && !this.player.ridingObstacle) this.scoring.endGrind();
     } else if (this.state === GameState.CRASHING) {
       this.skipCrash();
     }
@@ -322,40 +302,11 @@ export class Engine {
       return;
     }
 
-    // Environment progression
-    const envResult = this.envManager.update(dt, this.elapsedMs);
-    if (envResult.biomeStarted) this.emit({ type: "biomeChanged", biome: envResult.biomeStarted });
-    if (envResult.musicCrossfade) {
-      this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
-    }
     // Spawning, culling and scenery all work to the widest zoomed-out view, so nothing pops in or out on screen
     const widestView = getViewBounds(MIN_CAMERA_ZOOM, this.canvasW, this.canvasH, this.groundY);
-    if (envResult.appendBackground) {
-      const { fromEnv, toEnv } = envResult.appendBackground;
-      const scrollPx = this.scenery.beginBiomeChange(fromEnv, toEnv, widestView);
-      // Time the colour blend to the buildings arriving, at the current scroll speed
-      this.envManager.setTransitionDuration(scrollPx / (this.speed * toEnv.background.buildingSpeedRatio));
-    }
-    if (envResult.regenerateBackground) this.scenery.endBiomeChange();
-
-    // Speed progression
-    this.speedTimer += rawDt;
-    this.elapsedMs += rawDt;
-    if (this.speedTimer >= SPEED_INTERVAL) {
-      this.speedTimer -= SPEED_INTERVAL;
-      this.speed *= 1 + SPEED_INCREASE;
-      const maxSpeed = INITIAL_SPEED * MAX_SPEED_MULTIPLIER;
-      if (this.speed > maxSpeed) this.speed = maxSpeed;
-      this.callbacks.onSpeedUpdate?.(this.speed);
-    }
-
-    // Score from distance
-    this.distance += this.speed * dt;
-    const newScore = Math.floor(this.distance / SCORE_PER_PX);
-    if (newScore !== this.score) {
-      this.score = newScore;
-      this.callbacks.onScoreUpdate(this.score);
-    }
+    this.progressBiomes(dt, widestView);
+    this.progressSpeed(rawDt);
+    this.addDistance(dt);
 
     // Update player and background
     const wasAirborne = !this.player.isOnGround;
@@ -376,7 +327,7 @@ export class Engine {
     const trickCtx: TrickContext = {
       player: this.player,
       onCrash: (underRotated) => this.startCrash({ kind: "badLanding", underRotated, surfaceY: landingSurfaceY }),
-      onAwardBonus: (label, bonus, sketchy) => this.awardTrickBonus(label, bonus, sketchy)
+      onAwardBonus: (label, bonus, sketchy) => this.scoring.award(label, bonus, sketchy)
     };
 
     // Trick landing checks — unified to support combos (pose + flip simultaneously)
@@ -387,45 +338,18 @@ export class Engine {
       if (processTrickLanding(trickCtx, hadFlip, hadPose, prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
     }
 
-    // Trick chain: the window only drains on the ground (not in the air, not riding an obstacle)
     const dtMs = dt * FRAME_MS;
-    updateComboFx(this.comboFx, dtMs);
-    updateConfetti(this.confetti, dt);
-    if (tickChain(this.chain, dtMs, this.player.isOnGround && !this.player.ridingObstacle)) {
-      this.finishChain("expired");
-    }
+    this.scoring.tick(dtMs, dt);
 
     // Update floating texts (float up + fade out)
     this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
 
-    // Move obstacles and cull off-screen ones
-    for (const obs of this.obstacles) {
-      moveObstacle(obs, this.speed, dt, this.player.x);
-    }
-    this.obstacles = this.obstacles.filter((obs) => obs.x + obs.width > widestView.left);
-
-    // Obstacle spawning
-    this.distanceSinceLastObstacle += this.speed * dt;
-    const gap = this.debugSequence ? this.debugGap + this.nextDebugPadding : this.nextObstacleGap;
-    if (this.distanceSinceLastObstacle >= gap) {
-      if (this.debugSequence) {
-        const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
-        const spawned = createObstacle(type, widestView.right, this.groundY, this.player.x);
-        this.obstacles.push(spawned);
-        this.nextDebugPadding = spawnGapPadding(spawned);
-        this.debugIndex++;
-      } else {
-        const spawned = spawnObstacle(widestView.right, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.player.x, this.rng.random.bind(this.rng));
-        this.obstacles.push(spawned);
-        this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng)) + spawnGapPadding(spawned);
-      }
-      this.distanceSinceLastObstacle = 0;
-    }
+    this.updateObstacles(dt, widestView);
 
     // Ramp interaction (before collision checks)
     processRampInteractions(this.player, this.obstacles, this.groundY, dt);
     processRidingState(this.player);
-    this.updateGrind(dtMs, dt);
+    this.scoring.updateGrind(dtMs, dt);
 
     // Collision detection
     for (const obs of this.obstacles) {
@@ -449,7 +373,7 @@ export class Engine {
           this.player.velocityY = 0;
           this.player.isOnGround = false;
           this.player.jumpCount = 0;
-          this.beginGrind(obs);
+          this.scoring.beginGrind(obs);
         }
       } else {
         if (checkCollision(this.player, obs)) {
@@ -465,6 +389,77 @@ export class Engine {
     }
   }
 
+  /** Advances the biome schedule: announces a new biome, crossfades music, hands the scenery over. */
+  private progressBiomes(dt: number, widestView: ViewBounds): void {
+    const envResult = this.envManager.update(dt, this.elapsedMs);
+    if (envResult.biomeStarted) this.emit({ type: "biomeChanged", biome: envResult.biomeStarted });
+    if (envResult.musicCrossfade) {
+      this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
+    }
+    if (envResult.appendBackground) {
+      const { fromEnv, toEnv } = envResult.appendBackground;
+      const scrollPx = this.scenery.beginBiomeChange(fromEnv, toEnv, widestView);
+      // Time the colour blend to the buildings arriving, at the current scroll speed
+      this.envManager.setTransitionDuration(scrollPx / (this.speed * toEnv.background.buildingSpeedRatio));
+    }
+    if (envResult.regenerateBackground) this.scenery.endBiomeChange();
+  }
+
+  /** Run clock and the stepwise speed-up (capped at MAX_SPEED_MULTIPLIER). */
+  private progressSpeed(rawDt: number): void {
+    this.speedTimer += rawDt;
+    this.elapsedMs += rawDt;
+    if (this.speedTimer >= SPEED_INTERVAL) {
+      this.speedTimer -= SPEED_INTERVAL;
+      this.speed *= 1 + SPEED_INCREASE;
+      const maxSpeed = INITIAL_SPEED * MAX_SPEED_MULTIPLIER;
+      if (this.speed > maxSpeed) this.speed = maxSpeed;
+      this.callbacks.onSpeedUpdate?.(this.speed);
+    }
+  }
+
+  /** Distance travelled this frame, and the score it earns. */
+  private addDistance(dt: number): void {
+    this.distance += this.speed * dt;
+    const newScore = Math.floor(this.distance / SCORE_PER_PX);
+    if (newScore !== this.score) {
+      this.score = newScore;
+      this.callbacks.onScoreUpdate(this.score);
+    }
+  }
+
+  /** Trick points paid by TrickScoring; distance follows so distance scoring continues from the new total. */
+  private addTrickPoints(points: number): void {
+    this.score += points;
+    this.distance = this.score * SCORE_PER_PX;
+    this.callbacks.onScoreUpdate(this.score);
+  }
+
+  /** Moves obstacles, culls the ones left behind and spawns the next one when its gap is covered. */
+  private updateObstacles(dt: number, widestView: ViewBounds): void {
+    for (const obs of this.obstacles) {
+      moveObstacle(obs, this.speed, dt, this.player.x);
+    }
+    this.obstacles = this.obstacles.filter((obs) => obs.x + obs.width > widestView.left);
+
+    this.distanceSinceLastObstacle += this.speed * dt;
+    const gap = this.debugSequence ? this.debugGap + this.nextDebugPadding : this.nextObstacleGap;
+    if (this.distanceSinceLastObstacle < gap) return;
+    if (this.debugSequence) {
+      const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
+      const spawned = createObstacle(type, widestView.right, this.groundY, this.player.x);
+      this.obstacles.push(spawned);
+      this.nextDebugPadding = spawnGapPadding(spawned);
+      this.debugIndex++;
+    } else {
+      const random = this.rng.random.bind(this.rng);
+      const spawned = spawnObstacle(widestView.right, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.player.x, random);
+      this.obstacles.push(spawned);
+      this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, random) + spawnGapPadding(spawned);
+    }
+    this.distanceSinceLastObstacle = 0;
+  }
+
   /**
    * Begins a crash. What was hit picks the animation; the ambulance is decided here too
    * so the player may skip the animation when none is coming.
@@ -475,10 +470,7 @@ export class Engine {
     const variant = pickVariant(cause, Math.random);
     this.emit({ type: "crash", variant });
     // A crash ends the chain without paying a cash-in; a revive starts a fresh one
-    this.finishChain("crash");
-    this.cancelGrind();
-    clearComboFx(this.comboFx);
-    this.confetti = [];
+    this.scoring.onCrash();
     this.state = GameState.CRASHING;
     this.sound.stopMusic();
     this.sound.playCrash(variant);
@@ -609,100 +601,6 @@ export class Engine {
   }
 
   /**
-   * Pays a trick link through the chain.
-   * @returns Points actually paid (after the chain multiplier).
-   */
-  private awardTrickBonus(label: string, bonus: number, sketchy?: boolean): number {
-    const isSketchy = sketchy ?? false;
-    const prevMultiplier = this.chain.multiplier;
-    const { multiplier, paid } = addLink(this.chain, bonus);
-    this.score += paid;
-    this.distance = this.score * SCORE_PER_PX;
-    this.callbacks.onScoreUpdate(this.score);
-    // Multiplied points, so a climbing combo chain pushes the rider further
-    this.boost?.onTrick(paid, isSketchy);
-    this.sound.playComboStep(this.chain.links);
-    this.floatingTexts.push(createTrickFloatingText(label, paid, this.player.x, this.player.y, this.player.width, isSketchy, multiplier));
-    this.emit({ type: "trickLanded", label, points: paid, sketchy: isSketchy, big: bonus >= BIG_TRICK_POINTS, multiplier });
-    this.emit({ type: "comboChanged", links: this.chain.links, multiplier });
-
-    // A sketchy landing still counts as a link, but it breaks the chain
-    if (isSketchy) {
-      this.finishChain("sketchy");
-      return paid;
-    }
-    // Feedback only when the multiplier actually climbs into a tier
-    const climbed = multiplier > prevMultiplier;
-    triggerComboFx(this.comboFx, climbed && multiplier >= COMBO_FLASH_MULTIPLIER);
-    if (climbed && multiplier >= COMBO_CONFETTI_MULTIPLIER) {
-      this.confetti.push(...createConfettiBurst(this.canvasW / 2, 70, COMBO_CONFETTI_COUNT));
-    }
-    return paid;
-  }
-
-  /** Starts timing a ride along `obstacle` and its scrape sound; replaces (and pays out) any earlier one. */
-  private beginGrind(obstacle: ObstacleInstance): void {
-    if (this.grind) this.endGrind();
-    this.grind = { obstacle, ms: 0 };
-    this.sound.startGrind();
-  }
-
-  /**
-   * Per-frame grind bookkeeping, run right after the riding state is resolved: pays out
-   * a ride that just ended (rolled off the end), otherwise adds the frame to the ride,
-   * throws sparks from the rear wheel and keeps existing sparks flying.
-   */
-  private updateGrind(dtMs: number, dt: number): void {
-    if (this.grind) {
-      if (this.player.ridingObstacle !== this.grind.obstacle) {
-        this.endGrind();
-      } else {
-        this.grind.ms += dtMs;
-        const contact = getRearWheelContact(this.player, this.skin);
-        emitSparks(this.sparks, contact.x, contact.y);
-      }
-    }
-    updateSparks(this.sparks, dt);
-  }
-
-  /**
-   * Finishes the current ride (rolled off or jumped off): stops the scrape and, for a
-   * ride of at least GRIND_MIN_MS, awards a combo link named after the obstacle. Crashes
-   * and revives never come through here, so they pay nothing (see cancelGrind).
-   */
-  private endGrind(): void {
-    const grind = this.grind;
-    if (!grind) return;
-    this.grind = null;
-    this.sound.stopGrind();
-    if (grind.ms < GRIND_MIN_MS) return;
-    const base = Math.round(GRIND_BASE + (GRIND_PER_SEC * grind.ms) / 1000);
-    const points = this.awardTrickBonus(getGrindLabel(grind.obstacle.type), base);
-    this.emit({ type: "grindEnded", obstacle: grind.obstacle.type, points });
-  }
-
-  /** Drops the current ride without paying (crash, restart): no award, no sound, no sparks. */
-  private cancelGrind(): void {
-    this.grind = null;
-    this.sparks = [];
-    this.sound.stopGrind();
-  }
-
-  /**
-   * Ends the trick chain. A chain of 2+ links is announced with an event; unless it
-   * ended in a crash it also pays out a "cash-in" sound and summary text (the points
-   * were already paid link by link).
-   */
-  private finishChain(reason: ComboEndReason): void {
-    const summary = endChain(this.chain);
-    if (!summary || summary.links < COMBO_MIN_LINKS_FOR_SUMMARY) return;
-    this.emit({ type: "comboEnded", links: summary.links, multiplier: summary.multiplier, total: summary.total, reason });
-    if (reason === "crash") return;
-    this.sound.playComboCashIn(summary.multiplier);
-    this.floatingTexts.push(createComboSummaryText(summary, this.player.x, this.player.y, this.player.width, this.canvasW));
-  }
-
-  /**
    * Single exit for game events. Internal reactions are routed here first, then
    * React is told through `callbacks.onGameEvent`. Keeps feature code ignorant of
    * who listens.
@@ -761,7 +659,7 @@ export class Engine {
       drawCrash(ctx, this.crashState, { skin: this.skin, palette, groundY });
     } else {
       drawPlayer(ctx, this.player, this.skin, riderGear);
-      drawSparks(ctx, this.sparks);
+      this.scoring.drawSparks(ctx);
     }
 
     for (const ft of this.floatingTexts) {
@@ -792,12 +690,7 @@ export class Engine {
     }
 
     // Combo overlay in screen space, never shaken
-    drawConfetti(ctx, this.confetti);
-    if (this.state === GameState.RUNNING && this.chain.links > 0) {
-      this.displayFont ??= resolveDisplayFont(this.canvas);
-      drawComboMeter(ctx, this.chain, this.comboFx, canvasW, canvasH, this.displayFont, performance.now());
-    }
-    drawComboFlash(ctx, this.comboFx, canvasW, canvasH);
+    this.scoring.drawOverlay(ctx, canvasW, canvasH, this.state === GameState.RUNNING, () => (this.displayFont ??= resolveDisplayFont(this.canvas)));
   }
 
   private buildSnapshot(): GhostSnapshot {
@@ -887,7 +780,7 @@ export class Engine {
       this.rafId = requestAnimationFrame(this.loop);
       if (this.state === GameState.RUNNING) {
         this.sound.resumeMusic();
-        if (this.grind) this.sound.startGrind();
+        if (this.scoring.grinding) this.sound.startGrind();
       } else if (this.state === GameState.AMBULANCE && this.ambulance?.phase === AmbulancePhase.DRIVING_IN) {
         this.sound.playSiren();
       }
@@ -916,7 +809,7 @@ export class Engine {
   setSfxMuted(muted: boolean): void {
     this.sound.setSfxMuted(muted);
     // Muting stops the scrape inside the sound manager; bring it back if unmuted mid-grind
-    if (!muted && this.grind && this.state === GameState.RUNNING && !this.isPaused()) this.sound.startGrind();
+    if (!muted && this.scoring.grinding && this.state === GameState.RUNNING && !this.isPaused()) this.sound.startGrind();
   }
 
   setSkin(skin: SkinDefinition): void {

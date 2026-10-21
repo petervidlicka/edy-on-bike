@@ -1,13 +1,14 @@
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
+import { DUBAI_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 
 // --- Dubai biome obstacle draw functions ---
 
 /** Dromedary in profile, facing right: long legs, one hump, neck dipping then rising to the head. */
 export function drawCamel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const bodyColor = palette.obstacle.camel ?? "#c8a060";
-  const legColor = palette.obstacle.camelLeg ?? "#a08040";
-  const saddleColor = palette.obstacle.camelSaddle ?? "#c44040";
+  const bodyColor = palette.obstacle.camel ?? DUBAI_OBSTACLE_COLORS.camel;
+  const legColor = palette.obstacle.camelLeg ?? DUBAI_OBSTACLE_COLORS.camelLeg;
+  const saddleColor = palette.obstacle.camelSaddle ?? DUBAI_OBSTACLE_COLORS.camelSaddle;
   const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
 
   ctx.save();
@@ -114,9 +115,9 @@ export function drawCamel(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 export function drawSandTrap(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const sandColor = palette.obstacle.sand ?? "#d8c078";
-  const highlightColor = palette.obstacle.sandHighlight ?? "#e8d498";
-  const shadowColor = palette.obstacle.sandShadow ?? "#b09858";
+  const sandColor = palette.obstacle.sand ?? DUBAI_OBSTACLE_COLORS.sand;
+  const highlightColor = palette.obstacle.sandHighlight ?? DUBAI_OBSTACLE_COLORS.sandHighlight;
+  const shadowColor = palette.obstacle.sandShadow ?? DUBAI_OBSTACLE_COLORS.sandShadow;
 
   // Wide sand drift across the road — long, low dune shape
   // Main body
@@ -216,8 +217,8 @@ const PINK_G_CLASS_SHAPE: VehicleShape = {
 /** Pink Mercedes G-Class–style off-roader: a pure box with upright glass, round lamps and a rear spare wheel. */
 export function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const pink = c.pinkGClass ?? "#e87a9f";
-  const pinkDark = c.pinkGClassRoof ?? "#d06888";
+  const pink = c.pinkGClass ?? DUBAI_OBSTACLE_COLORS.pinkGClass;
+  const pinkDark = c.pinkGClassRoof ?? DUBAI_OBSTACLE_COLORS.pinkGClassRoof;
 
   // Spare wheel on the rear door, behind the body.
   const sx = x + w * 0.065;
@@ -258,9 +259,9 @@ export function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: numb
 }
 
 export function drawCactus(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const green = palette.obstacle.cactus ?? "#3a7a38";
-  const highlight = palette.obstacle.cactusHighlight ?? "#4a9a48";
-  const spine = palette.obstacle.cactusSpine ?? "#2a5a28";
+  const green = palette.obstacle.cactus ?? DUBAI_OBSTACLE_COLORS.cactus;
+  const highlight = palette.obstacle.cactusHighlight ?? DUBAI_OBSTACLE_COLORS.cactusHighlight;
+  const spine = palette.obstacle.cactusSpine ?? DUBAI_OBSTACLE_COLORS.cactusSpine;
   const cx = x + w / 2;
   const trunkW = w * 0.38;
 
@@ -330,9 +331,9 @@ export function drawCactus(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 export function drawDubaiChocolate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const choc = palette.obstacle.chocolate ?? "#5a3a20";
-  const chocDark = palette.obstacle.chocolateDark ?? "#3a2210";
-  const wrapper = palette.obstacle.chocolateWrapper ?? "#d4a844";
+  const choc = palette.obstacle.chocolate ?? DUBAI_OBSTACLE_COLORS.chocolate;
+  const chocDark = palette.obstacle.chocolateDark ?? DUBAI_OBSTACLE_COLORS.chocolateDark;
+  const wrapper = palette.obstacle.chocolateWrapper ?? DUBAI_OBSTACLE_COLORS.chocolateWrapper;
 
   // Main chocolate body
   ctx.fillStyle = choc;
@@ -414,8 +415,8 @@ export function drawDubaiChocolate(ctx: CanvasRenderingContext2D, x: number, y: 
 const BILLBOARD_SPARKLE_OFFSETS = [0.02, 0.05, 0.01, 0.04, 0.06, 0.0, 0.03, 0.05];
 
 export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const frameColor = palette.obstacle.billboardFrame ?? "#a0a0a0";
-  const postColor = palette.obstacle.billboardPost ?? "#5a5a5a";
+  const frameColor = palette.obstacle.billboardFrame ?? DUBAI_OBSTACLE_COLORS.billboardFrame;
+  const postColor = palette.obstacle.billboardPost ?? DUBAI_OBSTACLE_COLORS.billboardPost;
 
   // Layout: sign panel on top, short posts below
   const signH = h * 0.81;  // ~75px for 92h — legs are only 19%
@@ -656,15 +657,15 @@ const LAMBORGHINI_HURACAN_SHAPE: VehicleShape = {
  */
 export function drawLamborghiniHuracan(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const green = c.lamboGreen ?? "#86c232";
-  const greenDark = c.lamboGreenDark ?? "#5e8f1f";
+  const green = c.lamboGreen ?? DUBAI_OBSTACLE_COLORS.lamboGreen;
+  const greenDark = c.lamboGreenDark ?? DUBAI_OBSTACLE_COLORS.lamboGreenDark;
   const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
   drawVehicle(ctx, x, y, w, h, c, LAMBORGHINI_HURACAN_SHAPE, {
     body: green,
     bodyDark: greenDark,
     cladding: "#1c201c",
     rim: { color: "#232326", spokes: 5, caliper: "#e7c21b" },
-    window: c.lamboWindow ?? "#2a3a4a",
+    window: c.lamboWindow ?? DUBAI_OBSTACLE_COLORS.lamboWindow,
   });
 
   ctx.save();
@@ -741,8 +742,8 @@ const FERRARI_458_SHAPE: VehicleShape = {
  */
 export function drawFerrari458(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const red = c.ferrariRed ?? "#d11f1f";
-  const redDark = c.ferrariRedDark ?? "#9a1414";
+  const red = c.ferrariRed ?? DUBAI_OBSTACLE_COLORS.ferrariRed;
+  const redDark = c.ferrariRedDark ?? DUBAI_OBSTACLE_COLORS.ferrariRedDark;
   const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
   drawVehicle(ctx, x, y, w, h, c, FERRARI_458_SHAPE, {
     body: red,
@@ -812,8 +813,8 @@ const CONVERTIBLE_SHAPE: VehicleShape = {
 /** Generic open-top roadster: long bonnet, short deck, raked screen and tan leather seats. */
 export function drawConvertible(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const body = c.convertible ?? "#1f5fbf";
-  const bodyDark = c.convertibleDark ?? "#164586";
+  const body = c.convertible ?? DUBAI_OBSTACLE_COLORS.convertible;
+  const bodyDark = c.convertibleDark ?? DUBAI_OBSTACLE_COLORS.convertibleDark;
   const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
 
   // Seat backs sit in the cockpit, behind the body side.
@@ -932,8 +933,8 @@ const PORSCHE_911_SHAPE: VehicleShape = {
  */
 export function drawPorsche911(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const body = c.porsche ?? "#2fa8c9";
-  const bodyDark = c.porscheDark ?? "#1f7d97";
+  const body = c.porsche ?? DUBAI_OBSTACLE_COLORS.porsche;
+  const bodyDark = c.porscheDark ?? DUBAI_OBSTACLE_COLORS.porscheDark;
   const carbon = "#1b1f22";
   const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
 

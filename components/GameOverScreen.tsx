@@ -6,7 +6,7 @@
  * Views: summary (default) · form (qualifying / manual save) · leaderboard (on request).
  */
 import { useState, useCallback } from "react";
-import LeaderboardForm from "./LeaderboardForm";
+import { LeaderboardForm } from "./LeaderboardForm";
 import { GameOverHeader } from "./GameOverHeader";
 import { GameOverSummary } from "./GameOverSummary";
 import { GameOverLeaderboard } from "./GameOverLeaderboard";
@@ -45,7 +45,7 @@ const LEADERBOARD_FETCH_GRACE_MS = 1500;
  * @example
  * <GameOverScreen score={420} bestScore={900} skinName="Racer" runTicket={ticket} onRestart={restart} onHome={home} />
  */
-export default function GameOverScreen({
+export function GameOverScreen({
   score, bestScore, skinName, previousBest, cheatUnlocked, runTicket, onRestart, onHome,
 }: GameOverScreenProps) {
   const board = useGameOverLeaderboard();

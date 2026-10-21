@@ -1,5 +1,6 @@
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
+import { DUBAI_OBSTACLE_COLORS } from "./obstacleColors";
 import { EASING_OUT, stagedPool } from "./stages";
 import { DUBAI_BACKGROUND_DRAWERS } from "../rendering";
 import type {
@@ -92,31 +93,7 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
     rampMetalDark: "#5a6a7a",
 
     // Dubai-specific obstacle colors
-    camel: "#c8a060",
-    camelLeg: "#a08040",
-    camelSaddle: "#c44040",
-    sand: "#d8c078",
-    sandHighlight: "#e8d498",
-    sandShadow: "#b09858",
-    pinkGClass: "#e87a9f",
-    pinkGClassRoof: "#d06888",
-    cactus: "#3a7a38",
-    cactusHighlight: "#4a9a48",
-    cactusSpine: "#2a5a28",
-    chocolate: "#5a3a20",
-    chocolateDark: "#3a2210",
-    chocolateWrapper: "#d4a844",
-    lamboGreen: "#86c232", // Verde Mantis
-    lamboGreenDark: "#5e8f1f",
-    lamboWindow: "#2a3a4a",
-    ferrariRed: "#d11f1f", // Rosso Corsa
-    ferrariRedDark: "#9a1414",
-    convertible: "#1f5fbf",
-    convertibleDark: "#164586",
-    porsche: "#2fa8c9", // Miami Blue
-    porscheDark: "#1f7d97",
-    billboardFrame: "#a0a0a0",
-    billboardPost: "#5a5a5a",
+    ...DUBAI_OBSTACLE_COLORS,
   },
 };
 

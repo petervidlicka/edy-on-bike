@@ -6,14 +6,15 @@
  */
 import type { EnvironmentPalette } from "../../environments/types";
 
-import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, type Pt } from "./drawHelpers";
+import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, type Pt } from "../drawHelpers";
+import { AUSTRIA_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 
 // --- Snowman ---
 
 /** Three-ball snowman with a black hat, carrot nose, red scarf and twig arms. */
 export function drawSnowman(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const snow = palette.obstacle.snow ?? "#f6f9fc";
-  const shade = palette.obstacle.snowShadow ?? "#c6d6e6";
+  const snow = palette.obstacle.snow ?? AUSTRIA_OBSTACLE_COLORS.snow;
+  const shade = palette.obstacle.snowShadow ?? AUSTRIA_OBSTACLE_COLORS.snowShadow;
   const P = boxMapper(x, y, w, h);
 
   ctx.save();
@@ -76,10 +77,10 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, x: number, y: number,
 
 /** A frozen pond heaved into a low ridge of tilted ice plates, banked with snow at both ends. */
 export function drawFrozenLake(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const snow = palette.obstacle.snow ?? "#f6f9fc";
-  const shade = palette.obstacle.snowShadow ?? "#c6d6e6";
-  const ice = palette.obstacle.ice ?? "#a8d4ec";
-  const iceHi = palette.obstacle.iceHighlight ?? "#e4f4fc";
+  const snow = palette.obstacle.snow ?? AUSTRIA_OBSTACLE_COLORS.snow;
+  const shade = palette.obstacle.snowShadow ?? AUSTRIA_OBSTACLE_COLORS.snowShadow;
+  const ice = palette.obstacle.ice ?? AUSTRIA_OBSTACLE_COLORS.ice;
+  const iceHi = palette.obstacle.iceHighlight ?? AUSTRIA_OBSTACLE_COLORS.iceHighlight;
   const P = boxMapper(x, y, w, h);
 
   ctx.save();
@@ -144,9 +145,9 @@ export function drawFrozenLake(ctx: CanvasRenderingContext2D, x: number, y: numb
 
 /** Alpine red deer stag in profile facing left, with a full spread of antlers. */
 export function drawRedDeer(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const body = palette.obstacle.redDeer ?? "#8a5a36";
-  const dark = palette.obstacle.redDeerDark ?? "#5e3c22";
-  const antler = palette.obstacle.antler ?? "#d8c4a0";
+  const body = palette.obstacle.redDeer ?? AUSTRIA_OBSTACLE_COLORS.redDeer;
+  const dark = palette.obstacle.redDeerDark ?? AUSTRIA_OBSTACLE_COLORS.redDeerDark;
+  const antler = palette.obstacle.antler ?? AUSTRIA_OBSTACLE_COLORS.antler;
   const P = boxMapper(x, y, w, h);
 
   ctx.save();
@@ -236,8 +237,8 @@ function drawCrate(
   palette: EnvironmentPalette,
   withBottles: boolean
 ) {
-  const red = palette.obstacle.beerCrate ?? "#c8102e";
-  const dark = palette.obstacle.beerCrateDark ?? "#8e0b20";
+  const red = palette.obstacle.beerCrate ?? AUSTRIA_OBSTACLE_COLORS.beerCrate;
+  const dark = palette.obstacle.beerCrateDark ?? AUSTRIA_OBSTACLE_COLORS.beerCrateDark;
 
   if (withBottles) {
     const necks = Math.max(3, Math.round(cw / 6));
@@ -315,10 +316,10 @@ export function drawBeerCrateWall(ctx: CanvasRenderingContext2D, x: number, y: n
  * so the whole top is the rideable surface.
  */
 export function drawSnowCat(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const red = palette.obstacle.snowCat ?? "#d42a1c";
-  const dark = palette.obstacle.snowCatDark ?? "#9a1c12";
-  const track = palette.obstacle.snowCatTrack ?? "#2e3236";
-  const snow = palette.obstacle.snow ?? "#f6f9fc";
+  const red = palette.obstacle.snowCat ?? AUSTRIA_OBSTACLE_COLORS.snowCat;
+  const dark = palette.obstacle.snowCatDark ?? AUSTRIA_OBSTACLE_COLORS.snowCatDark;
+  const track = palette.obstacle.snowCatTrack ?? AUSTRIA_OBSTACLE_COLORS.snowCatTrack;
+  const snow = palette.obstacle.snow ?? AUSTRIA_OBSTACLE_COLORS.snow;
   const glass = "#2a3c4c";
   const P = boxMapper(x, y, w, h);
 
@@ -438,8 +439,8 @@ export function drawSnowCat(ctx: CanvasRenderingContext2D, x: number, y: number,
  * (height grows with t²) so it matches the physics; the knuckle drops away behind the lip.
  */
 export function drawSnowKicker(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const snow = palette.obstacle.snow ?? "#f6f9fc";
-  const shade = palette.obstacle.snowShadow ?? "#c6d6e6";
+  const snow = palette.obstacle.snow ?? AUSTRIA_OBSTACLE_COLORS.snow;
+  const shade = palette.obstacle.snowShadow ?? AUSTRIA_OBSTACLE_COLORS.snowShadow;
   const base = y + h;
   const steps = 16;
 
@@ -573,8 +574,8 @@ export function drawFreerideSkier(ctx: CanvasRenderingContext2D, x: number, y: n
 
 /** Downhill racer in a red suit, tucked low and coming left fast, with a spray of snow behind. */
 export function drawRaceSkier(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
-  const suit = palette.obstacle.skiRacer ?? "#d81e28";
-  const suitDark = palette.obstacle.skiRacerDark ?? "#9a141c";
+  const suit = palette.obstacle.skiRacer ?? AUSTRIA_OBSTACLE_COLORS.skiRacer;
+  const suitDark = palette.obstacle.skiRacerDark ?? AUSTRIA_OBSTACLE_COLORS.skiRacerDark;
   const P = boxMapper(x, y, w, h);
 
   ctx.save();

@@ -7,7 +7,7 @@ import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/ty
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
 import { drawRedDeer } from "../obstacles/austriaObstacles";
-import { hash01 as noise } from "../obstacles/drawHelpers";
+import { hash01 as noise } from "../drawHelpers";
 
 const SNOW = "#f6f9fc";
 const SNOW_SHADE = "#d4e0ec";

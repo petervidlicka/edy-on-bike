@@ -7,7 +7,8 @@
  */
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
-import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow } from "./drawHelpers";
+import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow } from "../drawHelpers";
+import { TOKYO_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 
 /** Japanese-capable font stack for the little signs and labels. */
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
@@ -57,8 +58,8 @@ export function drawKeiCar(ctx: CanvasRenderingContext2D, x: number, y: number, 
   const c = palette.obstacle;
   headlightBeam(ctx, x + w, y + h * 0.56, 34, 1);
   drawVehicle(ctx, x, y, w, h, c, KEI_CAR_SHAPE, {
-    body: c.keiCar ?? "#9ad8c4",
-    bodyDark: c.keiCarDark ?? "#6aae9a",
+    body: c.keiCar ?? TOKYO_OBSTACLE_COLORS.keiCar,
+    bodyDark: c.keiCarDark ?? TOKYO_OBSTACLE_COLORS.keiCarDark,
     lowerTone: ["#f4f4f0", 0.0, 0.08],
   });
   // Yellow Kei plate on the tail and a sliding-door rail.
@@ -149,8 +150,8 @@ export function drawJapanTaxi(ctx: CanvasRenderingContext2D, x: number, y: numbe
   fillTextUnmirrored(ctx, "TAXI", x + w * 0.42, y + h * 0.115, w * 0.14);
 
   drawVehicle(ctx, x, y, w, h, c, TAXI_SHAPE, {
-    body: c.taxi ?? "#2c3256",
-    bodyDark: c.taxiDark ?? "#1c2040",
+    body: c.taxi ?? TOKYO_OBSTACLE_COLORS.taxi,
+    bodyDark: c.taxiDark ?? TOKYO_OBSTACLE_COLORS.taxiDark,
   });
   // Gold belt line and the vacant sign glowing behind the windscreen.
   ctx.fillStyle = "#d4a840";

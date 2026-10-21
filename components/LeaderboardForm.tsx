@@ -32,7 +32,7 @@ interface LeaderboardFormProps {
  * @example
  * <LeaderboardForm runTicket={ticket} score={900} skinName="Racer" locked={false} onSaved={showBoard} onSavedAndRestart={restart} onSkip={restart} />
  */
-export default function LeaderboardForm({
+export function LeaderboardForm({
   runTicket,
   score,
   skinName,

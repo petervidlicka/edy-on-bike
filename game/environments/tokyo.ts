@@ -6,6 +6,7 @@
  */
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
+import { TOKYO_OBSTACLE_COLORS } from "./obstacleColors";
 import { EASING_OUT, stagedPool } from "./stages";
 import { TOKYO_BACKGROUND_DRAWERS, drawTokyoNightSky, drawNeonReflections } from "../rendering";
 import type {
@@ -98,10 +99,7 @@ export const TOKYO_PALETTE: EnvironmentPalette = {
     rampMetalDark: "#4a5a6a",
 
     // Tokyo-specific obstacle colours
-    keiCar: "#9ad8c4", // mint tall-roof Kei
-    keiCarDark: "#6aae9a",
-    taxi: "#2c3256", // deep indigo JPN-style taxi
-    taxiDark: "#1c2040",
+    ...TOKYO_OBSTACLE_COLORS,
     neonPink: "#ff3d8b",
     neonCyan: "#3de8ff",
   },

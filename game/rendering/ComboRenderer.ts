@@ -12,6 +12,7 @@ import { formatMultiplier } from "../ComboChain";
 import type { ComboChain } from "../ComboChain";
 import { flashAlpha, pulseScale } from "./ComboEffects";
 import type { ComboFx } from "./ComboEffects";
+import { traceRoundRect } from "./drawHelpers";
 
 /** Reference layout in px at scale 1. */
 const PILL_W = 116;
@@ -47,16 +48,6 @@ export function comboTierColor(multiplier: number, nowMs: number): string {
   if (multiplier >= 2) return "#fb923c";
   if (multiplier >= 1.5) return "#4ade80";
   return "#ffffff";
-}
-
-function roundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }
 
 /**
@@ -95,7 +86,7 @@ export function drawComboMeter(
   ctx.scale(pop, pop);
   ctx.translate(-cx, -(pillTop + pillH / 2));
 
-  roundedRectPath(ctx, cx - pillW / 2, pillTop, pillW, pillH, 16 * scale);
+  traceRoundRect(ctx, cx - pillW / 2, pillTop, pillW, pillH, 16 * scale);
   ctx.fillStyle = "rgba(15, 23, 42, 0.6)";
   ctx.fill();
   ctx.lineWidth = 2.5 * scale;
@@ -124,14 +115,14 @@ export function drawComboMeter(
   const barH = BAR_H * scale;
   const barX = cx - barW / 2;
   const barY = pillTop + pillH + BAR_GAP * scale;
-  roundedRectPath(ctx, barX, barY, barW, barH, barH / 2);
+  traceRoundRect(ctx, barX, barY, barW, barH, barH / 2);
   ctx.fillStyle = "rgba(15, 23, 42, 0.45)";
   ctx.fill();
   if (fraction > 0) {
     const blinkOff = fraction < LOW_WINDOW && Math.floor(nowMs / 140) % 2 === 0;
     ctx.save();
     ctx.globalAlpha = blinkOff ? 0.45 : 1;
-    roundedRectPath(ctx, barX, barY, Math.max(barH, barW * fraction), barH, barH / 2);
+    traceRoundRect(ctx, barX, barY, Math.max(barH, barW * fraction), barH, barH / 2);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.restore();

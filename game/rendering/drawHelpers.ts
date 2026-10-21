@@ -1,7 +1,7 @@
 /**
- * Small canvas helpers shared by the biome obstacle and backdrop renderers (Austria,
- * Tokyo): box mapping, polygons, rounded boxes, contact shadows, round-capped strokes,
- * soft glows and deterministic noise.
+ * Small canvas helpers shared across the renderers (biome obstacles and backdrops, the
+ * combo meter): box mapping, polygons, rounded boxes, contact shadows, round-capped
+ * strokes, soft glows and deterministic noise.
  */
 /** A canvas point as [x, y]. */
 export type Pt = [number, number];
@@ -22,12 +22,11 @@ export function fillPoly(ctx: CanvasRenderingContext2D, pts: Pt[], color: string
 }
 
 /**
- * Fills a rounded rectangle. Built from arcs rather than ctx.roundRect, which older
- * iOS WebViews lack.
+ * Starts a new path tracing a rounded rectangle (radius clamped to fit), ready to fill,
+ * stroke or clip. Built from arcs rather than ctx.roundRect, which older iOS WebViews lack.
  */
-export function fillRoundRect(ctx: CanvasRenderingContext2D, rx: number, ry: number, rw: number, rh: number, r: number, color: string) {
+export function traceRoundRect(ctx: CanvasRenderingContext2D, rx: number, ry: number, rw: number, rh: number, r: number) {
   const rad = Math.min(r, rw / 2, rh / 2);
-  ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(rx + rad, ry);
   ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, rad);
@@ -35,6 +34,12 @@ export function fillRoundRect(ctx: CanvasRenderingContext2D, rx: number, ry: num
   ctx.arcTo(rx, ry + rh, rx, ry, rad);
   ctx.arcTo(rx, ry, rx + rw, ry, rad);
   ctx.closePath();
+}
+
+/** Fills a rounded rectangle (see traceRoundRect). */
+export function fillRoundRect(ctx: CanvasRenderingContext2D, rx: number, ry: number, rw: number, rh: number, r: number, color: string) {
+  ctx.fillStyle = color;
+  traceRoundRect(ctx, rx, ry, rw, rh, r);
   ctx.fill();
 }
 

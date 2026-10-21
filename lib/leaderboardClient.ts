@@ -12,6 +12,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 /** Full URL of the leaderboard endpoint for this build. */
 const LEADERBOARD_URL = `${API_BASE}/api/leaderboard`;
+/** Issues the run ticket a score must be submitted with. */
+const RUN_URL = `${API_BASE}/api/leaderboard/run`;
 
 /** A leaderboard request that failed; `message` is safe to show to the player. */
 export class LeaderboardError extends Error {
@@ -21,12 +23,9 @@ export class LeaderboardError extends Error {
   }
 }
 
-/** One row as the game-over screen renders it. */
-export interface LeaderboardEntry {
-  name: string;
-  score: number;
-  skin?: string;
-}
+import type { LeaderboardEntry } from "./leaderboardConfig";
+
+export type { LeaderboardEntry };
 
 /** Top scores plus how many distinct players have ever submitted. */
 export interface LeaderboardData {
@@ -61,9 +60,9 @@ async function errorFromResponse(res: Response): Promise<LeaderboardError> {
 }
 
 /** Wraps fetch so a dropped connection reads as an actionable message, not a TypeError. */
-async function request(init?: RequestInit): Promise<Response> {
+async function request(init?: RequestInit, url = LEADERBOARD_URL): Promise<Response> {
   try {
-    return await fetch(LEADERBOARD_URL, init);
+    return await fetch(url, init);
   } catch (err) {
     throw new LeaderboardError("Couldn't reach the leaderboard. Check your connection and try again.", { cause: err });
   }
@@ -88,12 +87,32 @@ export async function fetchLeaderboard(): Promise<LeaderboardData> {
 }
 
 /**
+ * Registers a run as it starts. Never throws: a run that couldn't be registered (offline,
+ * outage) still plays; only saving its score will fail, with a message saying why.
+ * @returns The run's ticket for submitScore, or null if it couldn't be obtained.
+ */
+export async function startRun(): Promise<string | null> {
+  try {
+    const res = await request({ method: "POST" }, RUN_URL);
+    if (!res.ok) throw await errorFromResponse(res);
+    const data: unknown = await res.json();
+    const runId = typeof data === "object" && data !== null ? (data as { runId?: unknown }).runId : undefined;
+    if (typeof runId !== "string") throw new LeaderboardError("The leaderboard sent an unreadable response.");
+    return runId;
+  } catch (err) {
+    console.warn("[leaderboard] Couldn't register the run; its score won't be saveable", err);
+    return null;
+  }
+}
+
+/**
  * Submits a finished run.
+ * @param entry.runId - The ticket startRun returned when this run began.
  * @throws LeaderboardError when the score was not stored (rate limit, validation, outage).
  * @example
- * await submitScore({ name: "Edy", score: 1200, skin: "Racer" });
+ * await submitScore({ name: "Edy", score: 1200, skin: "Racer", runId });
  */
-export async function submitScore(entry: { name: string; score: number; skin: string }): Promise<void> {
+export async function submitScore(entry: { name: string; score: number; skin: string; runId: string }): Promise<void> {
   const res = await request({
     method: "POST",
     headers: { "Content-Type": "application/json" },

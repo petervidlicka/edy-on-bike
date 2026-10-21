@@ -15,7 +15,7 @@ import { LEADERBOARD_SIZE, scoreQualifies } from "@/lib/leaderboardConfig";
 import { useGameOverLeaderboard } from "@/hooks/useGameOverLeaderboard";
 import { useInputLockout, GAME_OVER_LOCKOUT_MS } from "@/hooks/useInputLockout";
 import { GlassPanel } from "./ui/GlassPanel";
-import { badgeWarn, font } from "./ui/tokens";
+import { badge, badgeWarn, color, font } from "./ui/tokens";
 
 interface GameOverScreenProps {
   score: number;
@@ -24,6 +24,11 @@ interface GameOverScreenProps {
   /** Saved best before this run (for the unlock progress animation). */
   previousBest: number;
   cheatUnlocked: boolean;
+  /**
+   * The run's leaderboard ticket (resolves to null if registering it failed), or null for a
+   * run that can't be ranked (debug course, cheat code): those get no save option.
+   */
+  runTicket: Promise<string | null> | null;
   /** Starts a new run immediately. */
   onRestart: () => void;
   /** Returns to the start screen (bike picker, multiplayer link). */
@@ -38,9 +43,11 @@ const LEADERBOARD_FETCH_GRACE_MS = 1500;
 /**
  * @param props - Run result, saved best, skin info and the restart / home actions.
  * @example
- * <GameOverScreen score={420} bestScore={900} skinName="Racer" onRestart={restart} onHome={home} />
+ * <GameOverScreen score={420} bestScore={900} skinName="Racer" runTicket={ticket} onRestart={restart} onHome={home} />
  */
-export default function GameOverScreen({ score, bestScore, skinName, previousBest, cheatUnlocked, onRestart, onHome }: GameOverScreenProps) {
+export default function GameOverScreen({
+  score, bestScore, skinName, previousBest, cheatUnlocked, runTicket, onRestart, onHome,
+}: GameOverScreenProps) {
   const board = useGameOverLeaderboard();
   const lockoutActive = useInputLockout(GAME_OVER_LOCKOUT_MS);
   // Give a slow leaderboard fetch a little longer, so the layout doesn't flip under the player's finger
@@ -50,7 +57,8 @@ export default function GameOverScreen({ score, bestScore, skinName, previousBes
   const [chosenView, setChosenView] = useState<View | null>(null);
   const [saved, setSaved] = useState<{ name: string; score: number } | null>(null);
 
-  const qualifies = board.status === "ready" && scoreQualifies(score, board.entries);
+  const ranked = runTicket !== null;
+  const qualifies = ranked && board.status === "ready" && scoreQualifies(score, board.entries);
   const view: View = chosenView ?? (qualifies ? "form" : "summary");
 
   // Freeze the layout once input unlocks; a fetch landing later must not swap the screen
@@ -93,6 +101,10 @@ export default function GameOverScreen({ score, bestScore, skinName, previousBes
                 <span style={badgeWarn}>
                   You made the top {LEADERBOARD_SIZE}
                 </span>
+              ) : !ranked ? (
+                <span style={{ ...badge, background: "rgba(255,255,255,0.7)", color: color.body, fontWeight: 700 }}>
+                  Practice run · not ranked
+                </span>
               ) : null
             }
           />
@@ -102,15 +114,16 @@ export default function GameOverScreen({ score, bestScore, skinName, previousBes
           <GameOverSummary
             locked={locked}
             // A board that arrives after the layout froze can still turn out to qualify
-            offerSave={board.status === "error" || qualifies}
+            offerSave={ranked && (board.status === "error" || qualifies)}
             onRestart={onRestart}
             onShowLeaderboard={() => setChosenView("leaderboard")}
             onSaveScore={() => setChosenView("form")}
           />
         )}
 
-        {view === "form" && (
+        {view === "form" && runTicket && (
           <LeaderboardForm
+            runTicket={runTicket}
             score={score}
             skinName={skinName}
             locked={locked}

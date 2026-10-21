@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { GameState, ObstacleType } from "@/game/types";
+import type { GameEvent } from "@/game/events";
 import { getSkinById } from "@/game/skins";
 import { loadSkinState } from "@/game/storage";
 import StartScreen from "./StartScreen";
@@ -11,6 +12,7 @@ import { PauseMenu } from "./PauseMenu";
 import { UnlockToast } from "./UnlockToast";
 import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 import { haptic } from "@/lib/haptics";
+import { startRun } from "@/lib/leaderboardClient";
 import { useUnlockToast } from "@/hooks/useUnlockToast";
 
 import { useCheatCode } from "@/hooks/useCheatCode";
@@ -44,7 +46,18 @@ export default function GameCanvas() {
   const [skinState, chooseSkin] = useSavedSkinState();
   const { bestScore, cheatUnlocked, selectedSkinId } = skinState;
 
-  const { onGameEvent, vibrationOn, toggleVibration } = useHapticFeedback();
+  const { onGameEvent: hapticsOnGameEvent, vibrationOn, toggleVibration } = useHapticFeedback();
+
+  // Leaderboard ticket for the current run (see startRun); null when the run can't be ranked
+  const [runTicket, setRunTicket] = useState<Promise<string | null> | null>(null);
+  /** IDDQD was typed since the last restart: the guaranteed revive makes the run unranked. */
+  const [cheated, setCheated] = useState(false);
+
+  const onGameEvent = useCallback((event: GameEvent) => {
+    hapticsOnGameEvent(event);
+    // Debug courses and cheat runs still play, they just never reach the public board
+    if (event.type === "runStart") setRunTicket(cheated || debugObstacles ? null : startRun());
+  }, [hapticsOnGameEvent, cheated, debugObstacles]);
 
   const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
     useGameEngine(canvasRef, {
@@ -78,14 +91,17 @@ export default function GameCanvas() {
   }, [engineRef, debugObstacles]);
 
   // Straight into the next run (same as the pause menu's Restart); Home keeps the start screen reachable
+  // engine.restart() clears an active IDDQD, so the next run is ranked again
   const handleRestart = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
+    setCheated(false);
     engine.restart();
     engine.start();
   }, [engineRef]);
 
   const handleHome = useCallback(() => {
+    setCheated(false);
     engineRef.current?.restart();
   }, [engineRef]);
 
@@ -97,6 +113,8 @@ export default function GameCanvas() {
   // IDDQD cheat code — guaranteed ambulance resurrection
   const handleIddqd = useCallback(() => {
     engineRef.current?.activateIddqd();
+    setCheated(true);
+    setRunTicket(null);
   }, [engineRef]);
   useCheatCode("IDDQD", handleIddqd);
 
@@ -169,6 +187,7 @@ export default function GameCanvas() {
           skinName={getSkinById(selectedSkinId).name}
           previousBest={previousBest}
           cheatUnlocked={cheatUnlocked}
+          runTicket={runTicket}
           onRestart={handleRestart}
           onHome={handleHome}
         />

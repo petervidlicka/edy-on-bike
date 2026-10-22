@@ -6,7 +6,7 @@
  */
 import type { EnvironmentPalette } from "../../environments/types";
 
-import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, drawSprite, drawCachedText, type Pt } from "../drawHelpers";
+import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, drawSprite, drawCachedText, cachedGradient, fillTransformed, type Pt } from "../drawHelpers";
 import { AUSTRIA_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 
 // --- Snowman ---
@@ -26,15 +26,18 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, x: number, y: number,
   strokeLine(ctx, [P(0.7, 0.48), P(1.1, 0.38), P(1.2, 0.4)], "#6a4a30", 1.4);
   strokeLine(ctx, [P(1.04, 0.4), P(1.1, 0.3)], "#6a4a30", 1);
 
-  // Balls, bottom up, each shaded on its lower-left.
+  // Balls, bottom up, each shaded on its lower-left: one unit-radius gradient per
+  // colour pair, scaled onto each ball, rather than a radial gradient per ball per frame.
+  const shading = cachedGradient(ctx, `snowball|${snow}|${shade}`, () => {
+    const unit = ctx.createRadialGradient(0.35, -0.35, 0.2, 0, 0, 1);
+    unit.addColorStop(0, snow);
+    unit.addColorStop(1, shade);
+    return unit;
+  });
   const ball = (cx: number, cy: number, r: number) => {
-    const g = ctx.createRadialGradient(cx + r * 0.35, cy - r * 0.35, r * 0.2, cx, cy, r);
-    g.addColorStop(0, snow);
-    g.addColorStop(1, shade);
-    ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
+    fillTransformed(ctx, shading, cx, cy, r, r);
   };
   ball(x + w * 0.5, y + h * 0.78, w * 0.4);
   ball(x + w * 0.5, y + h * 0.47, w * 0.3);
@@ -75,6 +78,14 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, x: number, y: number,
 
 // --- Frozen lake ---
 
+/** The four tilted ice plates as box fractions: base-left, top-left, top-right, base-right. */
+const ICE_PLATES: ReadonlyArray<ReadonlyArray<Pt>> = [
+  [[0.14, 0.95], [0.2, 0.42], [0.32, 0.3], [0.36, 0.95]],
+  [[0.3, 0.95], [0.38, 0.12], [0.5, 0.02], [0.54, 0.95]],
+  [[0.48, 0.95], [0.6, 0.18], [0.7, 0.26], [0.68, 0.95]],
+  [[0.64, 0.95], [0.74, 0.44], [0.86, 0.5], [0.84, 0.95]],
+];
+
 /** A frozen pond heaved into a low ridge of tilted ice plates, banked with snow at both ends. */
 export function drawFrozenLake(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const snow = palette.obstacle.snow ?? AUSTRIA_OBSTACLE_COLORS.snow;
@@ -91,33 +102,42 @@ export function drawFrozenLake(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.ellipse(x + w * 0.5, y + h * 0.9, w * 0.5, h * 0.12, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Tilted ice plates forming the ridge.
-  const plates: Pt[][] = [
-    [P(0.14, 0.95), P(0.2, 0.42), P(0.32, 0.3), P(0.36, 0.95)],
-    [P(0.3, 0.95), P(0.38, 0.12), P(0.5, 0.02), P(0.54, 0.95)],
-    [P(0.48, 0.95), P(0.6, 0.18), P(0.7, 0.26), P(0.68, 0.95)],
-    [P(0.64, 0.95), P(0.74, 0.44), P(0.86, 0.5), P(0.84, 0.95)],
-  ];
-  plates.forEach((pts, i) => {
-    const g = ctx.createLinearGradient(pts[1][0], pts[1][1], pts[3][0], pts[3][1]);
-    g.addColorStop(0, iceHi);
-    g.addColorStop(1, ice);
+  // Tilted ice plates forming the ridge, drawn in the box's local space so each
+  // plate's top-left-to-base-right gradient can be built once per look and size.
+  ctx.save();
+  ctx.translate(x, y);
+  const L = boxMapper(0, 0, w, h);
+  for (let i = 0; i < ICE_PLATES.length; i++) {
+    const f = ICE_PLATES[i];
+    const p0 = L(f[0][0], f[0][1]);
+    const p1 = L(f[1][0], f[1][1]);
+    const p2 = L(f[2][0], f[2][1]);
+    const p3 = L(f[3][0], f[3][1]);
+    const g = cachedGradient(ctx, `ice|${i}|${iceHi}|${ice}|${w}|${h}`, () => {
+      const plate = ctx.createLinearGradient(p1[0], p1[1], p3[0], p3[1]);
+      plate.addColorStop(0, iceHi);
+      plate.addColorStop(1, ice);
+      return plate;
+    });
     ctx.globalAlpha = 0.92;
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.moveTo(...pts[0]);
-    for (const p of pts.slice(1)) ctx.lineTo(...p);
+    ctx.moveTo(p0[0], p0[1]);
+    ctx.lineTo(p1[0], p1[1]);
+    ctx.lineTo(p2[0], p2[1]);
+    ctx.lineTo(p3[0], p3[1]);
     ctx.closePath();
     ctx.fill();
     ctx.globalAlpha = 1;
     // Bright top edge and a crack across the plate.
-    strokeLine(ctx, [pts[1], pts[2]], "#ffffff", 1.2);
+    strokeLine(ctx, [p1, p2], "#ffffff", 1.2);
     strokeLine(ctx, [
-      [pts[1][0] + 2, pts[1][1] + 4 + i],
-      [(pts[1][0] + pts[3][0]) / 2, (pts[1][1] + pts[3][1]) / 2],
-      [pts[3][0] - 2, pts[3][1] - 3],
+      [p1[0] + 2, p1[1] + 4 + i],
+      [(p1[0] + p3[0]) / 2, (p1[1] + p3[1]) / 2],
+      [p3[0] - 2, p3[1] - 3],
     ], "rgba(70,130,170,0.45)", 0.7);
-  });
+  }
+  ctx.restore();
 
   // Snow banks at both ends and a dusting on the plate tops.
   const bank = (cx: number, rx: number, ry: number) => {
@@ -451,31 +471,53 @@ export function drawSnowCat(ctx: CanvasRenderingContext2D, x: number, y: number,
 
 // --- Snow kicker ---
 
+/** Segments along the kicker's take-off curve. */
+const KICKER_STEPS = 16;
+
+/** Kicker bodies per size, in local space (take-off starts at the origin's base). */
+const kickerBodies = new Map<string, Path2D>();
+
+/**
+ * The kicker silhouette for a box size: the curved take-off, then the knuckle rolling
+ * down behind the lip. Sizes come from OBSTACLE_SPECS, so there are only a few.
+ */
+function kickerBody(w: number, h: number): Path2D {
+  const key = `${w}|${h}`;
+  let body = kickerBodies.get(key);
+  if (body) return body;
+  body = new Path2D();
+  body.moveTo(-4, h);
+  for (let i = 0; i <= KICKER_STEPS; i++) {
+    const t = i / KICKER_STEPS;
+    body.lineTo(t * w, h - t * t * h);
+  }
+  body.quadraticCurveTo(w + 6, -1, w + 14, h);
+  body.closePath();
+  kickerBodies.set(key, body);
+  return body;
+}
+
 /**
  * A freestyle kicker shaped out of snow. The surface follows the curved ramp's profile
  * (height grows with t²) so it matches the physics; the knuckle drops away behind the lip.
+ * Drawn in the box's local space so the body path and its gradient are built once per size.
  */
 export function drawSnowKicker(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const snow = palette.obstacle.snow ?? AUSTRIA_OBSTACLE_COLORS.snow;
   const shade = palette.obstacle.snowShadow ?? AUSTRIA_OBSTACLE_COLORS.snowShadow;
-  const base = y + h;
-  const steps = 16;
+  const base = h;
+  const steps = KICKER_STEPS;
 
   ctx.save();
+  ctx.translate(x, y);
 
-  // Body: the curved take-off, then the knuckle rolling down behind the lip.
-  const body = new Path2D();
-  body.moveTo(x - 4, base);
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    body.lineTo(x + t * w, base - t * t * h);
-  }
-  body.quadraticCurveTo(x + w + 6, y - 1, x + w + 14, base);
-  body.closePath();
-
-  const g = ctx.createLinearGradient(x, y, x + w, base);
-  g.addColorStop(0, snow);
-  g.addColorStop(1, shade);
+  const body = kickerBody(w, h);
+  const g = cachedGradient(ctx, `kicker|${snow}|${shade}|${w}|${h}`, () => {
+    const slope = ctx.createLinearGradient(0, 0, w, base);
+    slope.addColorStop(0, snow);
+    slope.addColorStop(1, shade);
+    return slope;
+  });
   ctx.fillStyle = g;
   ctx.fill(body);
 
@@ -486,7 +528,7 @@ export function drawSnowKicker(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.lineWidth = 0.8;
   for (let i = 1; i < 6; i++) {
     const t = i / 6;
-    const sx = x + t * w;
+    const sx = t * w;
     ctx.beginPath();
     ctx.moveTo(sx, base - t * t * h);
     ctx.lineTo(sx + 6, base);
@@ -494,7 +536,7 @@ export function drawSnowKicker(ctx: CanvasRenderingContext2D, x: number, y: numb
   }
   // Shadowed knuckle.
   ctx.fillStyle = "rgba(110,140,180,0.25)";
-  ctx.fillRect(x + w, y - 2, 16, h + 2);
+  ctx.fillRect(w, -2, 16, h + 2);
   ctx.restore();
 
   // Bright lip edge.
@@ -503,15 +545,15 @@ export function drawSnowKicker(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.beginPath();
   for (let i = steps / 2; i <= steps; i++) {
     const t = i / steps;
-    if (i === steps / 2) ctx.moveTo(x + t * w, base - t * t * h);
-    else ctx.lineTo(x + t * w, base - t * t * h);
+    if (i === steps / 2) ctx.moveTo(t * w, base - t * t * h);
+    else ctx.lineTo(t * w, base - t * t * h);
   }
   ctx.stroke();
 
   // Orange marker poles either side of the lip.
-  strokeLine(ctx, [[x + w + 2, base - h - 2], [x + w + 2, base - h - 14]], "#f07a1a", 1.4);
+  strokeLine(ctx, [[w + 2, base - h - 2], [w + 2, base - h - 14]], "#f07a1a", 1.4);
   ctx.fillStyle = "#f07a1a";
-  ctx.fillRect(x + w + 2, base - h - 14, 5, 3);
+  ctx.fillRect(w + 2, base - h - 14, 5, 3);
 
   ctx.restore();
 }

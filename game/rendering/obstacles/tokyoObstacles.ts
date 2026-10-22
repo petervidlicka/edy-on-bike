@@ -7,25 +7,31 @@
  */
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
-import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow, drawSprite, drawCachedText, type TextLabel } from "../drawHelpers";
+import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow, drawSprite, drawCachedText, cachedGradient, fillTransformed, type TextLabel } from "../drawHelpers";
 import { TOKYO_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 
 /** Japanese-capable font stack for the little signs and labels. */
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
-/** Headlight beam spilling forward onto the wet road. */
-function headlightBeam(ctx: CanvasRenderingContext2D, fromX: number, fromY: number, length: number, dir: 1 | -1) {
-  const g = ctx.createLinearGradient(fromX, fromY, fromX + length * dir, fromY);
+/** Unit beam fade along +x: full at the lamp, gone at the end of the throw. */
+function buildBeamGradient(ctx: CanvasRenderingContext2D): CanvasGradient {
+  const g = ctx.createLinearGradient(0, 0, 1, 0);
   g.addColorStop(0, "rgba(255,242,176,0.35)");
   g.addColorStop(1, "rgba(255,242,176,0)");
-  ctx.fillStyle = g;
+  return g;
+}
+
+/** Headlight beam spilling forward onto the wet road. */
+function headlightBeam(ctx: CanvasRenderingContext2D, fromX: number, fromY: number, length: number, dir: 1 | -1) {
+  const g = cachedGradient(ctx, "headlight-beam", () => buildBeamGradient(ctx));
   ctx.beginPath();
   ctx.moveTo(fromX, fromY - 1.5);
   ctx.lineTo(fromX + length * dir, fromY - 5);
   ctx.lineTo(fromX + length * dir, fromY + 8);
   ctx.lineTo(fromX, fromY + 2);
   ctx.closePath();
-  ctx.fill();
+  // The unit fade stretched over the throw (a negative x scale points it backwards)
+  fillTransformed(ctx, g, fromX, fromY, length * dir, 1);
 }
 
 /**

@@ -11,7 +11,7 @@
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
-import { cachedGradient, glow, hash01, drawSprite, drawCachedText, type TextLabel } from "../drawHelpers";
+import { cachedGradient, fillTransformed, glow, hash01, drawSprite, drawCachedText, type TextLabel } from "../drawHelpers";
 
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
@@ -652,12 +652,17 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   const sw = w * 0.84;
   const sh = h * 0.42;
   glow(ctx, sx + sw / 2, sy + sh / 2, sw * 0.9, "#7a9aff", 0.2);
-  const hue = (t * 40) % 360;
-  const g = ctx.createLinearGradient(sx, sy, sx + sw, sy + sh);
-  g.addColorStop(0, `hsl(${hue}, 85%, 55%)`);
-  g.addColorStop(1, `hsl(${(hue + 120) % 360}, 85%, 45%)`);
-  ctx.fillStyle = g;
-  ctx.fillRect(sx, sy, sw, sh);
+  // One unit gradient per whole degree of hue (360 at most), laid along the screen's diagonal
+  const hue = Math.floor((t * 40) % 360);
+  const g = cachedGradient(ctx, `screen|${hue}`, () => {
+    const unit = ctx.createLinearGradient(0, 0, 1, 0);
+    unit.addColorStop(0, `hsl(${hue}, 85%, 55%)`);
+    unit.addColorStop(1, `hsl(${(hue + 120) % 360}, 85%, 45%)`);
+    return unit;
+  });
+  ctx.beginPath();
+  ctx.rect(sx, sy, sw, sh);
+  fillTransformed(ctx, g, sx, sy, Math.hypot(sw, sh), Math.hypot(sw, sh), Math.atan2(sh, sw));
   drawCachedText(ctx, {
     text: SCREEN_LINES[Math.floor(t / 2.5) % SCREEN_LINES.length],
     font: `bold ${Math.round(sh * 0.36)}px ${JP_FONT}`,
@@ -807,17 +812,19 @@ function drawJapanFlag(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 /** A curved street lamp throwing a warm cone of light down through the rain. */
 function drawStreetLamp(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   ctx.save();
-  // Light cone.
-  const g = ctx.createLinearGradient(0, y + 6, 0, y + h);
-  g.addColorStop(0, "rgba(255,226,160,0.32)");
-  g.addColorStop(1, "rgba(255,226,160,0)");
-  ctx.fillStyle = g;
+  // Light cone: a unit downward fade stretched from the lamp head to the ground.
+  const g = cachedGradient(ctx, "lamp-cone", () => {
+    const unit = ctx.createLinearGradient(0, 0, 0, 1);
+    unit.addColorStop(0, "rgba(255,226,160,0.32)");
+    unit.addColorStop(1, "rgba(255,226,160,0)");
+    return unit;
+  });
   ctx.beginPath();
   ctx.moveTo(x + w * 0.9, y + 6);
   ctx.lineTo(x + w * 0.9 + 16, y + h);
   ctx.lineTo(x + w * 0.9 - 16, y + h);
   ctx.closePath();
-  ctx.fill();
+  fillTransformed(ctx, g, 0, y + 6, 1, h - 6);
   // Pole and curved arm.
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;

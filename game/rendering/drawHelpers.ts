@@ -112,6 +112,26 @@ export function cachedGradient(ctx: CanvasRenderingContext2D, key: string, build
 }
 
 /**
+ * Fills the path traced so far with a unit-space gradient placed by translate(x, y),
+ * rotate(angle) and scale(sx, sy). Path segments are fixed in canvas space as they are
+ * added, so only the gradient moves: one cached unit gradient serves every size and
+ * place, instead of a createLinearGradient per fill. A gradient from A to B is a unit
+ * gradient along +x under translate(A), rotate(atan2(B − A)), scale(|B − A|).
+ * @example
+ * ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+ * fillTransformed(ctx, unitRadial, cx, cy, r, r);
+ */
+export function fillTransformed(ctx: CanvasRenderingContext2D, gradient: CanvasGradient, x: number, y: number, sx: number, sy: number, angle = 0): void {
+  ctx.save();
+  ctx.translate(x, y);
+  if (angle !== 0) ctx.rotate(angle);
+  ctx.scale(sx, sy);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
  * Deterministic 0..1 noise for a seed and a couple of indices, so procedural scenery
  * (peaks, windows, signs) comes out the same every frame without storing it.
  * @example

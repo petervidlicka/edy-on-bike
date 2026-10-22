@@ -3,16 +3,22 @@ import type { EnvironmentPalette, BackgroundDrawFn, SkylinePass } from "../../en
 import { getTotalLayerWidth } from "../../Background";
 import type { ViewBounds } from "../../Camera";
 import { decodePedestrianVariant, SKIN_TONES, HAIR_COLORS } from "../../environments/pedestrians";
+import { cachedGradient, fillTransformed } from "../drawHelpers";
 
 // --- Sky ---
 
 function drawSky(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, palette: EnvironmentPalette) {
+  // One unit gradient per colour pair (the pair steps through a biome blend), stretched to the ground
+  const gradient = cachedGradient(ctx, `sky|${palette.sky}|${palette.skyBottom}`, () => {
+    const unit = ctx.createLinearGradient(0, 0, 0, 1);
+    unit.addColorStop(0, palette.sky);
+    unit.addColorStop(1, palette.skyBottom);
+    return unit;
+  });
   // Gradient stays pinned to the unzoomed sky; above it (zoomed out) the top colour just continues
-  const gradient = ctx.createLinearGradient(0, 0, 0, groundY);
-  gradient.addColorStop(0, palette.sky);
-  gradient.addColorStop(1, palette.skyBottom);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(view.left, view.top, view.right - view.left, groundY - view.top);
+  ctx.beginPath();
+  ctx.rect(view.left, view.top, view.right - view.left, groundY - view.top);
+  fillTransformed(ctx, gradient, 0, 0, 1, groundY);
 }
 
 // --- Clouds ---

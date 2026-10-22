@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ScoreGuard, SnapshotClock, TokenBucket, sanitizeName, sanitizeSnapshot } from "./validation";
+import { ScoreGuard, SnapshotClock, TokenBucket, sanitizeIntent, sanitizeName, sanitizeSnapshot } from "./validation";
 import { MAX_NAME_LENGTH } from "../game/multiplayer/protocol";
 import { MAX_BONUS_BURST, MAX_DISTANCE_POINTS_PER_SEC } from "../game/scoreBounds";
 
@@ -64,5 +64,21 @@ describe("sanitizeSnapshot", () => {
     expect(sanitizeSnapshot({ ...snapshot, h: "high" })).toBeNull();
     expect(sanitizeSnapshot({ ...snapshot, at: "TELEPORT" })).toBeNull();
     expect(sanitizeSnapshot({ ...snapshot, t: Infinity })).toBeNull();
+  });
+});
+
+describe("sanitizeIntent", () => {
+  it("accepts only the known join intents", () => {
+    expect(sanitizeIntent("create")).toBe("create");
+    expect(sanitizeIntent("join")).toBe("join");
+    expect(sanitizeIntent("quick")).toBe("quick");
+  });
+
+  it("rejects anything else, so no join guard is skipped", () => {
+    expect(sanitizeIntent("x")).toBeNull();
+    expect(sanitizeIntent("")).toBeNull();
+    expect(sanitizeIntent(undefined)).toBeNull();
+    expect(sanitizeIntent(1)).toBeNull();
+    expect(sanitizeIntent({ intent: "join" })).toBeNull();
   });
 });

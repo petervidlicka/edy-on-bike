@@ -206,9 +206,13 @@ export interface SkinUnlockState {
   cheatUnlocked: boolean;
 }
 
-export interface BackgroundElement {
-  /** Element type — extensible per biome (e.g. "house", "skyscraper", "palm_tree") */
-  type: string;
+/**
+ * One piece of a parallax layer. `T` is the biome's element-type union (e.g. "house" |
+ * "deer"), which picks the drawer; layers that mix biomes use the default `string`.
+ */
+export interface BackgroundElement<T extends string = string> {
+  /** Element type — picks the drawer in the biome's `backgroundDrawers` map. */
+  type: T;
   x: number;
   y: number;
   width: number;

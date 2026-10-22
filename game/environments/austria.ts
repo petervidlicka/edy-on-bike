@@ -3,15 +3,14 @@
  * biome cycle (after Dubai). Defines the palette, the village backdrop, the
  * time-staged obstacle pool (skiers, Pistenbully, Stiegl crates) and the winter kit.
  */
-import { ObstacleType, type BackgroundElement } from "../types";
+import { ObstacleType } from "../types";
 import { pickPedestrian } from "./pedestrians";
 import { AUSTRIA_OBSTACLE_COLORS } from "./obstacleColors";
+import { PLAYER_COLORS, SHARED_OBSTACLE_COLORS } from "./sharedPalette";
 import { EASING_OUT, stagedObstaclePool } from "./stages";
+import { generateStreet, type StreetConfig } from "./street";
 import { AUSTRIA_BACKGROUND_DRAWERS, drawAlpineRange } from "../rendering";
-import type {
-  EnvironmentDefinition,
-  EnvironmentPalette,
-} from "./types";
+import type { EnvironmentDefinition, EnvironmentPalette } from "./types";
 
 // ── Snowy Austria palette — crisp blue sky, white snow, timber chalets ──
 
@@ -46,19 +45,11 @@ export const AUSTRIA_PALETTE: EnvironmentPalette = {
   creatureLeg: "#6a4228",
   creatureTail: "#d8c0a0",
 
-  // Player
-  player: {
-    wheel: "#2e2e2e",
-    frame: "#8b1a1a",
-    helmet: "#9b3333",
-    skin: "#c8a882",
-    shirt: "#7a8a9a",
-    pants: "#5a5a6a",
-  },
+  player: PLAYER_COLORS,
 
-  // Obstacles
   obstacle: {
-    // Shared obstacle colours, snowed over where they appear here
+    ...SHARED_OBSTACLE_COLORS,
+    // Shared obstacles snowed over: grey rocks, dark spruce, pale cars, a blue cyclist
     rock: "#8a9098",
     rockHighlight: "#f4f8fc",
     rockShadow: "#5a6068",
@@ -66,35 +57,17 @@ export const AUSTRIA_PALETTE: EnvironmentPalette = {
     treeHighlight: "#3f7058",
     treeTrunk: "#5a4232",
     treeTrunkShadow: "#423020",
-    trolley: "#5a7a9a",
-    trolleyBasket: "#4a6888",
-    trolleyAccent: "#c47a42",
     car: "#d8dde4",
     carRoof: "#c0c8d0",
     carWindow: "#70a8c8",
     carBumper: "#8a9098",
-    carWheel: "#2e2e2c",
-    carHeadlight: "#e8d06a",
-    carTaillight: "#c44040",
     bikeRider: "#2a5a8a",
     bikeFrame: "#3a6a9a",
-    busStopFrame: "#3a7a6a",
-    busStopRoof: "#2e5e52",
-    busStopGlass: "#a0c8d4",
-    busStopSign: "#d4a444",
-    container: "#c4683a",
-    containerDark: "#8a4828",
-    containerDoor: "#a85830",
     giantTreeCanopy: "#2f5a46",
     giantTreeCanopyHighlight: "#3f7058",
     giantTreeTrunk: "#5a4232",
     giantTreeBark: "#423020",
     giantTreeOutline: "#1e3e30",
-    rampWood: "#b89a6a",
-    rampWoodDark: "#8a6a40",
-    rampWoodHighlight: "#d4b888",
-    rampMetal: "#7a8a9a",
-    rampMetalDark: "#5a6a7a",
 
     // Austria-specific obstacle colours
     ...AUSTRIA_OBSTACLE_COLORS,
@@ -105,46 +78,35 @@ export const AUSTRIA_PALETTE: EnvironmentPalette = {
 
 /** Landmark element types; at most one in a row, and never the same one twice running. */
 const LANDMARKS = ["onion_church", "ski_jump", "chairlift", "apres_bar"] as const;
+type AustriaLandmark = (typeof LANDMARKS)[number];
 
-function generateAustriaElements(
-  canvasWidth: number,
-  groundY: number,
-  palette: EnvironmentPalette
-): BackgroundElement[] {
-  const elements: BackgroundElement[] = [];
+/** Element types of the Austria backdrop (keys of AUSTRIA_BACKGROUND_DRAWERS). */
+export type AustriaElementType =
+  | AustriaLandmark
+  | "chalet"
+  | "snow_pine"
+  | "bg_red_deer"
+  | "walking_person"
+  | "austrian_flag";
 
-  let x = 0;
-  let lastType = "";
-  let lastLandmark = "";
-  let sinceLandmark = 99; // allow a landmark on the first pick
-
-  while (x < canvasWidth * 2.5) {
-    const roll = Math.random();
-
-    if (roll < 0.16 && sinceLandmark >= 3) {
-      // Landmark (rare, with breathing room on both sides)
-      const options = LANDMARKS.filter((l) => l !== lastLandmark);
-      const type = options[Math.floor(Math.random() * options.length)];
+const AUSTRIA_STREET: StreetConfig<AustriaElementType, AustriaLandmark> = {
+  landmarks: {
+    chance: 0.16,
+    ids: LANDMARKS,
+    padBefore: 16,
+    padAfter: 20,
+    make(type, palette) {
       const size =
         type === "onion_church" ? { w: 46 + Math.random() * 8, h: 118 + Math.random() * 18 }
         : type === "ski_jump" ? { w: 150 + Math.random() * 20, h: 150 + Math.random() * 20 }
         : type === "chairlift" ? { w: 230 + Math.random() * 40, h: 120 + Math.random() * 20 }
         : { w: 74 + Math.random() * 10, h: 50 + Math.random() * 6 };
-      x += 16;
-      elements.push({
-        type,
-        x,
-        y: groundY - size.h - 16,
-        width: size.w,
-        height: size.h,
-        color: palette.buildings[0].wall,
-        roofColor: palette.buildings[0].roof,
-      });
-      x += size.w + 20;
-      lastLandmark = type;
-      lastType = type;
-      sinceLandmark = 0;
-    } else if (roll < 0.62) {
+      return { type, width: size.w, height: size.h, color: palette.buildings[0].wall, roofColor: palette.buildings[0].roof };
+    },
+  },
+  fillers: {
+    chance: 0.62,
+    make(palette) {
       // Chalet hotel (variants: 0 = big hotel, 1 = gasthof, 2 = pension, 3 = small hut)
       const variant = Math.floor(Math.random() * 4);
       const w =
@@ -158,77 +120,51 @@ function generateAustriaElements(
         : variant === 2 ? 52 + Math.random() * 8
         : 32 + Math.random() * 6;
       const scheme = palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
-      elements.push({
+      return {
         type: "chalet",
-        x,
-        y: groundY - h - 16,
         width: w,
         height: h,
         color: scheme.wall,
         roofColor: scheme.roof,
         variant,
-      });
-      const gap = 14 + Math.random() * 30;
-      x += w + gap;
-      sinceLandmark++;
-
-      // Maybe a deer, a skier on foot or a flag in the gap
-      if (gap > 22 && Math.random() > 0.55 && lastType === "chalet") {
-        const pick = Math.random();
-        const vergeOffset = Math.random() * 18;
-        if (pick < 0.35) {
-          elements.push({
-            type: "bg_red_deer",
-            x: x - gap * 0.7,
-            y: groundY - 30 - vergeOffset,
-            width: 28,
-            height: 30,
-            color: palette.creature,
-          });
-          lastType = "bg_red_deer";
-        } else if (pick < 0.7) {
-          const person = pickPedestrian();
-          elements.push({
-            type: "walking_person",
-            x: x - gap * 0.5,
-            y: groundY - person.height - vergeOffset,
-            ...person,
-          });
-          lastType = "walking_person";
-        } else {
-          elements.push({
-            type: "austrian_flag",
-            x: x - gap * 0.6,
-            y: groundY - 62 - vergeOffset * 0.5,
-            width: 18,
-            height: 62,
-            color: "#c8102e",
-          });
-          lastType = "austrian_flag";
-        }
-      } else {
-        lastType = "chalet";
-      }
-    } else {
+        gap: 14 + Math.random() * 30,
+      };
+    },
+  },
+  trees: {
+    make(palette, vergeOffset) {
       // Snowy spruce — small / medium / large
       const sizeTier = Math.random();
       const tw = sizeTier < 0.4 ? 16 + Math.random() * 6 : sizeTier < 0.8 ? 22 + Math.random() * 8 : 30 + Math.random() * 8;
       const th = sizeTier < 0.4 ? 40 + Math.random() * 12 : sizeTier < 0.8 ? 56 + Math.random() * 16 : 78 + Math.random() * 18;
-      const vergeOffset = Math.random() * 18;
-      elements.push({
+      return {
         type: "snow_pine",
-        x,
-        y: groundY - th - vergeOffset,
         width: tw,
         height: th,
         color: palette.treeSilhouette,
-      });
-      x += tw + 6 + Math.random() * 16;
-      lastType = "snow_pine";
-    }
-  }
-  return elements;
-}
+        gap: 6 + Math.random() * 16,
+        lift: vergeOffset,
+      };
+    },
+  },
+  // A deer, a skier on foot or a flag in the gap, only between two plain chalets
+  figures: {
+    chance: 0.45,
+    minGap: 22,
+    after: "filler",
+    allowAfter: (last) => last?.kind === "filler",
+    make(palette, gap, vergeOffset) {
+      const pick = Math.random();
+      if (pick < 0.35) {
+        return { type: "bg_red_deer", width: 28, height: 30, color: palette.creature, back: gap * 0.7, lift: vergeOffset };
+      }
+      if (pick < 0.7) {
+        return { type: "walking_person", ...pickPedestrian(), back: gap * 0.5, lift: vergeOffset };
+      }
+      return { type: "austrian_flag", width: 18, height: 62, color: "#c8102e", back: gap * 0.6, lift: vergeOffset * 0.5 };
+    },
+  },
+};
 
 // ── Obstacle pool — Austria biome, time-staged ──
 
@@ -259,7 +195,7 @@ export const AUSTRIA_ENVIRONMENT: EnvironmentDefinition = {
     cloudCount: 7,
     cloudSpeedRatio: 0.08,
     buildingSpeedRatio: 0.4,
-    generateElements: generateAustriaElements,
+    generateElements: (canvasWidth, groundY, palette) => generateStreet(canvasWidth, groundY, palette, AUSTRIA_STREET),
   },
   backgroundDrawers: AUSTRIA_BACKGROUND_DRAWERS,
   obstaclePool: AUSTRIA_OBSTACLE_POOL,

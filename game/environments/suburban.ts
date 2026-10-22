@@ -1,11 +1,14 @@
-import { ObstacleType, type BackgroundElement } from "../types";
+/**
+ * Suburban biome: the opening streets. Defines the palette, the house-and-tree
+ * backdrop and the four-stage obstacle pool that eases the player in.
+ */
+import { ObstacleType } from "../types";
 import { pickPedestrian } from "./pedestrians";
+import { PLAYER_COLORS, SHARED_OBSTACLE_COLORS } from "./sharedPalette";
 import { stagedObstaclePool, type StageWeights } from "./stages";
+import { generateStreet, type StreetConfig } from "./street";
 import { SUBURBAN_BACKGROUND_DRAWERS } from "../rendering";
-import type {
-  EnvironmentDefinition,
-  EnvironmentPalette,
-} from "./types";
+import type { EnvironmentDefinition, EnvironmentPalette } from "./types";
 
 // ── Suburban palette — extracted from constants.ts COLORS + inline hex values in Renderer.ts ──
 
@@ -41,79 +44,28 @@ export const SUBURBAN_PALETTE: EnvironmentPalette = {
   creatureLeg: "#7a6048",
   creatureTail: "#c0a880",
 
-  // Player
-  player: {
-    wheel: "#2e2e2e",
-    frame: "#8b1a1a",
-    helmet: "#9b3333",
-    skin: "#c8a882",
-    shirt: "#7a8a9a",
-    pants: "#5a5a6a",
-  },
+  player: PLAYER_COLORS,
 
-  // Obstacles
+  // Obstacles: the shared look is the suburban one, plus the traffic variants only seen here
   obstacle: {
-    rock: "#b58850",
-    rockHighlight: "#cca06a",
-    rockShadow: "#7a5c38",
-    tree: "#3a8a42",
-    treeHighlight: "#58aa50",
-    treeTrunk: "#6e4e38",
-    treeTrunkShadow: "#523828",
-    trolley: "#5a7a9a",
-    trolleyBasket: "#4a6888",
-    trolleyAccent: "#c47a42",
-    car: "#c25a48",
-    carRoof: "#a84a3c",
-    carWindow: "#8abcd4",
-    carBumper: "#8a7a6a",
-    carWheel: "#2e2e2c",
-    carHeadlight: "#e8d06a",
-    carTaillight: "#c44040",
+    ...SHARED_OBSTACLE_COLORS,
     suv: "#4f6b74",
     suvDark: "#3b525a",
     van: "#e8e4dc",
     vanDark: "#b9b3a8",
     vanAccent: "#c47a42",
-    bikeRider: "#5a4878",
-    bikeFrame: "#7a6898",
-    busStopFrame: "#3a7a6a",
-    busStopRoof: "#2e5e52",
-    busStopGlass: "#a0c8d4",
-    busStopSign: "#d4a444",
-    container: "#c4683a",
-    containerDark: "#8a4828",
-    containerDoor: "#a85830",
-    giantTreeCanopy: "#2e7a36",
-    giantTreeCanopyHighlight: "#48994a",
-    giantTreeTrunk: "#5e4030",
-    giantTreeBark: "#4a3020",
-    giantTreeOutline: "#1e5a24",
-    rampWood: "#b89a6a",
-    rampWoodDark: "#8a6a40",
-    rampWoodHighlight: "#d4b888",
-    rampMetal: "#7a8a9a",
-    rampMetalDark: "#5a6a7a",
   },
 };
 
-// ── Background element generation — extracted from Background.ts ──
+// ── Background element generation — houses, trees, and a deer or a walker in the gaps ──
 
-function generateSuburbanElements(
-  canvasWidth: number,
-  groundY: number,
-  palette: EnvironmentPalette
-): BackgroundElement[] {
-  const elements: BackgroundElement[] = [];
+/** Element types of the suburban backdrop (keys of SUBURBAN_BACKGROUND_DRAWERS). */
+export type SuburbanElementType = "house" | "tree_silhouette" | "deer" | "walking_person";
 
-  let x = 0;
-  let lastType = "";
-
-  while (x < canvasWidth * 2.5) {
-    const roll = Math.random();
-
-    if (roll > 0.35) {
-      // House (65% chance)
+const SUBURBAN_STREET: StreetConfig<SuburbanElementType> = {
+  fillers: {
+    chance: 0.65,
+    make(palette) {
       // 0 = wide bungalow, 1 = two-storey, 2 = narrow townhouse, 3 = small church (rare)
       const variant = Math.random() < 0.07 ? 3 : Math.floor(Math.random() * 3);
       const w =
@@ -126,55 +78,21 @@ function generateSuburbanElements(
         : variant === 1 ? 50 + Math.random() * 10
         : variant === 2 ? 58 + Math.random() * 12
         : 34 + Math.random() * 6;
-      const scheme =
-        palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
-      elements.push({
+      const scheme = palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
+      return {
         type: "house",
-        x,
-        y: groundY - h - 16,
         width: w,
         height: h,
         color: scheme.wall,
         roofColor: scheme.roof,
         variant,
-      });
-      const gap = 20 + Math.random() * 30;
-      x += w + gap;
-
-      // Maybe add a deer or person in the gap
-      if (
-        gap > 25 &&
-        Math.random() > 0.6 &&
-        lastType !== "deer" &&
-        lastType !== "walking_person"
-      ) {
-        const isAnimal = Math.random() > 0.45;
-        const vergeOffset = Math.random() * 18; // random depth within the 22px strip
-        if (isAnimal) {
-          elements.push({
-            type: "deer",
-            x: x - gap * 0.6,
-            y: groundY - 28 - vergeOffset,
-            width: 30,
-            height: 28,
-            color: palette.creature,
-          });
-          lastType = "deer";
-        } else {
-          const person = pickPedestrian();
-          elements.push({
-            type: "walking_person",
-            x: x - gap * 0.5,
-            y: groundY - person.height - vergeOffset,
-            ...person,
-          });
-          lastType = "walking_person";
-        }
-      } else {
-        lastType = "house";
-      }
-    } else {
-      // Tree — 3 size tiers: small / medium / large
+        gap: 20 + Math.random() * 30,
+      };
+    },
+  },
+  trees: {
+    make(palette, vergeOffset) {
+      // Three size tiers: small / medium / large
       const sizeTier = Math.random();
       const tw =
         sizeTier < 0.33 ? 18 + Math.random() * 6   // small:  18-24
@@ -184,21 +102,30 @@ function generateSuburbanElements(
         sizeTier < 0.33 ? 40 + Math.random() * 14  // small:  40-54
         : sizeTier < 0.66 ? 56 + Math.random() * 16 // medium: 56-72
         : 76 + Math.random() * 18;                  // large:  76-94
-      const treeVergeOffset = Math.random() * 18;
-      elements.push({
+      return {
         type: "tree_silhouette",
-        x,
-        y: groundY - th - treeVergeOffset,
         width: tw,
         height: th,
         color: palette.treeSilhouette,
-      });
-      x += tw + 12 + Math.random() * 20;
-      lastType = "tree";
-    }
-  }
-  return elements;
-}
+        gap: 12 + Math.random() * 20,
+        lift: vergeOffset,
+      };
+    },
+  },
+  figures: {
+    chance: 0.4,
+    minGap: 25,
+    after: "filler",
+    // Never two figures in a row
+    allowAfter: (last) => last?.kind !== "figure",
+    make(palette, gap, vergeOffset) {
+      if (Math.random() > 0.45) {
+        return { type: "deer", width: 30, height: 28, color: palette.creature, back: gap * 0.6, lift: vergeOffset };
+      }
+      return { type: "walking_person", ...pickPedestrian(), back: gap * 0.5, lift: vergeOffset };
+    },
+  },
+};
 
 // ── Obstacle pool — Suburban biome, time-staged ──
 
@@ -242,7 +169,7 @@ export const SUBURBAN_ENVIRONMENT: EnvironmentDefinition = {
     cloudCount: 12,
     cloudSpeedRatio: 0.1,
     buildingSpeedRatio: 0.4,
-    generateElements: generateSuburbanElements,
+    generateElements: (canvasWidth, groundY, palette) => generateStreet(canvasWidth, groundY, palette, SUBURBAN_STREET),
   },
   backgroundDrawers: SUBURBAN_BACKGROUND_DRAWERS,
   obstaclePool: SUBURBAN_OBSTACLE_POOL,

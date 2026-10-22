@@ -4,15 +4,14 @@
  * train line), the time-staged obstacle pool (Kei cars, samurai, giant sushi) and the
  * rain, wet-road reflections and Edy's hachimaki.
  */
-import { ObstacleType, type BackgroundElement } from "../types";
+import { ObstacleType } from "../types";
 import { pickPedestrian } from "./pedestrians";
 import { TOKYO_OBSTACLE_COLORS } from "./obstacleColors";
+import { PLAYER_COLORS, SHARED_OBSTACLE_COLORS } from "./sharedPalette";
 import { EASING_OUT, stagedObstaclePool } from "./stages";
+import { generateStreet, type StreetConfig } from "./street";
 import { TOKYO_BACKGROUND_DRAWERS, drawTokyoNightSky, drawNeonReflections } from "../rendering";
-import type {
-  EnvironmentDefinition,
-  EnvironmentPalette,
-} from "./types";
+import type { EnvironmentDefinition, EnvironmentPalette } from "./types";
 
 // ── Night Tokyo palette — indigo sky, dark wet street, warm windows ──
 
@@ -47,19 +46,11 @@ export const TOKYO_PALETTE: EnvironmentPalette = {
   creatureLeg: "#a86a34",
   creatureTail: "#f4e6d0",
 
-  // Player
-  player: {
-    wheel: "#2e2e2e",
-    frame: "#8b1a1a",
-    helmet: "#9b3333",
-    skin: "#c8a882",
-    shirt: "#7a8a9a",
-    pants: "#5a5a6a",
-  },
+  player: PLAYER_COLORS,
 
-  // Obstacles
   obstacle: {
-    // Shared obstacle colours (ramps etc.), a touch darker for the night
+    ...SHARED_OBSTACLE_COLORS,
+    // Shared obstacles a touch darker for the night, with lit headlights and taillights
     rock: "#6a6a74",
     rockHighlight: "#8a8a96",
     rockShadow: "#44444c",
@@ -67,9 +58,6 @@ export const TOKYO_PALETTE: EnvironmentPalette = {
     treeHighlight: "#4a8a50",
     treeTrunk: "#5a4232",
     treeTrunkShadow: "#423020",
-    trolley: "#5a7a9a",
-    trolleyBasket: "#4a6888",
-    trolleyAccent: "#c47a42",
     car: "#e8e8ec",
     carRoof: "#c8c8d0",
     carWindow: "#3a4a6a",
@@ -79,18 +67,6 @@ export const TOKYO_PALETTE: EnvironmentPalette = {
     carTaillight: "#ff3a3a",
     bikeRider: "#3a5a8a",
     bikeFrame: "#4a6a9a",
-    busStopFrame: "#3a7a6a",
-    busStopRoof: "#2e5e52",
-    busStopGlass: "#a0c8d4",
-    busStopSign: "#d4a444",
-    container: "#c4683a",
-    containerDark: "#8a4828",
-    containerDoor: "#a85830",
-    giantTreeCanopy: "#2e7a36",
-    giantTreeCanopyHighlight: "#48994a",
-    giantTreeTrunk: "#5e4030",
-    giantTreeBark: "#4a3020",
-    giantTreeOutline: "#1e5a24",
     rampWood: "#a88a5a",
     rampWoodDark: "#7a5a34",
     rampWoodHighlight: "#c4a878",
@@ -108,27 +84,30 @@ export const TOKYO_PALETTE: EnvironmentPalette = {
 
 /** Landmark element types; at most one in a row, and never the same one twice running. */
 const LANDMARKS = ["tokyo_tower", "skytree", "pagoda", "torii", "big_screen", "train_viaduct"] as const;
+type TokyoLandmark = (typeof LANDMARKS)[number];
 
-function generateTokyoElements(
-  canvasWidth: number,
-  groundY: number,
-  palette: EnvironmentPalette
-): BackgroundElement[] {
-  const elements: BackgroundElement[] = [];
+/** Element types of the Tokyo backdrop (keys of TOKYO_BACKGROUND_DRAWERS). */
+export type TokyoElementType =
+  | TokyoLandmark
+  | "neon_building"
+  | "konbini"
+  | "izakaya"
+  | "umbrella_person"
+  | "walking_person"
+  | "sakura"
+  | "japan_flag"
+  | "street_lamp";
 
-  let x = 0;
-  let lastType = "";
-  let lastLandmark = "";
-  let sinceLandmark = 99; // allow a landmark on the first pick
+/** Seed carried in `variant` so a building keeps its signs and lit windows while scrolling. */
+const seed = () => Math.floor(Math.random() * 10_000);
 
-  while (x < canvasWidth * 2.5) {
-    const roll = Math.random();
-    // Seed carried in `variant` so a building keeps its signs and lit windows while scrolling
-    const seed = Math.floor(Math.random() * 10_000);
-
-    if (roll < 0.15 && sinceLandmark >= 3) {
-      const options = LANDMARKS.filter((l) => l !== lastLandmark);
-      const type = options[Math.floor(Math.random() * options.length)];
+const TOKYO_STREET: StreetConfig<TokyoElementType, TokyoLandmark> = {
+  landmarks: {
+    chance: 0.15,
+    ids: LANDMARKS,
+    padBefore: 16,
+    padAfter: 18,
+    make(type, palette) {
       const size =
         type === "tokyo_tower" ? { w: 76 + Math.random() * 10, h: 250 + Math.random() * 30 }
         : type === "skytree" ? { w: 44 + Math.random() * 6, h: 340 + Math.random() * 40 }
@@ -136,102 +115,72 @@ function generateTokyoElements(
         : type === "torii" ? { w: 62 + Math.random() * 8, h: 56 + Math.random() * 6 }
         : type === "big_screen" ? { w: 110 + Math.random() * 16, h: 170 + Math.random() * 30 }
         : { w: 300 + Math.random() * 60, h: 74 + Math.random() * 8 };
-      x += 16;
-      elements.push({
+      return {
         type,
-        x,
-        y: groundY - size.h - 16,
         width: size.w,
         height: size.h,
         color: palette.buildings[0].wall,
         roofColor: palette.buildings[0].roof,
-        variant: seed,
-      });
-      x += size.w + 18;
-      lastLandmark = type;
-      lastType = type;
-      sinceLandmark = 0;
-    } else if (roll < 0.86 || lastType === "lamp") {
-      // Neon building — packed tight, with the odd low shop in between
-      const lowShop = Math.random() < 0.28;
-      if (lowShop) {
+        variant: seed(),
+      };
+    },
+  },
+  fillers: {
+    chance: 0.86,
+    make(palette) {
+      // Neon buildings packed tight, with the odd low shop in between
+      if (Math.random() < 0.28) {
         const type = Math.random() < 0.5 ? "konbini" : "izakaya";
-        const w = type === "konbini" ? 74 + Math.random() * 10 : 58 + Math.random() * 10;
-        const h = type === "konbini" ? 44 + Math.random() * 4 : 48 + Math.random() * 6;
-        elements.push({ type, x, y: groundY - h - 16, width: w, height: h, color: palette.buildings[1].wall, variant: seed });
-        x += w + 4 + Math.random() * 8;
-      } else {
-        const w = 40 + Math.random() * 42;
-        const h = 96 + Math.random() * 120;
-        const scheme = palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
-        elements.push({
-          type: "neon_building",
-          x,
-          y: groundY - h - 16,
-          width: w,
-          height: h,
-          color: scheme.wall,
-          roofColor: scheme.roof,
-          variant: seed,
-        });
-        x += w + (-4 + Math.random() * 8);
+        return {
+          type,
+          width: type === "konbini" ? 74 + Math.random() * 10 : 58 + Math.random() * 10,
+          height: type === "konbini" ? 44 + Math.random() * 4 : 48 + Math.random() * 6,
+          color: palette.buildings[1].wall,
+          variant: seed(),
+          gap: 4 + Math.random() * 8,
+        };
       }
-      sinceLandmark++;
-
-      // Now and then a pedestrian (often under an umbrella), a sakura or a flag
-      if (Math.random() > 0.62 && lastType !== "person") {
-        const pick = Math.random();
-        const vergeOffset = Math.random() * 18;
-        if (pick < 0.55) {
-          const person = pickPedestrian();
-          elements.push({
-            type: Math.random() < 0.7 ? "umbrella_person" : "walking_person",
-            x: x - 10,
-            y: groundY - person.height - vergeOffset,
-            ...person,
-          });
-          lastType = "person";
-        } else if (pick < 0.8) {
-          elements.push({
-            type: "sakura",
-            x: x - 18,
-            y: groundY - 62 - vergeOffset,
-            width: 42,
-            height: 62,
-            color: palette.treeHighlight,
-            variant: seed,
-          });
-          lastType = "sakura";
-        } else {
-          elements.push({
-            type: "japan_flag",
-            x: x - 8,
-            y: groundY - 64 - vergeOffset * 0.5,
-            width: 18,
-            height: 64,
-            color: "#bc002d",
-          });
-          lastType = "flag";
-        }
-      } else {
-        lastType = "building";
+      const scheme = palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
+      return {
+        type: "neon_building",
+        width: 40 + Math.random() * 42,
+        height: 96 + Math.random() * 120,
+        color: scheme.wall,
+        roofColor: scheme.roof,
+        variant: seed(),
+        gap: -4 + Math.random() * 8,
+      };
+    },
+  },
+  // Street lamps take the tree slot; never two in a row
+  trees: {
+    neverTwice: true,
+    make() {
+      return { type: "street_lamp", width: 14, height: 74, color: "#5a5e6a", gap: Math.random() * 10, lift: 6 };
+    },
+  },
+  // Now and then a pedestrian (often under an umbrella), a sakura or a flag; never two people in a row
+  figures: {
+    chance: 0.38,
+    after: "filler",
+    allowAfter: (last) => !(last?.kind === "figure" && (last.type === "umbrella_person" || last.type === "walking_person")),
+    make(palette, _gap, vergeOffset) {
+      const pick = Math.random();
+      if (pick < 0.55) {
+        return {
+          type: Math.random() < 0.7 ? "umbrella_person" : "walking_person",
+          ...pickPedestrian(),
+          back: 10,
+          lift: vergeOffset,
+        };
       }
-    } else {
-      // Street lamp (never two in a row)
-      elements.push({
-        type: "street_lamp",
-        x,
-        y: groundY - 74 - 6,
-        width: 14,
-        height: 74,
-        color: "#5a5e6a",
-      });
-      x += 14 + Math.random() * 10;
-      lastType = "lamp";
-    }
-  }
-  return elements;
-}
+      if (pick < 0.8) {
+        return { type: "sakura", width: 42, height: 62, color: palette.treeHighlight, variant: seed(), back: 18, lift: vergeOffset };
+      }
+      return { type: "japan_flag", width: 18, height: 64, color: "#bc002d", back: 8, lift: vergeOffset * 0.5 };
+    },
+  },
+};
 
 // ── Obstacle pool — Tokyo biome, time-staged ──
 
@@ -266,7 +215,7 @@ export const TOKYO_ENVIRONMENT: EnvironmentDefinition = {
     cloudCount: 5,
     cloudSpeedRatio: 0.06,
     buildingSpeedRatio: 0.4,
-    generateElements: generateTokyoElements,
+    generateElements: (canvasWidth, groundY, palette) => generateStreet(canvasWidth, groundY, palette, TOKYO_STREET),
   },
   backgroundDrawers: TOKYO_BACKGROUND_DRAWERS,
   obstaclePool: TOKYO_OBSTACLE_POOL,

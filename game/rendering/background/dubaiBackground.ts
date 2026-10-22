@@ -1,5 +1,6 @@
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import { drawWalkingPerson } from "./shared";
+import { drawSprite } from "../drawHelpers";
 
 // --- Dubai background elements ---
 
@@ -70,14 +71,6 @@ function drawMuseumOfFuture(
   _wallColor: string, _roofColor: string, palette: EnvironmentPalette
 ) {
   const cx = x + w * 0.5;
-  const cy = y + h * 0.44;
-  const rx = w * 0.46;
-  const ry = h * 0.41;
-  const tilt = -0.12;
-  const hx = cx + w * 0.04;
-  const hy = cy - h * 0.03;
-  const hrx = w * 0.25;
-  const hry = h * 0.19;
 
   // Landscaped mound and glass podium under the ring.
   ctx.fillStyle = "#7fa35a";
@@ -86,6 +79,24 @@ function drawMuseumOfFuture(
   ctx.fill();
   ctx.fillStyle = palette.windowGlass;
   ctx.fillRect(cx - w * 0.18, y + h * 0.84, w * 0.36, h * 0.08);
+
+  // The ring: 46 clipped calligraphy strokes plus shading, all fixed, so it is rasterised once
+  drawSprite(ctx, "museum-ring", x, y, w, h, drawMuseumRing);
+}
+
+/** The Museum of the Future's torus in local space (element box at the origin). */
+function drawMuseumRing(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const x = 0;
+  const y = 0;
+  const cx = x + w * 0.5;
+  const cy = y + h * 0.44;
+  const rx = w * 0.46;
+  const ry = h * 0.41;
+  const tilt = -0.12;
+  const hx = cx + w * 0.04;
+  const hy = cy - h * 0.03;
+  const hrx = w * 0.25;
+  const hry = h * 0.19;
 
   // The ring itself: outer ellipse minus the void, so sky shows through.
   const ring = () => {

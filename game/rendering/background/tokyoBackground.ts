@@ -11,7 +11,7 @@
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
-import { cachedGradient, glow, hash01 } from "../drawHelpers";
+import { cachedGradient, glow, hash01, drawSprite, drawCachedText, type TextLabel } from "../drawHelpers";
 
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
@@ -328,8 +328,15 @@ function drawNeonBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, w
 
 /** A 24-hour convenience store: bright glass front, striped fascia, shelves inside. */
 function drawKonbini(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  ctx.save();
   glow(ctx, x + w / 2, y + h * 0.7, w * 0.8, "#e8f6ff", 0.22);
+  // The shopfront (sign text, shelves, door) never changes, so it is rasterised once
+  drawSprite(ctx, "konbini", x, y, w, h, drawKonbiniFront);
+}
+
+/** The konbini shopfront in local space (element box at the origin). */
+function drawKonbiniFront(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const x = 0;
+  const y = 0;
   ctx.fillStyle = "#e8ecf0";
   ctx.fillRect(x, y, w, h);
   // Fascia with colour stripes and the sign.
@@ -354,14 +361,42 @@ function drawKonbini(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.strokeStyle = "#9aa8b4";
   ctx.lineWidth = 1;
   ctx.strokeRect(x + w * 0.68, y + h * 0.46, w * 0.24, h * 0.54);
-  ctx.restore();
 }
 
 // --- Izakaya ---
 
+/** How far the izakaya's awning overhangs its box on each side. */
+const IZAKAYA_EAVES = 4;
+
 /** A small izakaya: dark timber front, glowing red lanterns, an indigo noren over the door. */
 function drawIzakaya(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, seed: number) {
   ctx.save();
+  // Front, lattice window and noren are fixed, so they come from one cached sprite
+  drawSprite(ctx, "izakaya", x, y, w, h, drawIzakayaFront, { pad: IZAKAYA_EAVES });
+
+  // Red lanterns, gently swaying.
+  const sway = Math.sin(performance.now() / 800 + seed) * 0.8;
+  for (const fx of [0.12, 0.32, 0.96]) {
+    const lx = x + w * fx + sway;
+    const ly = y + h * 0.3;
+    glow(ctx, lx, ly, 10, "#ff5a3a", 0.5);
+    ctx.fillStyle = "#e8302a";
+    ctx.beginPath();
+    ctx.ellipse(lx, ly, 3.4, 4.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#1e1e24";
+    ctx.fillRect(lx - 2, ly - 5, 4, 1);
+    ctx.fillRect(lx - 2, ly + 4, 4, 1);
+    ctx.fillStyle = "rgba(255,230,180,0.6)";
+    ctx.fillRect(lx - 3, ly - 1, 6, 0.6);
+  }
+  ctx.restore();
+}
+
+/** The izakaya front in local space (element box at the origin; the awning spills IZAKAYA_EAVES px either side). */
+function drawIzakayaFront(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const x = 0;
+  const y = 0;
   // Tiled awning and timber front.
   ctx.fillStyle = "#3a2a22";
   ctx.fillRect(x, y + h * 0.18, w, h * 0.82);
@@ -397,24 +432,6 @@ function drawIzakaya(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.fillText("酒", nx + nw / 2, y + h * 0.47);
   ctx.fillStyle = "#ffcf80";
   ctx.fillRect(nx, y + h * 0.64, nw, h * 0.36);
-
-  // Red lanterns, gently swaying.
-  const sway = Math.sin(performance.now() / 800 + seed) * 0.8;
-  for (const fx of [0.12, 0.32, 0.96]) {
-    const lx = x + w * fx + sway;
-    const ly = y + h * 0.3;
-    glow(ctx, lx, ly, 10, "#ff5a3a", 0.5);
-    ctx.fillStyle = "#e8302a";
-    ctx.beginPath();
-    ctx.ellipse(lx, ly, 3.4, 4.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#1e1e24";
-    ctx.fillRect(lx - 2, ly - 5, 4, 1);
-    ctx.fillRect(lx - 2, ly + 4, 4, 1);
-    ctx.fillStyle = "rgba(255,230,180,0.6)";
-    ctx.fillRect(lx - 3, ly - 1, 6, 0.6);
-  }
-  ctx.restore();
 }
 
 // --- Tokyo Tower ---
@@ -608,8 +625,13 @@ function drawTorii(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 const TICKER = "ようこそ東京へ  WELCOME TO TOKYO  ";
 /** Three copies, so the strip stays full while it scrolls one copy's width. */
 const TICKER_LOOP = TICKER.repeat(3);
+const TICKER_FONT = `bold 6px ${JP_FONT}`;
+/** The scrolling strip as one cached label, drawn left-aligned at its scroll offset. */
+const TICKER_LABEL: TextLabel = { text: TICKER_LOOP, font: TICKER_FONT, color: "#ffd23d", align: "left" };
 /** Ticker text width at its fixed font, measured on first draw. */
 let tickerWidth: number | null = null;
+/** The headline the screen cycles through. */
+const SCREEN_LINES = ["東京", "TOKYO", "♪ ♪ ♪", "ラーメン"];
 
 /** A corner building with a huge video screen cycling colour and text (Shibuya-style). */
 function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, wall: string, seed: number) {
@@ -636,12 +658,12 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   g.addColorStop(1, `hsl(${(hue + 120) % 360}, 85%, 45%)`);
   ctx.fillStyle = g;
   ctx.fillRect(sx, sy, sw, sh);
-  const lines = ["東京", "TOKYO", "♪ ♪ ♪", "ラーメン"];
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `bold ${Math.round(sh * 0.36)}px ${JP_FONT}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(lines[Math.floor(t / 2.5) % lines.length], sx + sw / 2, sy + sh / 2, sw * 0.9);
+  drawCachedText(ctx, {
+    text: SCREEN_LINES[Math.floor(t / 2.5) % SCREEN_LINES.length],
+    font: `bold ${Math.round(sh * 0.36)}px ${JP_FONT}`,
+    color: "#ffffff",
+    maxWidth: sw * 0.9,
+  }, sx + sw / 2, sy + sh / 2);
   ctx.strokeStyle = "#0e0e18";
   ctx.lineWidth = 2;
   ctx.strokeRect(sx, sy, sw, sh);
@@ -652,12 +674,12 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.beginPath();
   ctx.rect(sx, sy + sh + 4, sw, 7);
   ctx.clip();
-  ctx.fillStyle = "#ffd23d";
-  ctx.font = `bold 6px ${JP_FONT}`;
-  ctx.textAlign = "left";
-  const tw = (tickerWidth ??= ctx.measureText(TICKER).width);
-  const tx = sx - ((t * 30) % tw);
-  ctx.fillText(TICKER_LOOP, tx, sy + sh + 8);
+  if (tickerWidth === null) {
+    ctx.font = TICKER_FONT;
+    tickerWidth = ctx.measureText(TICKER).width;
+  }
+  const tx = sx - ((t * 30) % tickerWidth);
+  drawCachedText(ctx, TICKER_LABEL, tx, sy + sh + 8);
   ctx.restore();
   aviationLight(ctx, x + w * 0.85, y - 1, seed);
   ctx.restore();

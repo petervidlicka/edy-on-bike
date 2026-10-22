@@ -1,6 +1,7 @@
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
 import { DUBAI_OBSTACLE_COLORS } from "../../environments/obstacleColors";
+import { drawSprite, drawCachedText } from "../drawHelpers";
 
 // --- Dubai biome obstacle draw functions ---
 
@@ -396,11 +397,7 @@ export function drawDubaiChocolate(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fill();
 
   // "DUBAI" label
-  ctx.fillStyle = wrapper;
-  ctx.font = "bold 10px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("DUBAI", x + w * 0.55, y + h * 0.5);
+  drawCachedText(ctx, { text: "DUBAI", font: "bold 10px sans-serif", color: wrapper }, x + w * 0.55, y + h * 0.5);
 
   // Outline
   ctx.strokeStyle = chocDark;
@@ -449,11 +446,34 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(x + 2, y + 2, w - 4, signH - 4);
 
-  // --- Ad interior scene ---
-  const adX = x + 4;
-  const adY = y + 4;
-  const adW = w - 8; // ~132
-  const adH = signH - 8; // ~42
+  // --- Ad interior scene: a few hundred fills and three lines of text, all fixed, so
+  // it is rasterised once and blitted ---
+  drawSprite(ctx, "dubai-ad", x + 4, y + 4, w - 8, signH - 8, drawBillboardAd);
+
+  // --- Sign panel metal frame (on top of everything) ---
+  ctx.strokeStyle = frameColor;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 1, y + 1, w - 2, signH - 2);
+  // Inner frame line
+  ctx.strokeStyle = "#b8b8b8";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 3, y + 3, w - 6, signH - 6);
+}
+
+/** Skyscraper towers in the billboard ad, as fractions of the ad box. */
+const BILLBOARD_TOWERS = [
+  { cx: 0.15, tw: 0.08, th: 0.5, color: "#b8d0e0" },
+  { cx: 0.32, tw: 0.06, th: 0.55, color: "#c8d8e8" },
+  { cx: 0.68, tw: 0.07, th: 0.48, color: "#a8c0d0" },
+  { cx: 0.82, tw: 0.05, th: 0.42, color: "#c0d0e0" },
+];
+/** Palm positions in the billboard ad, as fractions of the ad width. */
+const BILLBOARD_PALMS = [0.22, 0.55, 0.88];
+
+/** The "Dubai Horizon" ad artwork in local space (ad box at the origin, ~132×42). */
+function drawBillboardAd(ctx: CanvasRenderingContext2D, adW: number, adH: number) {
+  const adX = 0;
+  const adY = 0;
 
   // Sky gradient (teal-blue)
   const skyGrad = ctx.createLinearGradient(adX, adY, adX, adY + adH * 0.65);
@@ -483,13 +503,7 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fillRect(adX, adY + adH * 0.68, adW, adH * 0.32);
 
   // --- Skyscrapers (4 simplified towers) ---
-  const towers = [
-    { cx: 0.15, tw: 0.08, th: 0.5, color: "#b8d0e0" },
-    { cx: 0.32, tw: 0.06, th: 0.55, color: "#c8d8e8" },
-    { cx: 0.68, tw: 0.07, th: 0.48, color: "#a8c0d0" },
-    { cx: 0.82, tw: 0.05, th: 0.42, color: "#c0d0e0" },
-  ];
-  for (const t of towers) {
+  for (const t of BILLBOARD_TOWERS) {
     const tx = adX + adW * t.cx - (adW * t.tw) / 2;
     const ty = adY + adH * (0.55 - t.th);
     const ttw = adW * t.tw;
@@ -516,8 +530,7 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fill();
 
   // --- Palm tree silhouettes (3 palms) ---
-  const palmPositions = [0.22, 0.55, 0.88];
-  for (const px of palmPositions) {
+  for (const px of BILLBOARD_PALMS) {
     const palmX = adX + adW * px;
     const palmBase = adY + adH * 0.62;
     const palmTop = adY + adH * 0.3;
@@ -619,19 +632,6 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText("COMING SOON", adX + adW - 17, adY + adH - 5);
-
-  // --- Sign panel metal frame (on top of everything) ---
-  ctx.strokeStyle = frameColor;
-  ctx.lineWidth = 3;
-  ctx.strokeRect(x + 1, y + 1, w - 2, signH - 2);
-  // Inner frame line
-  ctx.strokeStyle = "#b8b8b8";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 3, y + 3, w - 6, signH - 6);
-
-  // Reset text alignment
-  ctx.textAlign = "start";
-  ctx.textBaseline = "alphabetic";
 }
 
 const LAMBORGHINI_HURACAN_SHAPE: VehicleShape = {

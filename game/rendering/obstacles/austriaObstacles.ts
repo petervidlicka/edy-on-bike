@@ -6,7 +6,7 @@
  */
 import type { EnvironmentPalette } from "../../environments/types";
 
-import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, type Pt } from "../drawHelpers";
+import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, drawSprite, drawCachedText, type Pt } from "../drawHelpers";
 import { AUSTRIA_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 
 // --- Snowman ---
@@ -227,9 +227,13 @@ export function drawRedDeer(ctx: CanvasRenderingContext2D, x: number, y: number,
 
 // --- Stiegl beer crates ---
 
+/** Crate colours and whether bottle necks show, read by drawCrateArt while its sprite is built. */
+const crateSpec = { red: "", dark: "", withBottles: false };
+
 /**
  * One red beer crate seen from the side: rim, hand hole and a white label band, with
- * brown bottle necks showing when it is the top of a stack.
+ * brown bottle necks showing when it is the top of a stack. A crate wall draws sixteen
+ * of these (with text) per frame, so each look is rasterised once (see drawCrateArt).
  */
 function drawCrate(
   ctx: CanvasRenderingContext2D,
@@ -237,8 +241,19 @@ function drawCrate(
   palette: EnvironmentPalette,
   withBottles: boolean
 ) {
-  const red = palette.obstacle.beerCrate ?? AUSTRIA_OBSTACLE_COLORS.beerCrate;
-  const dark = palette.obstacle.beerCrateDark ?? AUSTRIA_OBSTACLE_COLORS.beerCrateDark;
+  crateSpec.red = palette.obstacle.beerCrate ?? AUSTRIA_OBSTACLE_COLORS.beerCrate;
+  crateSpec.dark = palette.obstacle.beerCrateDark ?? AUSTRIA_OBSTACLE_COLORS.beerCrateDark;
+  crateSpec.withBottles = withBottles;
+  // Necks poke up to 0.32 of the crate height above its box
+  const pad = withBottles ? Math.ceil(ch * 0.32) + 1 : 0;
+  drawSprite(ctx, `crate|${crateSpec.red}|${crateSpec.dark}|${withBottles ? 1 : 0}`, cx, cy, cw, ch, drawCrateArt, { pad });
+}
+
+/** The crate art in local space (crate box at the origin), from the current crateSpec. */
+function drawCrateArt(ctx: CanvasRenderingContext2D, cw: number, ch: number) {
+  const { red, dark, withBottles } = crateSpec;
+  const cx = 0;
+  const cy = 0;
 
   if (withBottles) {
     const necks = Math.max(3, Math.round(cw / 6));
@@ -387,11 +402,13 @@ export function drawSnowCat(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.strokeStyle = dark;
   ctx.lineWidth = 0.8;
   ctx.strokeRect(x + w * 0.27, y + h * 0.1, w * 0.15, h * 0.42);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `bold ${Math.max(5, Math.round(h * 0.09))}px Arial, sans-serif`;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillText("PistenBully", x + w * 0.44, y + h * 0.6, w * 0.46);
+  drawCachedText(ctx, {
+    text: "PistenBully",
+    font: `bold ${Math.max(5, Math.round(h * 0.09))}px Arial, sans-serif`,
+    color: "#ffffff",
+    align: "left",
+    maxWidth: w * 0.46,
+  }, x + w * 0.44, y + h * 0.6);
 
   // Roof rack the full length, on posts down to the cab and deck, with amber beacons.
   ctx.fillStyle = "#3a3e44";

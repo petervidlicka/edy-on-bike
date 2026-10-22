@@ -121,3 +121,157 @@ export function hash01(a: number, b = 0, c = 0): number {
   const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453;
   return s - Math.floor(s);
 }
+
+// --- Offscreen sprites ---
+
+/**
+ * Cached offscreen canvases (static art drawn once, then blitted), bounded so a long
+ * run can't grow the set without limit: the oldest entry goes when it fills up.
+ */
+const spriteCache = new Map<string, HTMLCanvasElement>();
+const MAX_CACHED_SPRITES = 160;
+
+/** Supersampling for cached sprites, so small text and 1px detail stay crisp when blitted. */
+const SPRITE_SCALE = 2;
+
+/** Draws a sprite's art into its own context; (0, 0) is the art's top-left, `w`×`h` its box. */
+export type SpriteDraw = (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
+
+export interface SpriteOptions {
+  /** Margin (game px) on every side for art that spills past its box (eaves, bottle necks). */
+  pad?: number;
+}
+
+/** Adds to a bounded cache, dropping the oldest entry (Map keeps insertion order) when full. */
+function putBounded<V>(cache: Map<string, V>, key: string, value: V, max: number): void {
+  if (cache.size >= max) {
+    const oldest = cache.keys().next();
+    if (!oldest.done) cache.delete(oldest.value);
+  }
+  cache.set(key, value);
+}
+
+/**
+ * Returns an offscreen canvas holding `draw`'s output, built once per key and size
+ * (sizes are rounded to whole pixels so near-identical boxes share one sprite).
+ * Use it for art that is the same every frame — text, dense window grids, signs — so
+ * drawing it costs one drawImage instead of dozens of fills.
+ * @returns The sprite, or null where offscreen canvases aren't available (SSR, tests).
+ */
+export function cachedSprite(key: string, w: number, h: number, draw: SpriteDraw, opts: SpriteOptions = {}): HTMLCanvasElement | null {
+  const pad = opts.pad ?? 0;
+  const cw = Math.round(w);
+  const ch = Math.round(h);
+  const fullKey = `${key}|${cw}|${ch}|${pad}`;
+  const cached = spriteCache.get(fullKey);
+  if (cached) return cached;
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil((cw + pad * 2) * SPRITE_SCALE);
+  canvas.height = Math.ceil((ch + pad * 2) * SPRITE_SCALE);
+  const octx = canvas.getContext("2d");
+  if (!octx) return null;
+  octx.scale(SPRITE_SCALE, SPRITE_SCALE);
+  octx.translate(pad, pad);
+  draw(octx, cw, ch);
+  putBounded(spriteCache, fullKey, canvas, MAX_CACHED_SPRITES);
+  return canvas;
+}
+
+/**
+ * Draws static art at (x, y) from a cached sprite (see cachedSprite), falling back to
+ * drawing it directly where sprites aren't available. `draw` must not depend on the
+ * caller's context state (font, alignment, alpha): it runs in a fresh context.
+ * @example
+ * drawSprite(ctx, `crate|${red}`, x, y, w, h, (c, cw, ch) => drawCrateArt(c, 0, 0, cw, ch, red));
+ */
+export function drawSprite(ctx: CanvasRenderingContext2D, key: string, x: number, y: number, w: number, h: number, draw: SpriteDraw, opts: SpriteOptions = {}): void {
+  const pad = opts.pad ?? 0;
+  const cw = Math.round(w);
+  const ch = Math.round(h);
+  const sprite = cachedSprite(key, cw, ch, draw, opts);
+  if (sprite) {
+    ctx.drawImage(sprite, x - pad, y - pad, cw + pad * 2, ch + pad * 2);
+    return;
+  }
+  ctx.save();
+  ctx.translate(x, y);
+  draw(ctx, cw, ch);
+  ctx.restore();
+}
+
+// --- Cached text labels ---
+
+/** A text label drawn from a cached sprite, anchored with textBaseline "middle". */
+export interface TextLabel {
+  text: string;
+  /** Canvas font string, e.g. `bold 6px Arial, sans-serif` (the px size sets the sprite height). */
+  font: string;
+  color: string;
+  /** Horizontal anchor; "center" if omitted. */
+  align?: "left" | "center" | "right";
+  /** Squeezes the text to fit, like fillText's maxWidth. */
+  maxWidth?: number;
+}
+
+interface LabelSprite {
+  canvas: HTMLCanvasElement | null;
+  w: number;
+  h: number;
+}
+
+const labelCache = new Map<string, LabelSprite>();
+const MAX_CACHED_LABELS = 256;
+/** Horizontal breathing room on each side of a label, so glyph overhangs aren't clipped. */
+const LABEL_PAD = 2;
+
+/** The px size in a canvas font string, or 10 when it has none. */
+function fontPx(font: string): number {
+  const m = /(\d+(?:\.\d+)?)px/.exec(font);
+  return m ? parseFloat(m[1]) : 10;
+}
+
+/** Lays `label` out: text at the sprite's vertical centre, anchored by `align`. */
+function paintLabel(ctx: CanvasRenderingContext2D, label: TextLabel, w: number, h: number): void {
+  const align = label.align ?? "center";
+  ctx.font = label.font;
+  ctx.fillStyle = label.color;
+  ctx.textAlign = align;
+  ctx.textBaseline = "middle";
+  const ax = align === "left" ? LABEL_PAD : align === "right" ? w - LABEL_PAD : w / 2;
+  ctx.fillText(label.text, ax, h / 2, label.maxWidth);
+}
+
+/**
+ * Fills a text label at (x, y) — the anchor fillText would use with textBaseline
+ * "middle" — from a sprite rasterised once per label. Text is costly to lay out every
+ * frame on phones, and signs and brand marks are the same every frame.
+ * @example
+ * drawCachedText(ctx, { text: "STIEGL", font: "bold 6px Arial, sans-serif", color: red, maxWidth: cw * 0.66 }, cx + cw / 2, cy + ch * 0.62);
+ */
+export function drawCachedText(ctx: CanvasRenderingContext2D, label: TextLabel, x: number, y: number): void {
+  const align = label.align ?? "center";
+  const key = `${label.text}|${label.font}|${label.color}|${align}|${label.maxWidth ?? ""}`;
+  let sprite = labelCache.get(key);
+  if (!sprite) {
+    ctx.save();
+    ctx.font = label.font;
+    const measured = ctx.measureText(label.text).width;
+    ctx.restore();
+    const textW = label.maxWidth === undefined ? measured : Math.min(measured, label.maxWidth);
+    const w = Math.ceil(textW) + LABEL_PAD * 2;
+    // Room above and below the em box for ascenders, descenders and tall CJK glyphs
+    const h = Math.ceil(fontPx(label.font) * 1.6);
+    sprite = { canvas: cachedSprite(`label|${key}`, w, h, (c, cw, ch) => paintLabel(c, label, cw, ch)), w, h };
+    putBounded(labelCache, key, sprite, MAX_CACHED_LABELS);
+  }
+  const left = align === "left" ? x - LABEL_PAD : align === "right" ? x - sprite.w + LABEL_PAD : x - sprite.w / 2;
+  if (sprite.canvas) {
+    ctx.drawImage(sprite.canvas, left, y - sprite.h / 2, sprite.w, sprite.h);
+    return;
+  }
+  ctx.save();
+  ctx.translate(left, y - sprite.h / 2);
+  paintLabel(ctx, label, sprite.w, sprite.h);
+  ctx.restore();
+}

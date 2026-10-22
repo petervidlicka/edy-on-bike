@@ -7,7 +7,7 @@
  */
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
-import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow } from "../drawHelpers";
+import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow, drawSprite, drawCachedText, type TextLabel } from "../drawHelpers";
 import { TOKYO_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 
 /** Japanese-capable font stack for the little signs and labels. */
@@ -29,14 +29,15 @@ function headlightBeam(ctx: CanvasRenderingContext2D, fromX: number, fromY: numb
 }
 
 /**
- * Fills text centred on (cx, cy) flipped back left-to-right. Taxis are drawn mirrored as
- * oncoming traffic (see ONCOMING_VEHICLES), so their signs would otherwise read backwards.
+ * Draws a cached label centred on (cx, cy) flipped back left-to-right. Taxis are drawn
+ * mirrored as oncoming traffic (see ONCOMING_VEHICLES), so their signs would otherwise
+ * read backwards.
  */
-function fillTextUnmirrored(ctx: CanvasRenderingContext2D, text: string, cx: number, cy: number, maxWidth: number) {
+function drawLabelUnmirrored(ctx: CanvasRenderingContext2D, label: TextLabel, cx: number, cy: number) {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(-1, 1);
-  ctx.fillText(text, 0, 0, maxWidth);
+  drawCachedText(ctx, label, 0, 0);
   ctx.restore();
 }
 
@@ -143,11 +144,12 @@ export function drawJapanTaxi(ctx: CanvasRenderingContext2D, x: number, y: numbe
   // Roof lamp (andon), glowing.
   glow(ctx, x + w * 0.42, y + h * 0.1, h * 0.35, "#ffe08a", 0.3);
   fillRoundRect(ctx, x + w * 0.34, y + h * 0.02, w * 0.16, h * 0.18, 2, "#ffe48a");
-  ctx.fillStyle = "#8a5a10";
-  ctx.font = `bold ${Math.max(4, Math.round(h * 0.12))}px Arial, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  fillTextUnmirrored(ctx, "TAXI", x + w * 0.42, y + h * 0.115, w * 0.14);
+  drawLabelUnmirrored(ctx, {
+    text: "TAXI",
+    font: `bold ${Math.max(4, Math.round(h * 0.12))}px Arial, sans-serif`,
+    color: "#8a5a10",
+    maxWidth: w * 0.14,
+  }, x + w * 0.42, y + h * 0.115);
 
   drawVehicle(ctx, x, y, w, h, c, TAXI_SHAPE, {
     body: c.taxi ?? TOKYO_OBSTACLE_COLORS.taxi,
@@ -158,9 +160,12 @@ export function drawJapanTaxi(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.fillRect(x + w * 0.04, y + h * 0.56, w * 0.92, 1.2);
   ctx.fillStyle = "#ff4040";
   ctx.fillRect(x + w * 0.74, y + h * 0.36, w * 0.08, h * 0.1);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `bold ${Math.max(3, Math.round(h * 0.08))}px ${JP_FONT}`;
-  fillTextUnmirrored(ctx, "空車", x + w * 0.78, y + h * 0.415, w * 0.075);
+  drawLabelUnmirrored(ctx, {
+    text: "空車",
+    font: `bold ${Math.max(3, Math.round(h * 0.08))}px ${JP_FONT}`,
+    color: "#ffffff",
+    maxWidth: w * 0.075,
+  }, x + w * 0.78, y + h * 0.415);
 }
 
 // --- Samurai ---
@@ -308,13 +313,23 @@ export function drawSushiRolls(ctx: CanvasRenderingContext2D, x: number, y: numb
 
 // --- Vending machine ---
 
+const VENDING_CANS = ["#d8344a", "#3a7ad8", "#f2c84a", "#2a2a2e", "#5ac27a", "#f2826a"];
+
 /** A glowing drinks vending machine: lit can display, buttons, coin slot and pickup bay. */
 export function drawVendingMachine(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const cans = ["#d8344a", "#3a7ad8", "#f2c84a", "#2a2a2e", "#5ac27a", "#f2826a"];
-
   ctx.save();
   glow(ctx, x + w * 0.5, y + h * 0.3, w * 1.4, "#cfe8ff", 0.28);
   contactShadow(ctx, x + w * 0.5, y + h, w * 0.6);
+  // The cabinet is ~70 small fills; its look never changes, so it is rasterised once
+  drawSprite(ctx, "vending", x, y, w, h, drawVendingCabinet);
+  ctx.restore();
+}
+
+/** The vending machine cabinet in local space (box at the origin). */
+function drawVendingCabinet(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const x = 0;
+  const y = 0;
+  const cans = VENDING_CANS;
 
   // Cabinet.
   fillRoundRect(ctx, x, y, w, h, 2, "#e8eef4");
@@ -351,8 +366,6 @@ export function drawVendingMachine(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fillRect(x + w * 0.16, y + h * 0.78, w * 0.68, h * 0.12);
   ctx.fillStyle = "rgba(255,255,255,0.25)";
   ctx.fillRect(x + w * 0.16, y + h * 0.78, w * 0.68, 1);
-
-  ctx.restore();
 }
 
 // --- Sake barrels ---
@@ -362,12 +375,21 @@ const SAKE_INK = ["#c8102e", "#1e3a8a", "#1e1e24", "#c8102e"];
 
 /** Two rows of straw-wrapped sake barrels (komodaru) with painted brand marks; the top row is flat. */
 export function drawSakeBarrels(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  ctx.save();
+  contactShadow(ctx, x + w * 0.5, y + h, w * 0.52);
+  // Eight barrels with painted glyphs: the stack never changes, so it is rasterised once.
+  // The bellies bulge 0.5px past the box, hence the padding.
+  drawSprite(ctx, "sake", x, y, w, h, drawSakeStack, { pad: 1 });
+  ctx.restore();
+}
+
+/** The barrel stack in local space (box at the origin). */
+function drawSakeStack(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const x = 0;
+  const y = 0;
   const cols = 4;
   const bw = w / cols;
   const bh = h / 2;
-
-  ctx.save();
-  contactShadow(ctx, x + w * 0.5, y + h, w * 0.52);
   for (let r = 0; r < 2; r++) {
     for (let c = 0; c < cols; c++) {
       const bx = x + c * bw + 1;
@@ -398,7 +420,6 @@ export function drawSakeBarrels(ctx: CanvasRenderingContext2D, x: number, y: num
       ctx.fillText(SAKE_LABELS[i % SAKE_LABELS.length], bx + ww / 2, by + bh * 0.52);
     }
   }
-  ctx.restore();
 }
 
 // --- Delivery scooter ---
@@ -427,11 +448,12 @@ export function drawDeliveryScooter(ctx: CanvasRenderingContext2D, x: number, y:
 
   // Delivery box on the rear rack.
   fillRoundRect(ctx, x + w * 0.02, y + h * 0.18, w * 0.32, h * 0.32, 2, "#d8282e");
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `bold ${Math.max(4, Math.round(h * 0.14))}px ${JP_FONT}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("出前", x + w * 0.18, y + h * 0.35, w * 0.28);
+  drawCachedText(ctx, {
+    text: "出前",
+    font: `bold ${Math.max(4, Math.round(h * 0.14))}px ${JP_FONT}`,
+    color: "#ffffff",
+    maxWidth: w * 0.28,
+  }, x + w * 0.18, y + h * 0.35);
   ctx.fillStyle = "#3a3a40";
   ctx.fillRect(x + w * 0.04, y + h * 0.5, w * 0.3, h * 0.04);
 
@@ -643,11 +665,11 @@ export function drawManekiNeko(ctx: CanvasRenderingContext2D, x: number, y: numb
 
   // Koban coin in the other paw.
   fillRoundRect(ctx, x + w * 0.5, y + h * 0.62, w * 0.3, h * 0.26, 4, "#e8c040");
-  ctx.fillStyle = "#b08a20";
-  ctx.font = `bold ${Math.max(4, Math.round(h * 0.14))}px ${JP_FONT}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("福", x + w * 0.65, y + h * 0.75);
+  drawCachedText(ctx, {
+    text: "福",
+    font: `bold ${Math.max(4, Math.round(h * 0.14))}px ${JP_FONT}`,
+    color: "#b08a20",
+  }, x + w * 0.65, y + h * 0.75);
 
   // Head with ears, face and whiskers.
   ctx.fillStyle = white;

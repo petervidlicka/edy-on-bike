@@ -7,10 +7,12 @@ import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/ty
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
 import { drawRedDeer } from "../obstacles/austriaObstacles";
-import { hash01 as noise } from "../drawHelpers";
+import { hash01 as noise, drawCachedText } from "../drawHelpers";
 
 const SNOW = "#f6f9fc";
 const SNOW_SHADE = "#d4e0ec";
+/** Lettering on the chalet name boards and the bar sign. */
+const SIGN_FONT = "bold 5px Arial, sans-serif";
 
 /** Deterministic 0..1 noise per integer (the shared hash's b = 1 row), so the mountain range is the same every frame. */
 function hash01(n: number): number {
@@ -235,11 +237,7 @@ function drawChalet(
     const sy = wallTop + floorH * 0.04;
     ctx.fillStyle = "#3e2a1c";
     ctx.fillRect(x + w / 2 - sw / 2, sy, sw, 6);
-    ctx.fillStyle = "#f2d48a";
-    ctx.font = "bold 5px Arial, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(sign, x + w / 2, sy + 3.2, sw - 3);
+    drawCachedText(ctx, { text: sign, font: SIGN_FONT, color: "#f2d48a", maxWidth: sw - 3 }, x + w / 2, sy + 3.2);
   }
 
   ctx.restore();
@@ -547,11 +545,7 @@ function drawApresBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
   for (const fx of [0.2, 0.3, 0.7]) ctx.fillRect(x + w * fx, counterTop - 7, 3, 1.4);
   ctx.fillStyle = "#c8102e";
   ctx.fillRect(x + w * 0.26, counterTop + 4, w * 0.48, 7);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 5px Arial, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("APRÈS SKI", cx, counterTop + 7.8, w * 0.46);
+  drawCachedText(ctx, { text: "APRÈS SKI", font: SIGN_FONT, color: "#ffffff", maxWidth: w * 0.46 }, cx, counterTop + 7.8);
 
   ctx.restore();
 }

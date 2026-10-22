@@ -15,7 +15,9 @@ export type ComboEndReason = "expired" | "sketchy" | "crash";
 
 /**
  * Something notable that happened during a run.
- * - `runStart`: a run began (not fired again when a revive resumes it).
+ * - `runStart`: a run began (not fired again when a revive resumes it). `ranked` is false when
+ *   the run can't go on the public leaderboard (debug course, IDDQD typed beforehand); the
+ *   engine owns this so every way of restarting (pause menu included) resets it together.
  * - `trickLanded`: a trick landing was scored; `points` is what was paid (after the chain
  *   multiplier, which is also given), `big` marks standout tricks (by their base bonus,
  *   see `BIG_TRICK_POINTS`) for stronger feedback.
@@ -32,7 +34,7 @@ export type ComboEndReason = "expired" | "sketchy" | "crash";
  * - `biomeChanged`: the transition into a new biome started.
  */
 export type GameEvent =
-  | { type: "runStart" }
+  | { type: "runStart"; ranked: boolean }
   | { type: "trickLanded"; label: string; points: number; sketchy: boolean; big: boolean; multiplier: number }
   | { type: "comboChanged"; links: number; multiplier: number }
   | { type: "comboEnded"; links: number; multiplier: number; total: number; reason: ComboEndReason }

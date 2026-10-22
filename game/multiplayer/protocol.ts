@@ -149,13 +149,19 @@ export interface RankingEntry {
 
 // ── Client → Server messages ──
 
+/**
+ * Why a client is joining a room. "create" opens a friend room, "join" enters an existing one
+ * (so a typo'd code is rejected instead of silently opening a room), "quick" enters a
+ * matchmade room: everyone is ready on arrival and the race starts once `expected` riders
+ * (the size of the match) have connected.
+ */
+export type JoinIntent = "create" | "join" | "quick";
+
+/** Every join intent, for validation on the server. */
+export const JOIN_INTENTS: readonly JoinIntent[] = ["create", "join", "quick"];
+
 export type ClientMessage =
-  /**
-   * `intent` lets the server reject joins to codes nobody is in, instead of silently creating a room.
-   * "quick" joins a matchmade room: everyone is ready on arrival and the race starts once
-   * `expected` riders (the size of the match) have connected.
-   */
-  | { type: "join"; name: string; skinId: SkinId; intent: "create" | "join" | "quick"; expected?: number }
+  | { type: "join"; name: string; skinId: SkinId; intent: JoinIntent; expected?: number }
   | { type: "ready" }
   | { type: "player_update"; snapshot: GhostSnapshot }
   | { type: "player_crashed"; score: number }

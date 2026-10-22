@@ -200,7 +200,7 @@ export class SoundManager {
     // Everything goes through one bus so a skipped, paused or restarted crash can be silenced,
     // including the boings and rustles scheduled up to 1.5 s ahead
     const out = ctx.createGain();
-    out.connect(out);
+    out.connect(ctx.destination);
     this.crashBus = out;
     switch (variant) {
       case "faceplant": this.playSplat(out); break;

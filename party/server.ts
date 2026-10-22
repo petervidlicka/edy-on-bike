@@ -17,6 +17,7 @@ import {
   TokenBucket,
   isPlayerNameAllowed,
   sanitizeExpectedPlayers,
+  sanitizeIntent,
   sanitizeName,
   sanitizeSkinId,
   sanitizeSnapshot,
@@ -211,15 +212,21 @@ export class MultiplayerServer extends Server {
       this.rejectJoin(sender, "Please pick a different name.");
       return;
     }
+    // Every guard below keys off the intent, so an unknown one must not get past them
+    const intent = sanitizeIntent(data.intent);
+    if (!intent) {
+      this.rejectJoin(sender, "That join request isn't valid. Update the game and try again.");
+      return;
+    }
 
     // A room exists for any code as soon as someone connects, so a typo would otherwise drop the
     // player into a fresh empty room that looks exactly like a real lobby.
-    if (data.intent === "join" && this.players.size === 0) {
+    if (intent === "join" && this.players.size === 0) {
       this.rejectJoin(sender, `No room found with code ${this.name}. Check the code and try again.`);
       return;
     }
 
-    const quickIntent = data.intent === "quick";
+    const quickIntent = intent === "quick";
     // Friend rooms live on typed-code shapes and matchmade rooms on Q-codes, so neither kind
     // can be opened on the other's code (which would strand matched riders in a friend lobby)
     if (quickIntent ? !isQuickPlayCode(this.name) : !isFriendRoomCode(this.name)) {
@@ -228,7 +235,7 @@ export class MultiplayerServer extends Server {
     }
 
     // Room codes are random, so a new room can land on a code someone is already using
-    if (data.intent === "create" && this.players.size > 0) {
+    if (intent === "create" && this.players.size > 0) {
       this.send(sender, {
         type: "error",
         message: "That room code is taken. Try creating the room again.",

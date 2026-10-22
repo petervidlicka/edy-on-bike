@@ -229,6 +229,24 @@ export async function consumeRun(id: string): Promise<number | null> {
 }
 
 /**
+ * Puts a redeemed ticket back, with the lifetime it had left. For when storing the score
+ * fails after `consumeRun`: the player is told to retry, so the retry has to find the ticket.
+ * Redemption stays atomic (GETDEL), so a ticket is still never accepted twice.
+ * @param id - The ticket id that `consumeRun` just redeemed.
+ * @param startedAt - What `consumeRun` returned for it.
+ */
+export async function restoreRun(id: string, startedAt: number): Promise<void> {
+  const remainingSeconds = Math.floor(RUN_TTL_SECONDS - (Date.now() - startedAt) / 1000);
+  if (remainingSeconds <= 0) return;
+  const redis = getRedis();
+  if (redis) {
+    await redis.set(`${RUN_KEY_PREFIX}${id}`, String(startedAt), { ex: remainingSeconds });
+  } else {
+    memoryRuns.set(id, startedAt);
+  }
+}
+
+/**
  * Records a score, keeping each name's best only.
  *
  * @param name - Display name, already validated and trimmed by the API route.

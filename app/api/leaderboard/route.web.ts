@@ -5,7 +5,7 @@
  * started), which bounds it by how long the run lasted and makes it single-use.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getTopScores, getTotalPlayers, addScore, consumeRun } from "@/lib/leaderboard";
+import { getTopScores, getTotalPlayers, addScore, consumeRun, restoreRun } from "@/lib/leaderboard";
 import { LEADERBOARD_SIZE, MAX_LEADERBOARD_NAME_LENGTH } from "@/lib/leaderboardConfig";
 import { cleanPlayerName, isPlayerNameAllowed } from "@/lib/playerName";
 import { maxPlausibleScore, MAX_SCORE } from "@/game/scoreBounds";
@@ -95,7 +95,15 @@ export async function POST(request: NextRequest) {
     }
 
     const skinStr = typeof skin === "string" && skin.trim().length <= 30 ? skin.trim() : undefined;
-    await addScore(name, Math.floor(score), skinStr);
+    try {
+      await addScore(name, Math.floor(score), skinStr);
+    } catch (error) {
+      // The form keeps the player on screen to retry, so the ticket has to survive the failure
+      await restoreRun(runId, startedAt).catch((restoreError: unknown) => {
+        console.error("[leaderboard] Could not restore run ticket after a failed save", restoreError);
+      });
+      throw error;
+    }
 
     return NextResponse.json({ ok: true }, { headers: cors });
   } catch (error) {

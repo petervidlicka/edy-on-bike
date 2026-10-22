@@ -3,14 +3,14 @@
  * they send is re-checked here before it is stored, ranked or relayed to others.
  */
 import type { SkinId, TrickType } from "../game/types";
-import { MAX_NAME_LENGTH, MAX_PLAYERS } from "../game/multiplayer/protocol";
+import { JOIN_INTENTS, MAX_NAME_LENGTH, MAX_PLAYERS } from "../game/multiplayer/protocol";
 import {
   BONUS_REFILL_PER_SEC,
   MAX_BONUS_BURST,
   MAX_DISTANCE_POINTS_PER_SEC,
   MAX_SCORE,
 } from "../game/scoreBounds";
-import type { GhostSnapshot } from "../game/multiplayer/protocol";
+import type { GhostSnapshot, JoinIntent } from "../game/multiplayer/protocol";
 import { cleanPlayerName } from "../lib/playerName";
 
 export { isPlayerNameAllowed } from "../lib/playerName";
@@ -122,6 +122,16 @@ export function sanitizeName(raw: unknown): string | null {
   const name = cleanPlayerName(raw);
   if (name.length === 0 || name.length > MAX_NAME_LENGTH) return null;
   return name;
+}
+
+/**
+ * Why the client says it is joining. Anything but a known intent is rejected: the join guards
+ * (no room for a typo'd code, room code taken) each key off one intent, so an unknown value
+ * would slip past all of them and open a friend room on any code.
+ * @returns The intent, or null when it isn't one of JOIN_INTENTS.
+ */
+export function sanitizeIntent(raw: unknown): JoinIntent | null {
+  return typeof raw === "string" && (JOIN_INTENTS as readonly string[]).includes(raw) ? (raw as JoinIntent) : null;
 }
 
 /**

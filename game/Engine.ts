@@ -188,7 +188,7 @@ export class Engine {
     // First user gesture: the one place the voice clips may be fetched and decoded
     this.sound.voice.preload();
     this.callbacks.onStateChange(this.state);
-    this.emit({ type: "runStart" });
+    this.emit({ type: "runStart", ranked: !this.iddqdActive && !this.debugSequence });
   }
 
   restart(): void {

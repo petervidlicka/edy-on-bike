@@ -9,6 +9,7 @@ import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
 import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow, drawSprite, drawCachedText, cachedGradient, fillTransformed, type TextLabel } from "../drawHelpers";
 import { TOKYO_OBSTACLE_COLORS } from "../../environments/obstacleColors";
+import { sceneTimeMs } from "../sceneClock";
 
 /** Japanese-capable font stack for the little signs and labels. */
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
@@ -633,7 +634,7 @@ export function drawKawaiiBarrier(ctx: CanvasRenderingContext2D, x: number, y: n
     ctx.fill();
   }
   // Blinking warning lamp on one frog.
-  const on = Math.floor(performance.now() / 450) % 2 === 0;
+  const on = Math.floor(sceneTimeMs() / 450) % 2 === 0;
   ctx.fillStyle = on ? "#ff3a3a" : "#7a2020";
   ctx.beginPath();
   ctx.arc(...P(0.87, 0.02), 2, 0, Math.PI * 2);
@@ -731,7 +732,7 @@ export function drawRamenBowl(ctx: CanvasRenderingContext2D, x: number, y: numbe
   // Steam wisps.
   ctx.strokeStyle = "rgba(240,240,250,0.45)";
   ctx.lineWidth = 1.2;
-  const t = performance.now() / 600;
+  const t = sceneTimeMs() / 600;
   for (const fx of [0.32, 0.5, 0.68]) {
     ctx.beginPath();
     ctx.moveTo(x + w * fx, rimY - 2);

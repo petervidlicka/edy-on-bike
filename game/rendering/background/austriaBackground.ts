@@ -8,6 +8,7 @@ import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
 import { drawRedDeer } from "../obstacles/austriaObstacles";
 import { hash01 as noise, drawCachedText } from "../drawHelpers";
+import { sceneTimeMs } from "../sceneClock";
 
 const SNOW = "#f6f9fc";
 const SNOW_SHADE = "#d4e0ec";
@@ -456,7 +457,7 @@ function drawChairlift(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.stroke();
 
   // Chairs with a rider or two.
-  const t0 = (performance.now() / 1000) * 0.025;
+  const t0 = (sceneTimeMs() / 1000) * 0.025;
   const riderColors = ["#e4572e", "#2e86ab", "#f2c14e", "#4caf7d"];
   for (let i = 0; i < 5; i++) {
     const t = (i / 5 + t0) % 1;
@@ -608,7 +609,7 @@ function drawAustrianFlag(ctx: CanvasRenderingContext2D, x: number, y: number, w
 
   const fw = w * 1.3;
   const fh = h * 0.24;
-  const t = performance.now() / 300;
+  const t = sceneTimeMs() / 300;
   const wave = (fx: number) => Math.sin(t + fx * 5) * 1.4 * fx;
   const band = (from: number, to: number, fill: string) => {
     ctx.fillStyle = fill;

@@ -4,6 +4,7 @@ import { getTotalLayerWidth } from "../../Background";
 import type { ViewBounds } from "../../Camera";
 import { decodePedestrianVariant, SKIN_TONES, HAIR_COLORS } from "../../environments/pedestrians";
 import { cachedGradient, fillTransformed } from "../drawHelpers";
+import { setSceneTimeMs } from "../sceneClock";
 
 // --- Sky ---
 
@@ -78,6 +79,7 @@ export interface FadingCloudLayer {
  * which grows beyond the canvas while the big-air camera is zoomed out.
  * @param cloudAlpha - Opacity of the current cloud layer (below 1 while it fades in on a biome change).
  * @param outgoingClouds - The previous biome's clouds while they fade out, or null.
+ * @param nowMs - Scene clock (engine time that stops while paused) for animated scenery.
  */
 export function drawBackground(
   ctx: CanvasRenderingContext2D,
@@ -91,7 +93,9 @@ export function drawBackground(
   roadOverlays: readonly SkylinePass[] = [],
   cloudAlpha = 1,
   outgoingClouds: FadingCloudLayer | null = null,
+  nowMs = 0,
 ) {
+  setSceneTimeMs(nowMs);
   drawSky(ctx, view, groundY, palette);
 
   // Far scenery (mountain ranges) sits behind the clouds and scrolls with them

@@ -146,6 +146,7 @@ export class BiomeScenery {
   /**
    * Draws sky, scenery and road (in world space, under the camera).
    * @param fade - Eased biome-change progress 0–1, or null outside a change.
+   * @param nowMs - Scene clock (engine time that stops while paused) for animated scenery.
    */
   drawWorld(
     ctx: CanvasRenderingContext2D,
@@ -154,11 +155,12 @@ export class BiomeScenery {
     skylines: readonly SkylinePass[],
     roadOverlays: readonly SkylinePass[],
     fade: number | null,
+    nowMs: number,
   ): void {
     const outgoing = this.outgoingClouds && fade !== null ? { layer: this.outgoingClouds, alpha: 1 - fade } : null;
     drawBackground(
       ctx, this.layers, this.canvasW, view, this.groundY, palette, this.drawers,
-      skylines, roadOverlays, fade ?? 1, outgoing,
+      skylines, roadOverlays, fade ?? 1, outgoing, nowMs,
     );
   }
 

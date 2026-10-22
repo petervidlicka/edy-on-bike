@@ -12,6 +12,7 @@ import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/ty
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
 import { cachedGradient, fillTransformed, glow, hash01, drawSprite, drawCachedText, type TextLabel } from "../drawHelpers";
+import { sceneTimeMs } from "../sceneClock";
 
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
@@ -84,7 +85,7 @@ function getNeonSign(text: string, color: string, vertical: boolean, fontPx: num
 /** Draws a cached sign with its panel's top-left at (x, y); `flicker` seeds an occasional blink-off. */
 function drawNeonSign(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string, vertical: boolean, fontPx: number, flicker: number) {
   // About one sign in six has a dodgy tube that cuts out now and then
-  if (flicker < 0.16 && Math.sin(performance.now() / 70 + flicker * 999) > 0.93) return;
+  if (flicker < 0.16 && Math.sin(sceneTimeMs() / 70 + flicker * 999) > 0.93) return;
   const sign = getNeonSign(text, color, vertical, fontPx);
   const glowPad = 6;
   ctx.drawImage(sign, x - glowPad, y - glowPad, sign.width / SIGN_SCALE, sign.height / SIGN_SCALE);
@@ -92,7 +93,7 @@ function drawNeonSign(ctx: CanvasRenderingContext2D, x: number, y: number, text:
 
 /** Blinking red aviation light on a rooftop or mast. */
 function aviationLight(ctx: CanvasRenderingContext2D, x: number, y: number, seed: number) {
-  const on = Math.floor(performance.now() / 700 + seed) % 2 === 0;
+  const on = Math.floor(sceneTimeMs() / 700 + seed) % 2 === 0;
   ctx.fillStyle = on ? "#ff3a3a" : "#5a1a1a";
   ctx.beginPath();
   ctx.arc(x, y, 1.4, 0, Math.PI * 2);
@@ -161,7 +162,7 @@ function skylineBlock(i: number): Float32Array {
  * off, and a distant skyline of lit windows; the last two scroll at slow parallax.
  */
 export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, offset: number) {
-  const t = performance.now() / 1000;
+  const t = sceneTimeMs() / 1000;
   const viewW = view.right - view.left;
   const skyTop = Math.min(0, view.top);
   // Fade alpha set by drawBackground across a biome transition; every opacity here scales it
@@ -444,7 +445,7 @@ function drawIzakaya(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   drawSprite(ctx, "izakaya", x, y, w, h, drawIzakayaFront, { pad: IZAKAYA_EAVES });
 
   // Red lanterns, gently swaying.
-  const sway = Math.sin(performance.now() / 800 + seed) * 0.8;
+  const sway = Math.sin(sceneTimeMs() / 800 + seed) * 0.8;
   for (const fx of [0.12, 0.32, 0.96]) {
     const lx = x + w * fx + sway;
     const ly = y + h * 0.3;
@@ -704,7 +705,7 @@ const SCREEN_LINES = ["東京", "TOKYO", "♪ ♪ ♪", "ラーメン"];
 
 /** A corner building with a huge video screen cycling colour and text (Shibuya-style). */
 function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, wall: string, seed: number) {
-  const t = performance.now() / 1000;
+  const t = sceneTimeMs() / 1000;
   ctx.save();
   ctx.fillStyle = wall;
   ctx.fillRect(x, y, w, h);
@@ -784,7 +785,7 @@ function drawTrainViaduct(ctx: CanvasRenderingContext2D, x: number, y: number, w
   const carW = 58;
   const trainW = carW * 5;
   const period = 9;
-  const t = (performance.now() / 1000) % period;
+  const t = (sceneTimeMs() / 1000) % period;
   const travel = (w + trainW * 2) * (t / (period * 0.6));
   if (t < period * 0.6) {
     const tx = x + w + trainW - travel;
@@ -852,7 +853,7 @@ function drawJapanFlag(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.fill();
   const fw = w * 1.4;
   const fh = h * 0.3;
-  const t = performance.now() / 300;
+  const t = sceneTimeMs() / 300;
   const wave = (fx: number) => Math.sin(t + fx * 5) * 1.3 * fx;
   ctx.fillStyle = "#f6f6f8";
   ctx.beginPath();

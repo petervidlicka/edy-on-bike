@@ -1,5 +1,6 @@
 import { ObstacleInstance, ObstacleType } from "../../types";
 import type { EnvironmentPalette } from "../../environments/types";
+import { setSceneTimeMs } from "../sceneClock";
 
 import {
   drawRock, drawSmallTree, drawTallTree, drawGiantTree,
@@ -34,7 +35,13 @@ const ONCOMING_VEHICLES: ReadonlySet<ObstacleType> = new Set([
   ObstacleType.PORSCHE_911, ObstacleType.KEI_CAR, ObstacleType.KEI_TRUCK, ObstacleType.JAPAN_TAXI,
 ]);
 
-export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette) {
+/**
+ * Draws one obstacle at its world position, mirrored if it is oncoming traffic.
+ * @param nowMs - Scene clock (engine time that stops while paused) for animated details
+ *   such as blinking lamps and steam.
+ */
+export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleInstance, palette: EnvironmentPalette, nowMs = 0) {
+  setSceneTimeMs(nowMs);
   if (!ONCOMING_VEHICLES.has(obstacle.type)) {
     drawObstacleArt(ctx, obstacle, palette);
     return;

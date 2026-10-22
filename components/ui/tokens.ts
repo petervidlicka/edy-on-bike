@@ -46,6 +46,18 @@ export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 /** Button height, and the smallest tappable size for anything else. */
 export const size = { control: 48, minTarget: 44 } as const;
 
+/**
+ * Corner offsets for fixed HUD elements that clear the notch and rounded corners: the app
+ * draws edge to edge (viewportFit "cover", status bar over the web view), so landscape
+ * iPhones need the insets. Use these for anything pinned to a screen corner.
+ */
+export const safeInset = {
+  top: "calc(1rem + env(safe-area-inset-top, 0px))",
+  right: "calc(1.5rem + env(safe-area-inset-right, 0px))",
+  bottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))",
+  left: "calc(1.5rem + env(safe-area-inset-left, 0px))",
+} as const;
+
 const blur = "blur(24px) saturate(180%)";
 
 /** The frosted-glass surface behind every menu panel and HUD chip. */

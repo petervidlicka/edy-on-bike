@@ -1,6 +1,18 @@
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
 import { DUBAI_OBSTACLE_COLORS } from "../../environments/obstacleColors";
+import { boxMapper, contactShadow, drawSprite, drawCachedText } from "../drawHelpers";
+
+/** x fractions of the Land Cruiser's roof-rack bars. */
+const CRUISER_RACK_X = [0.13, 0.33, 0.51];
+/** x fractions of the G-Class door hinges. */
+const G_CLASS_HINGE_X = [0.13, 0.32, 0.5];
+/** y fractions of the Ferrari's twin tail lamps. */
+const FERRARI_LAMP_Y = [0.33, 0.43];
+/** x fractions of the convertible's seat backs. */
+const CONVERTIBLE_SEAT_X = [0.33, 0.45];
+/** x fractions of the Porsche's front-wing louvres. */
+const PORSCHE_LOUVRE_X = [0.75, 0.765, 0.78];
 
 // --- Dubai biome obstacle draw functions ---
 
@@ -9,17 +21,13 @@ export function drawCamel(ctx: CanvasRenderingContext2D, x: number, y: number, w
   const bodyColor = palette.obstacle.camel ?? DUBAI_OBSTACLE_COLORS.camel;
   const legColor = palette.obstacle.camelLeg ?? DUBAI_OBSTACLE_COLORS.camelLeg;
   const saddleColor = palette.obstacle.camelSaddle ?? DUBAI_OBSTACLE_COLORS.camelSaddle;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
 
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  // Contact shadow.
-  ctx.fillStyle = "rgba(0,0,0,0.15)";
-  ctx.beginPath();
-  ctx.ellipse(x + w * 0.47, y + h - 0.5, w * 0.36, 1.5, 0, 0, Math.PI * 2);
-  ctx.fill();
+  contactShadow(ctx, x + w * 0.47, y + h, w * 0.36, 1.5, "rgba(0,0,0,0.15)");
 
   // Legs: thigh into a knobbly knee, then a thin cannon bone and a splayed foot pad.
   const leg = (top: [number, number], knee: [number, number], foot: [number, number], color: string, width: number) => {
@@ -198,7 +206,7 @@ export function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: num
   for (let i = 0; i < 3; i++) ctx.fillRect(x + w * 0.97, y + h * (0.53 + i * 0.05), w * 0.03, 0.9);
   ctx.fillStyle = "#555555";
   ctx.fillRect(x + w * 0.1, y + h * 0.01, w * 0.44, 1.4);
-  for (const fx of [0.13, 0.33, 0.51]) ctx.fillRect(x + w * fx, y + h * 0.01, 1.2, h * 0.04);
+  for (const fx of CRUISER_RACK_X) ctx.fillRect(x + w * fx, y + h * 0.01, 1.2, h * 0.04);
   // Side step.
   ctx.fillStyle = "#3f3f3f";
   ctx.fillRect(x + w * 0.3, y + h * 0.8, w * 0.38, 1.6);
@@ -247,7 +255,7 @@ export function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.fillStyle = "#f0a040";
   ctx.fillRect(x + w * 0.9, y + h * 0.37, w * 0.04, h * 0.035);
   ctx.fillStyle = pinkDark;
-  for (const fx of [0.13, 0.32, 0.5]) {
+  for (const fx of G_CLASS_HINGE_X) {
     ctx.fillRect(x + w * fx, y + h * 0.44, 1.3, 2);
     ctx.fillRect(x + w * fx, y + h * 0.62, 1.3, 2);
   }
@@ -396,11 +404,7 @@ export function drawDubaiChocolate(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fill();
 
   // "DUBAI" label
-  ctx.fillStyle = wrapper;
-  ctx.font = "bold 10px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("DUBAI", x + w * 0.55, y + h * 0.5);
+  drawCachedText(ctx, { text: "DUBAI", font: "bold 10px sans-serif", color: wrapper }, x + w * 0.55, y + h * 0.5);
 
   // Outline
   ctx.strokeStyle = chocDark;
@@ -449,11 +453,34 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(x + 2, y + 2, w - 4, signH - 4);
 
-  // --- Ad interior scene ---
-  const adX = x + 4;
-  const adY = y + 4;
-  const adW = w - 8; // ~132
-  const adH = signH - 8; // ~42
+  // --- Ad interior scene: a few hundred fills and three lines of text, all fixed, so
+  // it is rasterised once and blitted ---
+  drawSprite(ctx, "dubai-ad", x + 4, y + 4, w - 8, signH - 8, drawBillboardAd);
+
+  // --- Sign panel metal frame (on top of everything) ---
+  ctx.strokeStyle = frameColor;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 1, y + 1, w - 2, signH - 2);
+  // Inner frame line
+  ctx.strokeStyle = "#b8b8b8";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 3, y + 3, w - 6, signH - 6);
+}
+
+/** Skyscraper towers in the billboard ad, as fractions of the ad box. */
+const BILLBOARD_TOWERS = [
+  { cx: 0.15, tw: 0.08, th: 0.5, color: "#b8d0e0" },
+  { cx: 0.32, tw: 0.06, th: 0.55, color: "#c8d8e8" },
+  { cx: 0.68, tw: 0.07, th: 0.48, color: "#a8c0d0" },
+  { cx: 0.82, tw: 0.05, th: 0.42, color: "#c0d0e0" },
+];
+/** Palm positions in the billboard ad, as fractions of the ad width. */
+const BILLBOARD_PALMS = [0.22, 0.55, 0.88];
+
+/** The "Dubai Horizon" ad artwork in local space (ad box at the origin, ~132×42). */
+function drawBillboardAd(ctx: CanvasRenderingContext2D, adW: number, adH: number) {
+  const adX = 0;
+  const adY = 0;
 
   // Sky gradient (teal-blue)
   const skyGrad = ctx.createLinearGradient(adX, adY, adX, adY + adH * 0.65);
@@ -483,13 +510,7 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fillRect(adX, adY + adH * 0.68, adW, adH * 0.32);
 
   // --- Skyscrapers (4 simplified towers) ---
-  const towers = [
-    { cx: 0.15, tw: 0.08, th: 0.5, color: "#b8d0e0" },
-    { cx: 0.32, tw: 0.06, th: 0.55, color: "#c8d8e8" },
-    { cx: 0.68, tw: 0.07, th: 0.48, color: "#a8c0d0" },
-    { cx: 0.82, tw: 0.05, th: 0.42, color: "#c0d0e0" },
-  ];
-  for (const t of towers) {
+  for (const t of BILLBOARD_TOWERS) {
     const tx = adX + adW * t.cx - (adW * t.tw) / 2;
     const ty = adY + adH * (0.55 - t.th);
     const ttw = adW * t.tw;
@@ -516,8 +537,7 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fill();
 
   // --- Palm tree silhouettes (3 palms) ---
-  const palmPositions = [0.22, 0.55, 0.88];
-  for (const px of palmPositions) {
+  for (const px of BILLBOARD_PALMS) {
     const palmX = adX + adW * px;
     const palmBase = adY + adH * 0.62;
     const palmTop = adY + adH * 0.3;
@@ -619,19 +639,6 @@ export function drawDubaiBillboard(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText("COMING SOON", adX + adW - 17, adY + adH - 5);
-
-  // --- Sign panel metal frame (on top of everything) ---
-  ctx.strokeStyle = frameColor;
-  ctx.lineWidth = 3;
-  ctx.strokeRect(x + 1, y + 1, w - 2, signH - 2);
-  // Inner frame line
-  ctx.strokeStyle = "#b8b8b8";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 3, y + 3, w - 6, signH - 6);
-
-  // Reset text alignment
-  ctx.textAlign = "start";
-  ctx.textBaseline = "alphabetic";
 }
 
 const LAMBORGHINI_HURACAN_SHAPE: VehicleShape = {
@@ -659,7 +666,7 @@ export function drawLamborghiniHuracan(ctx: CanvasRenderingContext2D, x: number,
   const c = palette.obstacle;
   const green = c.lamboGreen ?? DUBAI_OBSTACLE_COLORS.lamboGreen;
   const greenDark = c.lamboGreenDark ?? DUBAI_OBSTACLE_COLORS.lamboGreenDark;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
   drawVehicle(ctx, x, y, w, h, c, LAMBORGHINI_HURACAN_SHAPE, {
     body: green,
     bodyDark: greenDark,
@@ -744,7 +751,7 @@ export function drawFerrari458(ctx: CanvasRenderingContext2D, x: number, y: numb
   const c = palette.obstacle;
   const red = c.ferrariRed ?? DUBAI_OBSTACLE_COLORS.ferrariRed;
   const redDark = c.ferrariRedDark ?? DUBAI_OBSTACLE_COLORS.ferrariRedDark;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
   drawVehicle(ctx, x, y, w, h, c, FERRARI_458_SHAPE, {
     body: red,
     bodyDark: redDark,
@@ -756,7 +763,7 @@ export function drawFerrari458(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.save();
   // Round twin tail lamps on the rear face.
   ctx.fillStyle = c.carTaillight;
-  for (const fy of [0.33, 0.43]) {
+  for (const fy of FERRARI_LAMP_Y) {
     ctx.beginPath();
     ctx.arc(...P(0.012, fy), h * 0.045, 0, Math.PI * 2);
     ctx.fill();
@@ -815,12 +822,12 @@ export function drawConvertible(ctx: CanvasRenderingContext2D, x: number, y: num
   const c = palette.obstacle;
   const body = c.convertible ?? DUBAI_OBSTACLE_COLORS.convertible;
   const bodyDark = c.convertibleDark ?? DUBAI_OBSTACLE_COLORS.convertibleDark;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
 
   // Seat backs sit in the cockpit, behind the body side.
   ctx.save();
   ctx.fillStyle = "#b07a4a";
-  for (const fx of [0.33, 0.45]) {
+  for (const fx of CONVERTIBLE_SEAT_X) {
     ctx.beginPath();
     ctx.ellipse(...P(fx, 0.34), w * 0.035, h * 0.13, -0.15, 0, Math.PI * 2);
     ctx.fill();
@@ -879,7 +886,7 @@ const ROLLS_ROYCE_PHANTOM_SHAPE: VehicleShape = {
  */
 export function drawRollsRoycePhantom(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
   drawVehicle(ctx, x, y, w, h, c, ROLLS_ROYCE_PHANTOM_SHAPE, {
     body: "#1b1c21",
     bodyDark: "#0f1013",
@@ -936,7 +943,7 @@ export function drawPorsche911(ctx: CanvasRenderingContext2D, x: number, y: numb
   const body = c.porsche ?? DUBAI_OBSTACLE_COLORS.porsche;
   const bodyDark = c.porscheDark ?? DUBAI_OBSTACLE_COLORS.porscheDark;
   const carbon = "#1b1f22";
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
 
   // Wing uprights behind the body, from the engine deck up to the wing.
   ctx.save();
@@ -983,7 +990,7 @@ export function drawPorsche911(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.strokeStyle = "#151a1d";
   ctx.lineWidth = 0.7;
   ctx.beginPath();
-  for (const fx of [0.75, 0.765, 0.78]) {
+  for (const fx of PORSCHE_LOUVRE_X) {
     ctx.moveTo(...P(fx, 0.36));
     ctx.lineTo(...P(fx + 0.008, 0.4));
   }

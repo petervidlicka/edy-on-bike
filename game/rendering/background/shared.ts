@@ -3,16 +3,26 @@ import type { EnvironmentPalette, BackgroundDrawFn, SkylinePass } from "../../en
 import { getTotalLayerWidth } from "../../Background";
 import type { ViewBounds } from "../../Camera";
 import { decodePedestrianVariant, SKIN_TONES, HAIR_COLORS } from "../../environments/pedestrians";
+import { cachedGradient, fillTransformed } from "../drawHelpers";
+import { setSceneTimeMs } from "../sceneClock";
+
+/** x fractions of a walking figure's two shoes. */
+const SHOE_X = [-0.26, 0.22];
 
 // --- Sky ---
 
 function drawSky(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, palette: EnvironmentPalette) {
+  // One unit gradient per colour pair (the pair steps through a biome blend), stretched to the ground
+  const gradient = cachedGradient(ctx, `sky|${palette.sky}|${palette.skyBottom}`, () => {
+    const unit = ctx.createLinearGradient(0, 0, 0, 1);
+    unit.addColorStop(0, palette.sky);
+    unit.addColorStop(1, palette.skyBottom);
+    return unit;
+  });
   // Gradient stays pinned to the unzoomed sky; above it (zoomed out) the top colour just continues
-  const gradient = ctx.createLinearGradient(0, 0, 0, groundY);
-  gradient.addColorStop(0, palette.sky);
-  gradient.addColorStop(1, palette.skyBottom);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(view.left, view.top, view.right - view.left, groundY - view.top);
+  ctx.beginPath();
+  ctx.rect(view.left, view.top, view.right - view.left, groundY - view.top);
+  fillTransformed(ctx, gradient, 0, 0, 1, groundY);
 }
 
 // --- Clouds ---
@@ -67,25 +77,47 @@ export interface FadingCloudLayer {
   alpha: number;
 }
 
+/** Shared empty pass list, so a scene without skylines allocates nothing per frame. */
+const NO_PASSES: readonly SkylinePass[] = [];
+
+/** A wrapping layer is checked at its natural position and one layer-width either side. */
+const WRAP_SIGNS = [0, 1, -1];
+
+/** Everything drawBackground needs for one frame of scenery. */
+export interface BackgroundScene {
+  /** [clouds, buildings, road] — see createBackgroundLayers. */
+  layers: BackgroundLayer[];
+  canvasW: number;
+  /** The world rectangle on screen; wider than the canvas while the big-air camera is zoomed out. */
+  view: ViewBounds;
+  groundY: number;
+  palette: EnvironmentPalette;
+  /** Building-layer element type → renderer. */
+  drawers: Record<string, BackgroundDrawFn>;
+  /** Far scenery bands behind the clouds, each with its fade. */
+  skylines?: readonly SkylinePass[];
+  /** Passes over the road (wet-road reflections), each with its fade. */
+  roadOverlays?: readonly SkylinePass[];
+  /** Opacity of the current cloud layer (below 1 while it fades in on a biome change). */
+  cloudAlpha?: number;
+  /** The previous biome's clouds while they fade out. */
+  outgoingClouds?: FadingCloudLayer | null;
+  /** Scene clock (engine time that stops while paused) for animated scenery. */
+  nowMs?: number;
+}
+
 /**
- * Draws sky, parallax layers and road covering `view` — the world rectangle on screen,
- * which grows beyond the canvas while the big-air camera is zoomed out.
- * @param cloudAlpha - Opacity of the current cloud layer (below 1 while it fades in on a biome change).
- * @param outgoingClouds - The previous biome's clouds while they fade out, or null.
+ * Draws sky, parallax layers and road covering `scene.view`.
+ * @example
+ * drawBackground(ctx, { layers, canvasW, view, groundY, palette, drawers, nowMs });
  */
-export function drawBackground(
-  ctx: CanvasRenderingContext2D,
-  layers: BackgroundLayer[],
-  canvasW: number,
-  view: ViewBounds,
-  groundY: number,
-  palette: EnvironmentPalette,
-  drawers: Record<string, BackgroundDrawFn>,
-  skylines: readonly SkylinePass[] = [],
-  roadOverlays: readonly SkylinePass[] = [],
-  cloudAlpha = 1,
-  outgoingClouds: FadingCloudLayer | null = null,
-) {
+export function drawBackground(ctx: CanvasRenderingContext2D, scene: BackgroundScene) {
+  const { layers, canvasW, view, groundY, palette, drawers } = scene;
+  const skylines = scene.skylines ?? NO_PASSES;
+  const roadOverlays = scene.roadOverlays ?? NO_PASSES;
+  const cloudAlpha = scene.cloudAlpha ?? 1;
+  const outgoingClouds = scene.outgoingClouds ?? null;
+  setSceneTimeMs(scene.nowMs ?? 0);
   drawSky(ctx, view, groundY, palette);
 
   // Far scenery (mountain ranges) sits behind the clouds and scrolls with them
@@ -107,13 +139,15 @@ export function drawBackground(
   const buildingWidth = getTotalLayerWidth(buildingLayer, canvasW);
   const buildingNorm = buildingLayer.offset % buildingWidth;
   // Each element is checked at its natural scroll position and both wrapped copies
-  const buildingShifts = [0, buildingWidth, -buildingWidth];
   for (const el of buildingLayer.elements) {
-    for (const shift of buildingShifts) {
-      const drawX = el.x - buildingNorm + shift;
+    for (const sign of WRAP_SIGNS) {
+      const drawX = el.x - buildingNorm + sign * buildingWidth;
       if (drawX + el.width < view.left || drawX > view.right) continue;
       const drawFn = drawers[el.type];
       if (drawFn) {
+        // BackgroundDrawFn's last two parameters are overloaded by element type: `roofColor`
+        // is a pedestrian's trouser colour or a chalet's timber, and `variant` is a drawing
+        // variant for houses but a seed for Tokyo buildings (see environments/types.ts).
         drawFn(ctx, drawX, el.y, el.width, el.height, el.color, palette, el.roofColor, el.variant);
       }
     }
@@ -144,12 +178,11 @@ function drawCloudLayer(
   if (alpha <= 0) return;
   const width = getTotalLayerWidth(layer, canvasW);
   const norm = layer.offset % width;
-  const shifts = [0, width, -width];
   ctx.save();
   ctx.globalAlpha = alpha;
   for (const el of layer.elements) {
-    for (const shift of shifts) {
-      const drawX = el.x - norm + shift;
+    for (const sign of WRAP_SIGNS) {
+      const drawX = el.x - norm + sign * width;
       if (drawX + el.width < view.left || drawX > view.right) continue;
       drawCloud(ctx, drawX, el.y, el.width, el.height, color);
     }
@@ -216,7 +249,7 @@ export function drawWalkingPerson(
 
   // Shoes.
   ctx.fillStyle = "#2a2a2a";
-  for (const fx of [-0.26, 0.22]) {
+  for (const fx of SHOE_X) {
     ctx.beginPath();
     ctx.ellipse(cx + w * fx + 1, footY - 0.6, limb * 0.75, limb * 0.4, 0, 0, Math.PI * 2);
     ctx.fill();

@@ -103,6 +103,8 @@ export class Engine {
   private score: number = 0;
   private distance: number = 0;
   private elapsedMs: number = 0;
+  /** Scene clock for animated scenery: advances only while the loop runs, so it freezes on pause. */
+  private sceneMs: number = 0;
   private lastTime: number = 0;
   private speedTimer: number = 0;
   private distanceSinceLastObstacle: number = 0;
@@ -322,6 +324,7 @@ export class Engine {
     if (this.lastTime === 0) this.lastTime = timestamp;
     const rawDt = timestamp - this.lastTime;
     this.lastTime = timestamp;
+    this.sceneMs += rawDt;
     // Normalize to 60fps units — dt=1 at 60fps, capped to avoid spiral on tab switch
     const dt = Math.min(rawDt / FRAME_MS, 3);
 
@@ -632,13 +635,13 @@ export class Engine {
     const view = getViewBounds(this.camera.zoom, canvasW, canvasH, groundY);
     ctx.save();
     this.camera.apply(ctx, canvasW, groundY);
-    this.scenery.drawWorld(ctx, view, palette, this.envManager.getSkylines(), this.envManager.getRoadOverlays(), biomeFade);
+    this.scenery.drawWorld(ctx, view, palette, this.envManager.getSkylines(), this.envManager.getRoadOverlays(), biomeFade, this.sceneMs);
     ctx.restore();
     this.scenery.drawWeather(ctx, biomeFade);
     ctx.save();
     this.camera.apply(ctx, canvasW, groundY);
     for (const obs of this.obstacles) {
-      drawObstacle(ctx, obs, palette);
+      drawObstacle(ctx, obs, palette, this.sceneMs);
     }
 
     // Draw ghost players (multiplayer)

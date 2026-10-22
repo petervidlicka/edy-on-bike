@@ -1,6 +1,7 @@
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
 import { drawCachedText, type TextLabel } from "../drawHelpers";
+import { CONTAINER_RAMP } from "../../rampGeometry";
 
 // --- Suburban biome obstacle draw functions ---
 
@@ -706,8 +707,8 @@ export function drawContainerWithRamp(ctx: CanvasRenderingContext2D, x: number, 
 
   // Draw a curved ramp on top of the right end (last 75px of width)
   const c = palette.obstacle;
-  const rampW = 75;
-  const rampH = 36;
+  const rampW = CONTAINER_RAMP.width;
+  const rampH = CONTAINER_RAMP.height;
   const rampX = x + w - rampW;
   const rampY = y - rampH;
 

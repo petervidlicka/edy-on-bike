@@ -31,13 +31,9 @@ export type {
   CrashVariantData,
   CrashVariantId,
 } from "./types";
+import { CRASH_FADE_OUT_S } from "./types";
 
-/**
- * Seconds at the end of a crash during which everything fades out. Every variant's
- * duration includes it. `FADE_OUT_S` in rendering/CrashRenderer.ts draws the fade and
- * must stay equal to this.
- */
-export const CRASH_FADE_OUT_S = 0.3;
+export { CRASH_FADE_OUT_S } from "./types";
 
 /**
  * A variant as the framework drives it, with its data type erased: `CrashVariant<D>`

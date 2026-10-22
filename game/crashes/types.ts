@@ -8,6 +8,13 @@ import type { ObstacleInstance, PlayerState, SkinDefinition } from "../types";
 import type { EnvironmentPalette } from "../environments/types";
 
 /**
+ * Seconds at the end of a crash during which everything fades out. Every variant's
+ * duration includes it. Lives here (a leaf module) so both the crash framework and
+ * rendering/CrashRenderer.ts read the one value without an import cycle.
+ */
+export const CRASH_FADE_OUT_S = 0.3;
+
+/**
  * Why the rider crashed. Variants are picked from this, so every `startCrash` call site
  * says what happened instead of the engine guessing afterwards.
  * - `obstacle`: ran into (or under-jumped) an obstacle; `obstacle` is the one that was hit.

@@ -6,31 +6,9 @@
  * isn't available). The native apps are locked to landscape and already fullscreen.
  */
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Capacitor } from "@capacitor/core";
-
-// --- Fullscreen helpers ---
-
-function getFullscreenElement(): Element | null {
-  return (
-    document.fullscreenElement ||
-    (document as unknown as { webkitFullscreenElement: Element | null })
-      .webkitFullscreenElement
-  );
-}
-
-/**
- * True when the game already fills the screen without a browser UI: the native Capacitor
- * app, an installed PWA, or a Home Screen launch. No fullscreen hint is shown then.
- */
-function isStandaloneMode(): boolean {
-  if (Capacitor.isNativePlatform()) return true;
-  if (window.matchMedia("(display-mode: standalone)").matches) return true;
-  if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
-  // iOS Safari standalone detection
-  if ((navigator as unknown as { standalone?: boolean }).standalone === true)
-    return true;
-  return false;
-}
+import {
+  getFullscreenElement, isIOS, isPortrait, isPortraitPhone, isStandalone, isTouchDevice, subscribeOrientation,
+} from "@/lib/platform";
 
 type PromptMode = "hidden" | "fullscreen" | "install";
 
@@ -96,12 +74,9 @@ export function OrientationGuard({
       }
 
       // Try webkit-prefixed API
-      const webkit = el as unknown as {
-        webkitRequestFullscreen?: () => void;
-      };
-      if (webkit.webkitRequestFullscreen) {
+      if (el.webkitRequestFullscreen) {
         try {
-          webkit.webkitRequestFullscreen();
+          el.webkitRequestFullscreen();
           // No promise — rely on fullscreenchange event to hide prompt
         } catch {
           showTimedPrompt("install");
@@ -117,16 +92,10 @@ export function OrientationGuard({
 
   useEffect(() => {
     const check = () => {
-      const portrait = window.matchMedia("(orientation: portrait)").matches;
-      const touch = window.matchMedia("(pointer: coarse)").matches;
-      setShowOverlay(portrait && touch);
+      // Same test as usePauseOnHidden's orientation pause, so overlay and pause agree
+      setShowOverlay(isPortraitPhone());
 
-      if (
-        !portrait &&
-        touch &&
-        !getFullscreenElement() &&
-        !isStandaloneMode()
-      ) {
+      if (!isPortrait() && isTouchDevice() && !getFullscreenElement() && !isStandalone()) {
         showTimedPrompt("fullscreen");
       } else {
         setPrompt("hidden");
@@ -135,9 +104,7 @@ export function OrientationGuard({
     };
 
     check();
-    const mq = window.matchMedia("(orientation: portrait)");
-    mq.addEventListener("change", check);
-    window.addEventListener("orientationchange", check);
+    const unsubscribeOrientation = subscribeOrientation(check);
 
     const onFsChange = () => {
       if (getFullscreenElement()) {
@@ -149,18 +116,12 @@ export function OrientationGuard({
     document.addEventListener("webkitfullscreenchange", onFsChange);
 
     return () => {
-      mq.removeEventListener("change", check);
-      window.removeEventListener("orientationchange", check);
+      unsubscribeOrientation();
       document.removeEventListener("fullscreenchange", onFsChange);
       document.removeEventListener("webkitfullscreenchange", onFsChange);
       clearDismissTimer();
     };
   }, [clearDismissTimer, showTimedPrompt]);
-
-  const isIOS =
-    typeof navigator !== "undefined" &&
-    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
 
   return (
     <div ref={containerRef}>
@@ -225,7 +186,7 @@ export function OrientationGuard({
             maxWidth: "90vw",
           }}
         >
-          {isIOS ? (
+          {isIOS() ? (
             <>
               Tap{" "}
               <svg

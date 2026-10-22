@@ -4,7 +4,7 @@
  * which only Android browsers implement. Everything here is fire-and-forget so the
  * game loop never waits on, or breaks because of, a vibration.
  */
-import { Capacitor } from "@capacitor/core";
+import { isNative, prefersCoarsePointer } from "./platform";
 
 /** The moments the game can buzz for. */
 export type HapticKind = "tap" | "land" | "bigLand" | "comboUp" | "crash" | "success";
@@ -51,8 +51,7 @@ function warnOnce(error: unknown): void {
 export function canVibrate(): boolean {
   if (typeof window === "undefined") return false;
   // Desktop Chrome exposes navigator.vibrate too, but has nothing to vibrate; require a touch device
-  return Capacitor.isNativePlatform()
-    || (typeof navigator.vibrate === "function" && window.matchMedia("(pointer: coarse)").matches);
+  return isNative() || (typeof navigator.vibrate === "function" && prefersCoarsePointer());
 }
 
 /**
@@ -83,7 +82,7 @@ async function playNative(kind: HapticKind): Promise<void> {
 export function haptic(kind: HapticKind): void {
   if (!enabled || typeof window === "undefined") return;
   try {
-    if (Capacitor.isNativePlatform()) {
+    if (isNative()) {
       playNative(kind).catch(warnOnce);
     } else if (typeof navigator.vibrate === "function" && navigator.userActivation?.hasBeenActive !== false) {
       // Chrome refuses (and logs an error) until the page has had a real tap

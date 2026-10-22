@@ -217,13 +217,20 @@ export function createComboSummaryText(
   return { text, x, y: playerY - 70, opacity: 1, velocityY: -0.7, color: COMBO_SUMMARY_COLOR, size: COMBO_SUMMARY_SIZE };
 }
 
-/** Advance floating texts upward and fade out. Returns only still-visible texts. */
+/**
+ * Advance floating texts upward and fade out, dropping the ones that have faded.
+ * Compacts `texts` in place (no per-frame array allocation) and returns the same array.
+ */
 export function updateFloatingTexts(texts: FloatingText[], dt: number): FloatingText[] {
-  for (const ft of texts) {
+  let kept = 0;
+  for (let i = 0; i < texts.length; i++) {
+    const ft = texts[i];
     ft.y += ft.velocityY * dt;
     ft.opacity -= 0.01333 * dt;
+    if (ft.opacity > 0) texts[kept++] = ft;
   }
-  return texts.filter((ft) => ft.opacity > 0);
+  texts.length = kept;
+  return texts;
 }
 
 export interface TrickContext {

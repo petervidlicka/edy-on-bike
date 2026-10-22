@@ -25,6 +25,7 @@ import { BiomeScenery } from "./BiomeScenery";
 import {
   drawPlayer, drawObstacle, drawFloatingText, drawAmbulance, drawReviveFlash, resolveDisplayFont,
 } from "./rendering";
+import type { FloatingTextStyle } from "./rendering/FloatingTextRenderer";
 import { spawnObstacle, createObstacle, nextSpawnGap, moveObstacle, spawnGapPadding } from "./Obstacle";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
@@ -104,9 +105,22 @@ export class Engine {
   private scoring: TrickScoring;
   /** Canvas font stack for the combo meter and pop words, resolved on first use (needs the mounted DOM). */
   private displayFont: string | null = null;
+  /** Resolves `displayFont` lazily; one function for the whole run, so render never allocates a closure. */
+  private readonly getDisplayFont = (): string => (this.displayFont ??= resolveDisplayFont(this.canvas));
+  /** Reused for every floating text drawn, instead of a fresh style object per text per frame. */
+  private readonly floatingTextStyle: FloatingTextStyle = {};
   private canvasW: number = 0;
   private canvasH: number = 0;
   private groundY: number = 0;
+  /**
+   * The world rectangle the camera can show when fully zoomed out. Spawning, culling and
+   * scenery all work to it so nothing pops in or out; it only changes with the canvas size.
+   */
+  private widestView: ViewBounds = { left: 0, right: 0, top: 0, bottom: 0 };
+  /** Where a botched landing plants the rider: the road, or the top of the obstacle landed on. */
+  private landingSurfaceY = 0;
+  /** Trick landing hooks, built once; `player` is refreshed each frame since restart/resize replace it. */
+  private readonly trickCtx: TrickContext;
   private callbacks: EngineCallbacks;
   private sound = new SoundManager();
   /** The ambulance that may follow a crash, with the one-rescue-per-run rule and the IDDQD cheat. */
@@ -119,6 +133,8 @@ export class Engine {
   private nextDebugPadding = 0;
   private crashState = createCrashState();
   private rng: { random(): number } = { random: Math.random };
+  /** `rng.random` bound once, so spawning never allocates a bound function per draw. */
+  private readonly random: () => number;
   private multiplayer: MultiplayerAdapter | null = null;
   /** Zooms out for big air so the rider never leaves the screen. Render-only. */
   private camera = new Camera();
@@ -130,10 +146,16 @@ export class Engine {
     this.ctx = canvas.getContext("2d")!;
     this.callbacks = callbacks;
     if (options?.rng) this.rng = options.rng;
+    this.random = this.rng.random.bind(this.rng);
     if (options?.multiplayer) {
       this.multiplayer = options.multiplayer;
       this.boost = new TrickBoost();
     }
+    this.trickCtx = {
+      player: this.player,
+      onCrash: (underRotated) => this.startCrash({ kind: "badLanding", underRotated, surfaceY: this.landingSurfaceY }),
+      onAwardBonus: (label, bonus, sketchy) => this.scoring.award(label, bonus, sketchy),
+    };
     // Getters, not values: the player and canvas size are replaced on restart/resize
     this.scoring = new TrickScoring({
       player: () => this.player,
@@ -177,6 +199,7 @@ export class Engine {
     this.groundY = Math.floor(h * GROUND_RATIO);
     this.canvas.width = w;
     this.canvas.height = h;
+    this.widestView = getViewBounds(MIN_CAMERA_ZOOM, w, h, this.groundY);
     // Rebuilt for the new size; mid-transition it jumps straight to the incoming biome
     this.scenery.reset(this.envManager.getTargetEnvironment(), w, h, this.groundY);
     if (this.state !== GameState.RUNNING && this.state !== GameState.AMBULANCE) {
@@ -195,7 +218,7 @@ export class Engine {
   start(): void {
     if (this.state !== GameState.IDLE) return;
     this.state = GameState.RUNNING;
-    this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.rng.random.bind(this.rng));
+    this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.random);
     this.sound.startMusic();
     // First user gesture: the one place the voice clips may be fetched and decoded
     this.sound.voice.preload();
@@ -309,7 +332,7 @@ export class Engine {
     }
 
     // Spawning, culling and scenery all work to the widest zoomed-out view, so nothing pops in or out on screen
-    const widestView = getViewBounds(MIN_CAMERA_ZOOM, this.canvasW, this.canvasH, this.groundY);
+    const widestView = this.widestView;
     this.progressBiomes(dt, widestView);
     this.progressSpeed(rawDt);
     this.addDistance(dt);
@@ -328,19 +351,15 @@ export class Engine {
     this.scenery.update(this.speed, dt, widestView.left);
 
     const FULL_FLIP = Math.PI * 2;
-    // Where a botched landing plants the rider: the road, or the top of the obstacle landed on
-    let landingSurfaceY = this.groundY;
-    const trickCtx: TrickContext = {
-      player: this.player,
-      onCrash: (underRotated) => this.startCrash({ kind: "badLanding", underRotated, surfaceY: landingSurfaceY }),
-      onAwardBonus: (label, bonus, sketchy) => this.scoring.award(label, bonus, sketchy)
-    };
+    const trickCtx = this.trickCtx;
+    trickCtx.player = this.player;
+    this.landingSurfaceY = this.groundY;
 
     // Trick landing checks — unified to support combos (pose + flip simultaneously)
     if (wasAirborne && this.player.isOnGround) {
       const hadFlip = wasBackflipping;
       const hadPose = this.player.activeTrick !== TrickType.NONE;
-      landingSurfaceY = Math.min(this.groundY, this.player.y + this.player.height);
+      this.landingSurfaceY = Math.min(this.groundY, this.player.y + this.player.height);
       if (processTrickLanding(trickCtx, hadFlip, hadPose, prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
     }
 
@@ -348,7 +367,7 @@ export class Engine {
     this.scoring.tick(dtMs, dt);
 
     // Update floating texts (float up + fade out)
-    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
+    updateFloatingTexts(this.floatingTexts, dt);
 
     this.updateObstacles(dt, widestView);
 
@@ -372,7 +391,7 @@ export class Engine {
           // Check trick landing on rideable (combo-aware)
           const landFlip = this.player.isBackflipping;
           const landPose = this.player.activeTrick !== TrickType.NONE;
-          landingSurfaceY = obs.y;
+          this.landingSurfaceY = obs.y;
           if (processTrickLanding(trickCtx, landFlip, landPose, this.player.backflipAngle, this.player.flipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
           this.player.ridingObstacle = obs;
           this.player.y = obs.y - this.player.height;
@@ -443,10 +462,15 @@ export class Engine {
 
   /** Moves obstacles, culls the ones left behind and spawns the next one when its gap is covered. */
   private updateObstacles(dt: number, widestView: ViewBounds): void {
-    for (const obs of this.obstacles) {
+    // Move, then compact in place (no per-frame array): keep what is still inside the widest view
+    const obstacles = this.obstacles;
+    let kept = 0;
+    for (let i = 0; i < obstacles.length; i++) {
+      const obs = obstacles[i];
       moveObstacle(obs, this.speed, dt, this.player.x);
+      if (obs.x + obs.width > widestView.left) obstacles[kept++] = obs;
     }
-    this.obstacles = this.obstacles.filter((obs) => obs.x + obs.width > widestView.left);
+    obstacles.length = kept;
 
     this.distanceSinceLastObstacle += this.speed * dt;
     const gap = this.debugSequence ? this.debugGap + this.nextDebugPadding : this.nextObstacleGap;
@@ -458,10 +482,9 @@ export class Engine {
       this.nextDebugPadding = spawnGapPadding(spawned);
       this.debugIndex++;
     } else {
-      const random = this.rng.random.bind(this.rng);
-      const spawned = spawnObstacle(widestView.right, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.player.x, random);
+      const spawned = spawnObstacle(widestView.right, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.player.x, this.random);
       this.obstacles.push(spawned);
-      this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, random) + spawnGapPadding(spawned);
+      this.nextObstacleGap = nextSpawnGap(this.speed, this.elapsedMs, this.random) + spawnGapPadding(spawned);
     }
     this.distanceSinceLastObstacle = 0;
   }
@@ -528,7 +551,7 @@ export class Engine {
   private updateAmbulance(dt: number, rawDt: number): void {
     if (!this.rescue.current) return;
 
-    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
+    updateFloatingTexts(this.floatingTexts, dt);
 
     // The crashed rider keeps wiggling while the ambulance drives up
     if (this.rescue.riderStillDown) tickCrashAnim(this.crashState, rawDt);
@@ -538,7 +561,7 @@ export class Engine {
 
   private updateCrash(dt: number, rawDt: number): void {
     // The pop word ("SPLAT!") has to keep floating and fading while the crash plays
-    this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
+    updateFloatingTexts(this.floatingTexts, dt);
     if (stepCrash(this.crashState, dt, rawDt, this.groundY)) {
       this.gameOver();
     }
@@ -605,14 +628,13 @@ export class Engine {
       this.scoring.drawSparks(ctx);
     }
 
+    const style = this.floatingTextStyle;
     for (const ft of this.floatingTexts) {
-      if (ft.pop) this.displayFont ??= resolveDisplayFont(this.canvas);
-      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color, ft.size, {
-        rotation: ft.rotation,
-        outline: ft.outline,
-        pop: ft.pop,
-        fontFamily: ft.pop ? this.displayFont ?? undefined : undefined,
-      });
+      style.rotation = ft.rotation;
+      style.outline = ft.outline;
+      style.pop = ft.pop;
+      style.fontFamily = ft.pop ? this.getDisplayFont() : undefined;
+      drawFloatingText(ctx, ft.text, ft.x, ft.y, ft.opacity, ft.color, ft.size, style);
     }
     ctx.restore();
 
@@ -633,7 +655,7 @@ export class Engine {
     }
 
     // Combo overlay in screen space, never shaken
-    this.scoring.drawOverlay(ctx, canvasW, canvasH, this.state === GameState.RUNNING, () => (this.displayFont ??= resolveDisplayFont(this.canvas)));
+    this.scoring.drawOverlay(ctx, canvasW, canvasH, this.state === GameState.RUNNING, this.getDisplayFont);
   }
 
   private buildSnapshot(): GhostSnapshot {

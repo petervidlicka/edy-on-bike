@@ -1,10 +1,11 @@
-import { INITIAL_SPEED } from "@/game/constants";
+import { memo } from "react";
 import { formatMultiplier } from "@/game/ComboChain";
+import type { EngineStats } from "@/hooks/engineStats";
 import type { TrickFeedbackData } from "@/hooks/useGameEngine";
 import { useCanVibrate } from "@/hooks/useHapticFeedback";
 import { useGamepadConnected } from "@/hooks/useGamepad";
+import { LiveHudChip } from "./LiveHudChip";
 import { GlassButton } from "./ui/GlassButton";
-import { HudChip } from "./ui/HudChip";
 import { color, font, glassSurfaceSmall, radius } from "./ui/tokens";
 
 /** Guards against browsers firing both onTouchStart and onClick. */
@@ -25,8 +26,8 @@ const TRICK_COLOR_CLEAN = color.success;
 const TRICK_COLOR_SKETCHY = color.caution;
 
 interface HUDProps {
-  score: number;
-  speed: number;
+  /** Live score and speed; only the score chip subscribes to them. */
+  stats: EngineStats;
   trickFeedback: TrickFeedbackData | null;
   musicMuted: boolean;
   sfxMuted: boolean;
@@ -184,9 +185,10 @@ function TrickButton({ arm, label, title, icon, onPress }: { arm: DpadArm; label
 
 /**
  * Music/SFX/vibration toggles, top left (vibration only where the device can vibrate). Extracted so the multiplayer race screen can reuse
- * them and append its own buttons (e.g. LEAVE) via children.
+ * them and append its own buttons (e.g. LEAVE) via children. Memoised: its props only change
+ * when a setting is toggled, so it must not re-render with the rest of the HUD.
  */
-export function AudioControls({
+export const AudioControls = memo(function AudioControls({
   musicMuted,
   sfxMuted,
   onToggleMusic,
@@ -244,7 +246,7 @@ export function AudioControls({
       {children}
     </div>
   );
-}
+});
 
 /** "Backflip +75 (×1.5)"-style feedback; renders nothing when there's no recent trick. */
 export function TrickFeedbackPopup({
@@ -276,8 +278,9 @@ export function TrickFeedbackPopup({
 /**
  * Touch D-pad for tricks (bottom right), shared by single-player and multiplayer.
  * Hidden while a gamepad is connected, since the controller's own D-pad does the job.
+ * Memoised: pass stable handlers and it never re-renders during a run.
  */
-export function TrickDpad({
+export const TrickDpad = memo(function TrickDpad({
   onBackflip,
   onFrontflip,
   onSuperman,
@@ -318,11 +321,54 @@ export function TrickDpad({
       <div />
     </div>
   );
-}
+});
 
-export function HUD({
-  score,
-  speed,
+/** Jump button, bottom left. Memoised like the D-pad; hidden while a gamepad's A button does the job. */
+const JumpButton = memo(function JumpButton({ onJump }: { onJump: () => void }) {
+  const hasGamepad = useGamepadConnected();
+  if (hasGamepad) return null;
+  return (
+    <button
+      onTouchStart={(e) => { e.preventDefault(); lastTouchTime = Date.now(); onJump(); }}
+      onClick={() => { if (Date.now() - lastTouchTime < 500) return; onJump(); }}
+      title="Jump (tap or space)"
+      aria-label="Jump"
+      style={{
+        ...glassSurfaceSmall,
+        position: "fixed",
+        bottom: SAFE.bottom,
+        left: SAFE.left,
+        width: "80px",
+        height: "80px",
+        borderRadius: "50%",
+        color: color.ink,
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "2px",
+        padding: 0,
+        fontFamily: font.ui,
+      }}
+    >
+      <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="6 15 12 9 18 15" />
+      </svg>
+      <span style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.08em", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
+    </button>
+  );
+});
+
+/**
+ * The in-run overlay: score chip, audio/pause controls, jump button and trick D-pad.
+ * Memoised, and every handler prop should be stable (created once from the engine ref),
+ * so a score tick re-renders the chip alone and a landed trick only the top-right column.
+ * @example
+ * <HUD stats={stats} trickFeedback={trickFeedback} onJump={handleJump} ... />
+ */
+export const HUD = memo(function HUD({
+  stats,
   trickFeedback,
   musicMuted,
   sfxMuted,
@@ -337,9 +383,6 @@ export function HUD({
   onSuperman,
   onNoHander,
 }: HUDProps) {
-  const multiplier = (speed / INITIAL_SPEED).toFixed(1);
-  const hasGamepad = useGamepadConnected();
-
   return (
     <>
       {/* Score + speed — top right */}
@@ -355,9 +398,8 @@ export function HUD({
           pointerEvents: "none",
         }}
       >
-        <HudChip
-          score={score}
-          multiplier={multiplier}
+        <LiveHudChip
+          stats={stats}
           accent={trickFeedback ? (trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN) : undefined}
         />
         <TrickFeedbackPopup trickFeedback={trickFeedback} />
@@ -378,36 +420,7 @@ export function HUD({
         )}
       </AudioControls>
 
-      {/* Jump button — bottom left; a connected gamepad's A button replaces it */}
-      {!hasGamepad && <button
-        onTouchStart={(e) => { e.preventDefault(); lastTouchTime = Date.now(); onJump(); }}
-        onClick={() => { if (Date.now() - lastTouchTime < 500) return; onJump(); }}
-        title="Jump (tap or space)"
-        aria-label="Jump"
-        style={{
-          ...glassSurfaceSmall,
-          position: "fixed",
-          bottom: SAFE.bottom,
-          left: SAFE.left,
-          width: "80px",
-          height: "80px",
-          borderRadius: "50%",
-          color: color.ink,
-          cursor: "pointer",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "2px",
-          padding: 0,
-          fontFamily: font.ui,
-        }}
-      >
-        <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 15 12 9 18 15" />
-        </svg>
-        <span style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.08em", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
-      </button>}
+      <JumpButton onJump={onJump} />
 
       <TrickDpad
         onBackflip={onBackflip}
@@ -417,4 +430,4 @@ export function HUD({
       />
     </>
   );
-}
+});

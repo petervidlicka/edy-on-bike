@@ -6,16 +6,15 @@
  * a waiting state once the local rider has crashed.
  */
 import { useRef, useEffect, useState } from "react";
-import { INITIAL_SPEED } from "@/game/constants";
 import { getSkinById } from "@/game/skins";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
 import { SeededRNG } from "@/game/multiplayer/SeededRNG";
 import { PlayerInfo } from "@/game/multiplayer/protocol";
 import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 import { AudioControls, TrickFeedbackPopup, TrickDpad } from "./HUD";
+import { LiveHudChip } from "./LiveHudChip";
 import { GlassButton } from "./ui/GlassButton";
 import { GlassPanel } from "./ui/GlassPanel";
-import { HudChip } from "./ui/HudChip";
 import { ScreenTitle } from "./ui/ScreenTitle";
 import { badge, color, font, formatScore, glassSurfaceSmall, radius, text } from "./ui/tokens";
 import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
@@ -54,7 +53,7 @@ export function MultiplayerGameCanvas({
   /** Local rider is out but others may still be racing — show a waiting state with a way out. */
   const [crashed, setCrashed] = useState(false);
   const { onGameEvent, vibrationOn, toggleVibration } = useHapticFeedback();
-  const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
+  const { engineRef, stats, finalScore, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
     useGameEngine(canvasRef, {
       // Engine already calls adapter.sendCrashed() in its gameOver() method
       onGameOver: () => setCrashed(true),
@@ -99,8 +98,6 @@ export function MultiplayerGameCanvas({
   useEngineInput(engineRef, canvasRef, { allowIdleStart: false });
 
   usePauseOnHidden(engineRef);
-
-  const multiplier = (speed / INITIAL_SPEED).toFixed(1);
 
   return (
     <>
@@ -149,7 +146,7 @@ export function MultiplayerGameCanvas({
         >
           <GlassPanel style={{ pointerEvents: "auto", fontFamily: font.ui }}>
             <ScreenTitle>You Crashed</ScreenTitle>
-            <span style={text.numberXl}>{formatScore(score)}</span>
+            <span style={text.numberXl}>{formatScore(finalScore)}</span>
             <p style={{ ...text.body, fontSize: "0.875rem" }}>Waiting for the others to finish…</p>
             <GlassButton variant="quiet" onClick={onLeave}>
               Leave race
@@ -202,7 +199,7 @@ export function MultiplayerGameCanvas({
               pointerEvents: "none",
             }}
           >
-            <HudChip score={score} multiplier={multiplier} />
+            <LiveHudChip stats={stats} />
             <TrickFeedbackPopup trickFeedback={trickFeedback} />
             <ol
               aria-label="Standings"

@@ -7,6 +7,7 @@
  */
 import { INITIAL_SPEED, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
 import { ObstacleType } from "../types";
+import { OBSTACLE_SPECS } from "../Obstacle";
 import { drawRiderFigure, UPRIGHT_SHOULDER } from "../rendering/CrashRenderer";
 import type { Offset } from "../rendering/CrashRenderer";
 import type { EnvironmentPalette } from "../environments/types";
@@ -28,12 +29,7 @@ const HIP_FROM_PLAYER: Offset = [27, 24];
 /** Where the branch catches the shirt: between the shoulder blades, relative to the hip. */
 const HOOK_OFFSET: Offset = [1, -12];
 
-/** How far down from the tree's top the hook sits, as a fraction of its height. */
-const HOOK_DEPTH: Partial<Record<ObstacleType, number>> = {
-  [ObstacleType.SMALL_TREE]: 0.26,
-  [ObstacleType.TALL_TREE]: 0.3,
-  [ObstacleType.GIANT_TREE]: 0.3,
-};
+/** Hook depth (fraction of the tree's height, from the top) for a type whose spec has none. */
 const DEFAULT_HOOK_DEPTH = 0.3;
 
 /** Falling leaves: sideways offset from the hook, delay before they let go, sway phase, size. */
@@ -111,7 +107,7 @@ export const treeHangCrash: CrashVariant<TreeHangData> = {
       startX: p.x + HIP_FROM_PLAYER[0],
       startY: p.y + HIP_FROM_PLAYER[1],
       hookX: treeBox.x + treeBox.width / 2,
-      hookY: treeBox.y + treeBox.height * (HOOK_DEPTH[treeBox.type] ?? DEFAULT_HOOK_DEPTH),
+      hookY: treeBox.y + treeBox.height * (OBSTACLE_SPECS[treeBox.type].hookDepth ?? DEFAULT_HOOK_DEPTH),
       tree: treeBox,
     };
     cs.riderX = data.startX;

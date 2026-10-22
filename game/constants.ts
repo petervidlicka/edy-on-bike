@@ -12,6 +12,12 @@ export const SCORE_PER_PX = 20;
 export const MIN_OBSTACLE_GAP = 350;
 export const MIN_OBSTACLE_GAP_LATE = 450;
 export const RIDEABLE_JUMP_MULTIPLIER = 1.3;
+/**
+ * Inner padding that makes hitboxes slightly smaller than the visual bounds, so
+ * near-misses feel fair rather than frustrating. Obstacle placement reads it to keep
+ * low obstacles hittable.
+ */
+export const HITBOX_PADDING = 8;
 export const FLIP_TOLERANCE = Math.PI / 6; // 30° clean landing zone
 export const SKETCHY_TOLERANCE = Math.PI / 6; // additional 30° sketchy zone
 export const SKETCHY_PENALTY = 0.7; // 30% point penalty

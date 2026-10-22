@@ -5,30 +5,12 @@
  * the rear bumper and falls to the road.
  */
 import { INITIAL_SPEED, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
-import { ObstacleType } from "../types";
 import { drawRiderFigure, UPRIGHT_SHOULDER } from "../rendering/CrashRenderer";
 import type { Offset } from "../rendering/CrashRenderer";
 import { clamp01, figurePoint, HEAD_OFFSET, launchBike, lerp, stepBike } from "./physics";
 import type { CarBonkData, CrashVariant } from "./types";
 
-/** The obstacle types this variant handles: every one drawn as a car, plus the snow and Tokyo vehicles. */
-export const CAR_OBSTACLES: readonly ObstacleType[] = [
-  ObstacleType.CAR,
-  ObstacleType.SUV,
-  ObstacleType.DELIVERY_VAN,
-  ObstacleType.LAND_CRUISER,
-  ObstacleType.PINK_G_CLASS,
-  ObstacleType.LAMBORGHINI_HURACAN,
-  ObstacleType.FERRARI_458,
-  ObstacleType.CONVERTIBLE,
-  ObstacleType.ROLLS_ROYCE_PHANTOM,
-  ObstacleType.PORSCHE_911,
-  ObstacleType.SNOW_SCOOTER,
-  ObstacleType.SNOW_CAT,
-  ObstacleType.KEI_CAR,
-  ObstacleType.KEI_TRUCK,
-  ObstacleType.JAPAN_TAXI,
-];
+// Which obstacles play this variant is the `crashFamily: "car"` entry in OBSTACLE_SPECS.
 
 const DURATION = 2.3;
 const STARS_FROM = 1.55;

@@ -1,15 +1,11 @@
 import { PlayerState, ObstacleInstance, ObstacleType } from "./types";
+import { HITBOX_PADDING } from "./constants";
+
+export { HITBOX_PADDING };
 
 // Ramp dimensions for CONTAINER_WITH_RAMP (must match Obstacle.ts / Renderer.ts)
 const CONTAINER_RAMP_W = 75;
 const CONTAINER_RAMP_H = 36;
-
-/**
- * Inner padding that makes hitboxes slightly smaller than the visual bounds, so
- * near-misses feel fair rather than frustrating. Obstacle placement reads it to keep
- * low obstacles hittable.
- */
-export const HITBOX_PADDING = 8;
 
 // How many pixels below the obstacle top still count as "landing on top" when the
 // previous position isn't known. Covers ~18px of fall per frame at 60fps; slower frames

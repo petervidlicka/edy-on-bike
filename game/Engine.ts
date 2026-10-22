@@ -26,7 +26,8 @@ import {
   drawPlayer, drawObstacle, drawFloatingText, drawAmbulance, drawReviveFlash, resolveDisplayFont,
 } from "./rendering";
 import type { FloatingTextStyle } from "./rendering/FloatingTextRenderer";
-import { spawnObstacle, createObstacle, nextSpawnGap, moveObstacle, spawnGapPadding } from "./Obstacle";
+import { spawnObstacle, nextSpawnGap, moveObstacle, spawnGapPadding } from "./Obstacle";
+import { DebugCourse } from "./DebugCourse";
 import { checkCollision, checkRideableCollision } from "./Collision";
 import { processRampInteractions, processRidingState } from "./RampPhysics";
 import { SoundManager } from "./SoundManager";
@@ -134,11 +135,8 @@ export class Engine {
   /** The ambulance that may follow a crash, with the one-rescue-per-run rule and the IDDQD cheat. */
   private rescue: AmbulanceSequence;
   private skin: SkinDefinition = getSkinById("default");
-  private debugSequence: ObstacleType[] | null = null;
-  private debugIndex: number = 0;
-  private debugGap: number = 500;
-  /** Padding the last debug-spawned mover needs before the next spawn (see spawnGapPadding). */
-  private nextDebugPadding = 0;
+  /** Fixed test course (`?obstacles=`) that replaces random spawning while set. */
+  private debugCourse = new DebugCourse();
   private crashState = createCrashState();
   private rng: { random(): number } = { random: Math.random };
   /** `rng.random` bound once, so spawning never allocates a bound function per draw. */
@@ -235,7 +233,7 @@ export class Engine {
     // First user gesture: the one place the voice clips may be fetched and decoded
     this.sound.voice.preload();
     this.callbacks.onStateChange(this.state);
-    this.emit({ type: "runStart", ranked: !this.rescue.cheatActive && !this.debugSequence });
+    this.emit({ type: "runStart", ranked: !this.rescue.cheatActive && !this.debugCourse.active });
   }
 
   restart(): void {
@@ -254,8 +252,7 @@ export class Engine {
     this.lastTime = 0;
     this.distanceSinceLastObstacle = 0;
     this.nextObstacleGap = 0;
-    this.debugIndex = 0;
-    this.nextDebugPadding = 0;
+    this.debugCourse.reset();
     this.obstacles = [];
     this.floatingTexts = [];
     this.envManager.reset();
@@ -495,14 +492,10 @@ export class Engine {
     obstacles.length = kept;
 
     this.distanceSinceLastObstacle += this.speed * dt;
-    const gap = this.debugSequence ? this.debugGap + this.nextDebugPadding : this.nextObstacleGap;
+    const gap = this.debugCourse.active ? this.debugCourse.spawnGap : this.nextObstacleGap;
     if (this.distanceSinceLastObstacle < gap) return;
-    if (this.debugSequence) {
-      const type = this.debugSequence[this.debugIndex % this.debugSequence.length];
-      const spawned = createObstacle(type, widestView.right, this.groundY, this.player.x);
-      this.obstacles.push(spawned);
-      this.nextDebugPadding = spawnGapPadding(spawned);
-      this.debugIndex++;
+    if (this.debugCourse.active) {
+      this.obstacles.push(this.debugCourse.spawn(widestView.right, this.groundY, this.player.x));
     } else {
       const spawned = spawnObstacle(widestView.right, this.groundY, this.envManager.getBiomeElapsedMs(this.elapsedMs), this.envManager.getCurrentEnvironment(), this.player.x, this.random);
       this.obstacles.push(spawned);
@@ -818,10 +811,7 @@ export class Engine {
   }
 
   setDebugObstacles(sequence: ObstacleType[] | null, gap?: number): void {
-    this.debugSequence = sequence;
-    this.debugIndex = 0;
-    this.nextDebugPadding = 0;
-    if (gap !== undefined) this.debugGap = gap;
+    this.debugCourse.set(sequence, gap);
   }
 
   forceNextBiome(): void {

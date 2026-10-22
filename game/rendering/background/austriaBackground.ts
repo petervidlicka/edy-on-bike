@@ -17,22 +17,37 @@ const SIGN_FONT = "bold 5px Arial, sans-serif";
 
 // --- Alpine range (skyline band) ---
 
+/** One mountain ridge's look; heights are fractions of groundY so the range scales with the canvas. */
+interface RidgeSpec {
+  /** Peak-to-peak distance in px. */
+  spacing: number;
+  /** Summit height range as fractions of groundY. */
+  minH: number;
+  maxH: number;
+  /** Offsets the hash so the two ridges differ. */
+  seed: number;
+  rock: string;
+  /** Summits taller than this (fraction of groundY) get a snowcap. */
+  capLine: number;
+  /** Fraction of the cloud parallax this ridge scrolls at. */
+  parallax: number;
+}
+
+/** Pale, distant ridge. */
+const FAR_RIDGE: RidgeSpec = { spacing: 110, minH: 0.3, maxH: 0.52, seed: 11, rock: "#a9bfd6", capLine: 0.36, parallax: 0.6 };
+/** Nearer, bluer ridge. */
+const NEAR_RIDGE: RidgeSpec = { spacing: 80, minH: 0.16, maxH: 0.32, seed: 47, rock: "#7f9cbb", capLine: 0.24, parallax: 1.2 };
+
 /**
  * One row of peaks: a jagged ridge with snowcaps on the taller summits. Peak heights
  * come from hash01 of the peak index, so the ridge tiles seamlessly as it scrolls.
  */
-function drawRidge(
-  ctx: CanvasRenderingContext2D,
-  view: ViewBounds,
-  baseY: number,
-  offset: number,
-  spacing: number,
-  minH: number,
-  maxH: number,
-  seed: number,
-  rock: string,
-  capLine: number
-) {
+function drawRidge(ctx: CanvasRenderingContext2D, view: ViewBounds, baseY: number, groundY: number, cloudOffset: number, spec: RidgeSpec) {
+  const { spacing, seed, rock } = spec;
+  const offset = cloudOffset * spec.parallax;
+  const minH = groundY * spec.minH;
+  const maxH = groundY * spec.maxH;
+  const capLine = groundY * spec.capLine;
   const first = Math.floor((offset + view.left) / spacing) - 1;
   const last = Math.ceil((offset + view.right) / spacing) + 1;
   const peaks: Array<[number, number]> = [];
@@ -105,8 +120,8 @@ export function drawAlpineRange(
   offset: number
 ) {
   const baseY = groundY - 16;
-  drawRidge(ctx, view, baseY, offset * 0.6, 110, groundY * 0.3, groundY * 0.52, 11, "#a9bfd6", groundY * 0.36);
-  drawRidge(ctx, view, baseY, offset * 1.2, 80, groundY * 0.16, groundY * 0.32, 47, "#7f9cbb", groundY * 0.24);
+  drawRidge(ctx, view, baseY, groundY, offset, FAR_RIDGE);
+  drawRidge(ctx, view, baseY, groundY, offset, NEAR_RIDGE);
 }
 
 // --- Chalet hotels ---

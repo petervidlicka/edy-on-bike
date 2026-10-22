@@ -144,6 +144,22 @@ export function getBikeGeometry(bikeStyle: BikeStyle, x: number, y: number): Bik
   }
 }
 
+/** How a skin's wheels are built: spoke pattern, tread and tyre width (see getWheelParams). */
+export interface WheelStyle {
+  spokeCount: number;
+  spokeWidth: number;
+  /** Spoke colour; the default light grey if omitted. */
+  spokeColor?: string;
+  /** Knobby MTB tread around the tyre. */
+  knobby: boolean;
+  tyreWidth: number;
+}
+
+/**
+ * One bike wheel: tyre, rim, spokes and hub, turned by `rotation`.
+ * @param glow - Neon halo around the tyre (the fixie skin).
+ * @param style - The skin's wheel build, from getWheelParams.
+ */
 export function drawWheel(
   ctx: CanvasRenderingContext2D,
   cx: number,
@@ -152,12 +168,9 @@ export function drawWheel(
   rotation: number,
   color: string,
   glow: boolean,
-  spokeCount: number = 12,
-  spokeWidth: number = 0.5,
-  spokeColor?: string,
-  knobby: boolean = false,
-  tyreWidth: number = 2.3
+  style: WheelStyle,
 ) {
+  const { spokeCount, spokeWidth, spokeColor, knobby, tyreWidth } = style;
   // Glow halo for neon skin
   if (glow) {
     ctx.save();
@@ -428,9 +441,8 @@ export function drawHandlebars(
   return { gripX: stemTopX - 2, gripY: stemTopY };
 }
 
-export function getWheelParams(skin: SkinDefinition): {
-  spokeCount: number; spokeWidth: number; spokeColor?: string; knobby: boolean; tyreWidth: number;
-} {
+/** The wheel build for a skin's bike style: racing, MTB, cruiser, fixie and fat-tyre each differ. */
+export function getWheelParams(skin: SkinDefinition): WheelStyle {
   let spokeCount = 12, spokeWidth = 0.5, spokeColor: string | undefined, knobby = false, tyreWidth = 2.3;
   switch (skin.bikeStyle) {
     case "racing":  spokeCount = 16; spokeWidth = 0.4; tyreWidth = 1.7; break;
@@ -556,9 +568,9 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, player: PlayerState, s
   ctx.translate(-g.pivotX, -g.pivotY);
 
   // ── Wheels ──
-  const { spokeCount, spokeWidth, spokeColor, knobby, tyreWidth } = getWheelParams(skin);
-  drawWheel(ctx, g.rearWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby, tyreWidth);
-  drawWheel(ctx, g.frontWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby, tyreWidth);
+  const wheelStyle = getWheelParams(skin);
+  drawWheel(ctx, g.rearWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, wheelStyle);
+  drawWheel(ctx, g.frontWheelX, g.wheelY, g.wheelR, wheelRotation, c.wheel, glowWheels, wheelStyle);
 
   // ── Frame ──
   drawBikeFrame(ctx, skin, g);

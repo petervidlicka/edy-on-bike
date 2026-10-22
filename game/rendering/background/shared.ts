@@ -74,28 +74,44 @@ export interface FadingCloudLayer {
   alpha: number;
 }
 
+/** Shared empty pass list, so a scene without skylines allocates nothing per frame. */
+const NO_PASSES: readonly SkylinePass[] = [];
+
+/** Everything drawBackground needs for one frame of scenery. */
+export interface BackgroundScene {
+  /** [clouds, buildings, road] — see createBackgroundLayers. */
+  layers: BackgroundLayer[];
+  canvasW: number;
+  /** The world rectangle on screen; wider than the canvas while the big-air camera is zoomed out. */
+  view: ViewBounds;
+  groundY: number;
+  palette: EnvironmentPalette;
+  /** Building-layer element type → renderer. */
+  drawers: Record<string, BackgroundDrawFn>;
+  /** Far scenery bands behind the clouds, each with its fade. */
+  skylines?: readonly SkylinePass[];
+  /** Passes over the road (wet-road reflections), each with its fade. */
+  roadOverlays?: readonly SkylinePass[];
+  /** Opacity of the current cloud layer (below 1 while it fades in on a biome change). */
+  cloudAlpha?: number;
+  /** The previous biome's clouds while they fade out. */
+  outgoingClouds?: FadingCloudLayer | null;
+  /** Scene clock (engine time that stops while paused) for animated scenery. */
+  nowMs?: number;
+}
+
 /**
- * Draws sky, parallax layers and road covering `view` — the world rectangle on screen,
- * which grows beyond the canvas while the big-air camera is zoomed out.
- * @param cloudAlpha - Opacity of the current cloud layer (below 1 while it fades in on a biome change).
- * @param outgoingClouds - The previous biome's clouds while they fade out, or null.
- * @param nowMs - Scene clock (engine time that stops while paused) for animated scenery.
+ * Draws sky, parallax layers and road covering `scene.view`.
+ * @example
+ * drawBackground(ctx, { layers, canvasW, view, groundY, palette, drawers, nowMs });
  */
-export function drawBackground(
-  ctx: CanvasRenderingContext2D,
-  layers: BackgroundLayer[],
-  canvasW: number,
-  view: ViewBounds,
-  groundY: number,
-  palette: EnvironmentPalette,
-  drawers: Record<string, BackgroundDrawFn>,
-  skylines: readonly SkylinePass[] = [],
-  roadOverlays: readonly SkylinePass[] = [],
-  cloudAlpha = 1,
-  outgoingClouds: FadingCloudLayer | null = null,
-  nowMs = 0,
-) {
-  setSceneTimeMs(nowMs);
+export function drawBackground(ctx: CanvasRenderingContext2D, scene: BackgroundScene) {
+  const { layers, canvasW, view, groundY, palette, drawers } = scene;
+  const skylines = scene.skylines ?? NO_PASSES;
+  const roadOverlays = scene.roadOverlays ?? NO_PASSES;
+  const cloudAlpha = scene.cloudAlpha ?? 1;
+  const outgoingClouds = scene.outgoingClouds ?? null;
+  setSceneTimeMs(scene.nowMs ?? 0);
   drawSky(ctx, view, groundY, palette);
 
   // Far scenery (mountain ranges) sits behind the clouds and scrolls with them
@@ -124,6 +140,9 @@ export function drawBackground(
       if (drawX + el.width < view.left || drawX > view.right) continue;
       const drawFn = drawers[el.type];
       if (drawFn) {
+        // BackgroundDrawFn's last two parameters are overloaded by element type: `roofColor`
+        // is a pedestrian's trouser colour or a chalet's timber, and `variant` is a drawing
+        // variant for houses but a seed for Tokyo buildings (see environments/types.ts).
         drawFn(ctx, drawX, el.y, el.width, el.height, el.color, palette, el.roofColor, el.variant);
       }
     }

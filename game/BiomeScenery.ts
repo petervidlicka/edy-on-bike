@@ -157,11 +157,20 @@ export class BiomeScenery {
     fade: number | null,
     nowMs: number,
   ): void {
-    const outgoing = this.outgoingClouds && fade !== null ? { layer: this.outgoingClouds, alpha: 1 - fade } : null;
-    drawBackground(
-      ctx, this.layers, this.canvasW, view, this.groundY, palette, this.drawers,
-      skylines, roadOverlays, fade ?? 1, outgoing, nowMs,
-    );
+    const outgoingClouds = this.outgoingClouds && fade !== null ? { layer: this.outgoingClouds, alpha: 1 - fade } : null;
+    drawBackground(ctx, {
+      layers: this.layers,
+      canvasW: this.canvasW,
+      view,
+      groundY: this.groundY,
+      palette,
+      drawers: this.drawers,
+      skylines,
+      roadOverlays,
+      cloudAlpha: fade ?? 1,
+      outgoingClouds,
+      nowMs,
+    });
   }
 
   /**

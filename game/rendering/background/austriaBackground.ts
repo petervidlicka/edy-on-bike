@@ -6,19 +6,14 @@
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
-import { drawRedDeer } from "../obstacles/austriaObstacles";
-import { hash01 as noise, drawCachedText } from "../drawHelpers";
+import { drawRedDeer } from "../redDeer";
+import { hash01, drawCachedText, drawFlagPole, fillFlagBand } from "../drawHelpers";
 import { sceneTimeMs } from "../sceneClock";
 
 const SNOW = "#f6f9fc";
 const SNOW_SHADE = "#d4e0ec";
 /** Lettering on the chalet name boards and the bar sign. */
 const SIGN_FONT = "bold 5px Arial, sans-serif";
-
-/** Deterministic 0..1 noise per integer (the shared hash's b = 1 row), so the mountain range is the same every frame. */
-function hash01(n: number): number {
-  return noise(n, 1);
-}
 
 // --- Alpine range (skyline band) ---
 
@@ -44,9 +39,9 @@ function drawRidge(
   for (let i = first; i <= last; i++) {
     // Alternate summits and saddles; nudge x so peaks don't sit on a grid
     const isSummit = i % 2 === 0;
-    const r = hash01(i + seed);
+    const r = hash01(i + seed, 1);
     const ph = isSummit ? minH + r * (maxH - minH) : minH * 0.45 + r * minH * 0.4;
-    const px = i * spacing - offset + (hash01(i * 3.7 + seed) - 0.5) * spacing * 0.5;
+    const px = i * spacing - offset + (hash01(i * 3.7 + seed, 1) - 0.5) * spacing * 0.5;
     peaks.push([px, baseY - ph]);
   }
 
@@ -215,7 +210,7 @@ function drawChalet(
   ctx.fill();
   ctx.fillStyle = SNOW_SHADE;
   for (let ix = x - over + 2; ix < x + w + over - 2; ix += 5) {
-    const len = 2 + hash01(ix) * 4;
+    const len = 2 + hash01(ix, 1) * 4;
     ctx.beginPath();
     ctx.moveTo(ix, wallTop + 5);
     ctx.lineTo(ix + 1.2, wallTop + 5 + len);
@@ -600,69 +595,29 @@ function drawSnowPine(
 /** Red-white-red flag on a white pole, rippling in the wind. */
 function drawAustrianFlag(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   ctx.save();
-  ctx.fillStyle = "#e8e8ec";
-  ctx.fillRect(x, y, 1.6, h);
-  ctx.fillStyle = "#c8a040";
-  ctx.beginPath();
-  ctx.arc(x + 0.8, y, 1.4, 0, Math.PI * 2);
-  ctx.fill();
-
+  drawFlagPole(ctx, x, y, h, "#e8e8ec");
   const fw = w * 1.3;
   const fh = h * 0.24;
   const t = sceneTimeMs() / 300;
-  const wave = (fx: number) => Math.sin(t + fx * 5) * 1.4 * fx;
-  const band = (from: number, to: number, fill: string) => {
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    const steps = 8;
-    for (let i = 0; i <= steps; i++) {
-      const fx = i / steps;
-      const px = x + 1.6 + fx * fw;
-      const py = y + 2 + fh * from + wave(fx);
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    for (let i = steps; i >= 0; i--) {
-      const fx = i / steps;
-      ctx.lineTo(x + 1.6 + fx * fw, y + 2 + fh * to + wave(fx));
-    }
-    ctx.closePath();
-    ctx.fill();
-  };
-  band(0, 1 / 3, color);
-  band(1 / 3, 2 / 3, "#ffffff");
-  band(2 / 3, 1, color);
+  const amp = 1.4;
+  fillFlagBand(ctx, x + 1.6, y + 2, fw, fh, 0, 1 / 3, t, amp, color);
+  fillFlagBand(ctx, x + 1.6, y + 2, fw, fh, 1 / 3, 2 / 3, t, amp, "#ffffff");
+  fillFlagBand(ctx, x + 1.6, y + 2, fw, fh, 2 / 3, 1, t, amp, color);
   ctx.restore();
 }
 
 // --- Austria background drawer registry ---
 
+/** Element type → renderer. The chalet reads the element's roofColor as its timber colour. */
 export const AUSTRIA_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
-  chalet: (ctx, x, y, w, h, color, palette, roofColor, variant) => {
-    drawChalet(ctx, x, y, w, h, color, palette, roofColor, variant);
-  },
-  onion_church: (ctx, x, y, w, h) => {
-    drawOnionChurch(ctx, x, y, w, h);
-  },
-  ski_jump: (ctx, x, y, w, h) => {
-    drawSkiJump(ctx, x, y, w, h);
-  },
-  chairlift: (ctx, x, y, w, h) => {
-    drawChairlift(ctx, x, y, w, h);
-  },
-  apres_bar: (ctx, x, y, w, h) => {
-    drawApresBar(ctx, x, y, w, h);
-  },
-  snow_pine: (ctx, x, y, w, h, color, palette) => {
-    drawSnowPine(ctx, x, y, w, h, color, palette);
-  },
-  bg_red_deer: (ctx, x, y, w, h, _color, palette) => {
-    drawRedDeer(ctx, x, y, w, h, palette);
-  },
-  austrian_flag: (ctx, x, y, w, h, color) => {
-    drawAustrianFlag(ctx, x, y, w, h, color);
-  },
-  walking_person: (ctx, x, y, w, h, color, palette, bottomColor, variant) => {
-    drawWalkingPerson(ctx, x, y, w, h, color, palette, bottomColor, variant);
-  },
+  chalet: drawChalet,
+  onion_church: drawOnionChurch,
+  ski_jump: drawSkiJump,
+  chairlift: drawChairlift,
+  apres_bar: drawApresBar,
+  snow_pine: drawSnowPine,
+  // The deer takes no element colour; its coat comes from the palette
+  bg_red_deer: (ctx, x, y, w, h, _color, palette) => drawRedDeer(ctx, x, y, w, h, palette),
+  austrian_flag: drawAustrianFlag,
+  walking_person: drawWalkingPerson,
 };

@@ -43,11 +43,92 @@ export function fillRoundRect(ctx: CanvasRenderingContext2D, rx: number, ry: num
   ctx.fill();
 }
 
-/** Soft oval shadow on the snow under an obstacle. */
-export function contactShadow(ctx: CanvasRenderingContext2D, cx: number, by: number, rx: number) {
-  ctx.fillStyle = "rgba(60,90,130,0.18)";
+/** Default contact-shadow tint: a cool blue-grey that reads on snow and tarmac alike. */
+const SNOW_SHADOW = "rgba(60,90,130,0.18)";
+
+/**
+ * Soft oval shadow under an obstacle, centred on (cx, by) just above the ground line.
+ * @param ry - Half-height in px (2 by default).
+ * @param color - Shadow tint; vehicles use a neutral black.
+ */
+export function contactShadow(ctx: CanvasRenderingContext2D, cx: number, by: number, rx: number, ry = 2, color = SNOW_SHADOW) {
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.ellipse(cx, by - 0.5, rx, 2, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, by - 0.5, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
+ * Fills a grid of windows: `cols`×`rows` cells from (ox, oy) on a (cellW, cellH) pitch,
+ * each window winW×winH in its cell's top-left. Shared by every tower in every biome.
+ * @param color - One fill for all, or a per-cell picker for mixed lit and dark windows.
+ */
+export function fillWindowGrid(
+  ctx: CanvasRenderingContext2D,
+  ox: number, oy: number,
+  cols: number, rows: number,
+  cellW: number, cellH: number,
+  winW: number, winH: number,
+  color: string | ((row: number, col: number) => string),
+) {
+  if (typeof color === "string") ctx.fillStyle = color;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (typeof color !== "string") ctx.fillStyle = color(r, c);
+      ctx.fillRect(ox + c * cellW, oy + r * cellH, winW, winH);
+    }
+  }
+}
+
+// --- Flags ---
+
+/** Points along a rippling flag's edge. */
+const FLAG_STEPS = 8;
+
+/** A flag pole `h` tall at x with a gold finial on top. */
+export function drawFlagPole(ctx: CanvasRenderingContext2D, x: number, y: number, h: number, color: string) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, 1.6, h);
+  ctx.fillStyle = "#c8a040";
+  ctx.beginPath();
+  ctx.arc(x + 0.8, y, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
+ * Vertical ripple of a flag at `fx` (0 at the pole, 1 at the fly) for scene time `t`:
+ * a travelling wave that grows towards the free edge.
+ */
+export function flagWave(t: number, amp: number, fx: number): number {
+  return Math.sin(t + fx * 5) * amp * fx;
+}
+
+/**
+ * Fills one horizontal band of a rippling flag whose cloth starts at (x0, y0) and is
+ * fw×fh; `from` and `to` are 0–1 fractions of fh. Both the Austrian tricolour and the
+ * Hinomaru are bands of this.
+ */
+export function fillFlagBand(
+  ctx: CanvasRenderingContext2D,
+  x0: number, y0: number, fw: number, fh: number,
+  from: number, to: number,
+  t: number, amp: number,
+  color: string,
+) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i <= FLAG_STEPS; i++) {
+    const fx = i / FLAG_STEPS;
+    const px = x0 + fx * fw;
+    const py = y0 + fh * from + flagWave(t, amp, fx);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  for (let i = FLAG_STEPS; i >= 0; i--) {
+    const fx = i / FLAG_STEPS;
+    ctx.lineTo(x0 + fx * fw, y0 + fh * to + flagWave(t, amp, fx));
+  }
+  ctx.closePath();
   ctx.fill();
 }
 

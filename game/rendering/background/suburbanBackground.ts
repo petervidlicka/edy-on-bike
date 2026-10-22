@@ -1,5 +1,6 @@
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import { drawWalkingPerson } from "./shared";
+import { boxMapper } from "../drawHelpers";
 
 // --- Houses ---
 // Three house types share one detail kit: framed windows with mullions and sills,
@@ -369,7 +370,7 @@ export function drawDeer(
   x: number, y: number, w: number, h: number,
   color: string, palette: EnvironmentPalette
 ) {
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
   const legColor = palette.creatureLeg;
   const pale = palette.creatureTail;
 
@@ -459,17 +460,10 @@ export function drawDeer(
 
 // --- Suburban background drawer registry ---
 
+/** Element type → renderer; every renderer already takes the BackgroundDrawFn arguments. */
 export const SUBURBAN_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
-  house: (ctx, x, y, w, h, color, palette, roofColor, variant) => {
-    drawHouse(ctx, x, y, w, h, color, palette, roofColor, variant);
-  },
-  tree_silhouette: (ctx, x, y, w, h, color, palette) => {
-    drawTreeSilhouette(ctx, x, y, w, h, color, palette);
-  },
-  deer: (ctx, x, y, w, h, color, palette) => {
-    drawDeer(ctx, x, y, w, h, color, palette);
-  },
-  walking_person: (ctx, x, y, w, h, color, palette, bottomColor, variant) => {
-    drawWalkingPerson(ctx, x, y, w, h, color, palette, bottomColor, variant);
-  },
+  house: drawHouse,
+  tree_silhouette: drawTreeSilhouette,
+  deer: drawDeer,
+  walking_person: drawWalkingPerson,
 };

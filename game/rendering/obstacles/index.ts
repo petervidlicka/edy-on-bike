@@ -20,9 +20,10 @@ import {
 } from "./dubaiObstacles";
 
 import {
-  drawSnowman, drawFrozenLake, drawRedDeer, drawBeerCrates, drawBeerCrateWall,
+  drawSnowman, drawFrozenLake, drawBeerCrates, drawBeerCrateWall,
   drawSnowCat, drawSnowKicker, drawFreerideSkier, drawRaceSkier, drawSnowboarder, drawSnowScooter,
 } from "./austriaObstacles";
+import { drawRedDeer } from "../redDeer";
 
 import {
   drawKeiCar, drawKeiTruck, drawJapanTaxi, drawSamurai, drawSushiRolls, drawVendingMachine, drawSakeBarrels,

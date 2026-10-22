@@ -1,7 +1,7 @@
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
 import { DUBAI_OBSTACLE_COLORS } from "../../environments/obstacleColors";
-import { drawSprite, drawCachedText } from "../drawHelpers";
+import { boxMapper, contactShadow, drawSprite, drawCachedText } from "../drawHelpers";
 
 // --- Dubai biome obstacle draw functions ---
 
@@ -10,17 +10,13 @@ export function drawCamel(ctx: CanvasRenderingContext2D, x: number, y: number, w
   const bodyColor = palette.obstacle.camel ?? DUBAI_OBSTACLE_COLORS.camel;
   const legColor = palette.obstacle.camelLeg ?? DUBAI_OBSTACLE_COLORS.camelLeg;
   const saddleColor = palette.obstacle.camelSaddle ?? DUBAI_OBSTACLE_COLORS.camelSaddle;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
 
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  // Contact shadow.
-  ctx.fillStyle = "rgba(0,0,0,0.15)";
-  ctx.beginPath();
-  ctx.ellipse(x + w * 0.47, y + h - 0.5, w * 0.36, 1.5, 0, 0, Math.PI * 2);
-  ctx.fill();
+  contactShadow(ctx, x + w * 0.47, y + h, w * 0.36, 1.5, "rgba(0,0,0,0.15)");
 
   // Legs: thigh into a knobbly knee, then a thin cannon bone and a splayed foot pad.
   const leg = (top: [number, number], knee: [number, number], foot: [number, number], color: string, width: number) => {
@@ -659,7 +655,7 @@ export function drawLamborghiniHuracan(ctx: CanvasRenderingContext2D, x: number,
   const c = palette.obstacle;
   const green = c.lamboGreen ?? DUBAI_OBSTACLE_COLORS.lamboGreen;
   const greenDark = c.lamboGreenDark ?? DUBAI_OBSTACLE_COLORS.lamboGreenDark;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
   drawVehicle(ctx, x, y, w, h, c, LAMBORGHINI_HURACAN_SHAPE, {
     body: green,
     bodyDark: greenDark,
@@ -744,7 +740,7 @@ export function drawFerrari458(ctx: CanvasRenderingContext2D, x: number, y: numb
   const c = palette.obstacle;
   const red = c.ferrariRed ?? DUBAI_OBSTACLE_COLORS.ferrariRed;
   const redDark = c.ferrariRedDark ?? DUBAI_OBSTACLE_COLORS.ferrariRedDark;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
   drawVehicle(ctx, x, y, w, h, c, FERRARI_458_SHAPE, {
     body: red,
     bodyDark: redDark,
@@ -815,7 +811,7 @@ export function drawConvertible(ctx: CanvasRenderingContext2D, x: number, y: num
   const c = palette.obstacle;
   const body = c.convertible ?? DUBAI_OBSTACLE_COLORS.convertible;
   const bodyDark = c.convertibleDark ?? DUBAI_OBSTACLE_COLORS.convertibleDark;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
 
   // Seat backs sit in the cockpit, behind the body side.
   ctx.save();
@@ -879,7 +875,7 @@ const ROLLS_ROYCE_PHANTOM_SHAPE: VehicleShape = {
  */
 export function drawRollsRoycePhantom(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
   drawVehicle(ctx, x, y, w, h, c, ROLLS_ROYCE_PHANTOM_SHAPE, {
     body: "#1b1c21",
     bodyDark: "#0f1013",
@@ -936,7 +932,7 @@ export function drawPorsche911(ctx: CanvasRenderingContext2D, x: number, y: numb
   const body = c.porsche ?? DUBAI_OBSTACLE_COLORS.porsche;
   const bodyDark = c.porscheDark ?? DUBAI_OBSTACLE_COLORS.porscheDark;
   const carbon = "#1b1f22";
-  const P = (fx: number, fy: number): [number, number] => [x + w * fx, y + h * fy];
+  const P = boxMapper(x, y, w, h);
 
   // Wing uprights behind the body, from the engine deck up to the wing.
   ctx.save();

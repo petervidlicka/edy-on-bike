@@ -11,7 +11,7 @@
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
-import { cachedGradient, fillTransformed, glow, hash01, drawSprite, drawCachedText, type TextLabel } from "../drawHelpers";
+import { cachedGradient, fillTransformed, glow, hash01, drawSprite, drawCachedText, fillWindowGrid, drawFlagPole, fillFlagBand, flagWave, type TextLabel } from "../drawHelpers";
 import { sceneTimeMs } from "../sceneClock";
 
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
@@ -319,17 +319,14 @@ function drawTowerBody(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.fillStyle = "rgba(255,255,255,0.04)";
   ctx.fillRect(x + w - 3, y, 3, h);
 
-  // Window grid.
+  // Window grid: warm lit, cool lit or dark per window, from the seed.
   const cols = Math.max(2, Math.floor((w - 6) / 8));
   const rows = Math.max(3, Math.floor((h - 14) / 9));
   const gx = (w - 6) / cols;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const v = hash01(seed, r, c);
-      ctx.fillStyle = v < 0.32 ? "#ffd890" : v < 0.46 ? "#bfe4ff" : "#2a2e48";
-      ctx.fillRect(x + 3 + c * gx + gx * 0.2, y + 8 + r * 9, gx * 0.6, 5);
-    }
-  }
+  fillWindowGrid(ctx, x + 3 + gx * 0.2, y + 8, cols, rows, gx, 9, gx * 0.6, 5, (r, c) => {
+    const v = hash01(seed, r, c);
+    return v < 0.32 ? "#ffd890" : v < 0.46 ? "#bfe4ff" : "#2a2e48";
+  });
 }
 
 /**
@@ -710,12 +707,8 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.fillStyle = wall;
   ctx.fillRect(x, y, w, h);
   // Lit floors below the screen.
-  for (let r = 0; r < 6; r++) {
-    for (let c = 0; c < 8; c++) {
-      ctx.fillStyle = hash01(seed, r, c) < 0.5 ? "#ffd890" : "#2a2e48";
-      ctx.fillRect(x + 4 + c * ((w - 8) / 8), y + h * 0.62 + r * 9, (w - 8) / 8 - 3, 4);
-    }
-  }
+  const bay = (w - 8) / 8;
+  fillWindowGrid(ctx, x + 4, y + h * 0.62, 8, 6, bay, 9, bay - 3, 4, (r, c) => (hash01(seed, r, c) < 0.5 ? "#ffd890" : "#2a2e48"));
   // Screen: animated gradient with a bold line of text.
   const sx = x + w * 0.08;
   const sy = y + h * 0.1;
@@ -845,34 +838,15 @@ function drawSakura(ctx: CanvasRenderingContext2D, x: number, y: number, w: numb
 /** Hinomaru on a white pole, rippling. */
 function drawJapanFlag(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   ctx.save();
-  ctx.fillStyle = "#d8d8e0";
-  ctx.fillRect(x, y, 1.6, h);
-  ctx.fillStyle = "#c8a040";
-  ctx.beginPath();
-  ctx.arc(x + 0.8, y, 1.4, 0, Math.PI * 2);
-  ctx.fill();
+  drawFlagPole(ctx, x, y, h, "#d8d8e0");
   const fw = w * 1.4;
   const fh = h * 0.3;
   const t = sceneTimeMs() / 300;
-  const wave = (fx: number) => Math.sin(t + fx * 5) * 1.3 * fx;
-  ctx.fillStyle = "#f6f6f8";
-  ctx.beginPath();
-  const steps = 8;
-  for (let i = 0; i <= steps; i++) {
-    const fx = i / steps;
-    const px = x + 1.6 + fx * fw;
-    if (i === 0) ctx.moveTo(px, y + 2 + wave(fx));
-    else ctx.lineTo(px, y + 2 + wave(fx));
-  }
-  for (let i = steps; i >= 0; i--) {
-    const fx = i / steps;
-    ctx.lineTo(x + 1.6 + fx * fw, y + 2 + fh + wave(fx));
-  }
-  ctx.closePath();
-  ctx.fill();
+  const amp = 1.3;
+  fillFlagBand(ctx, x + 1.6, y + 2, fw, fh, 0, 1, t, amp, "#f6f6f8");
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(x + 1.6 + fw * 0.5, y + 2 + fh / 2 + wave(0.5), fh * 0.3, 0, Math.PI * 2);
+  ctx.arc(x + 1.6 + fw * 0.5, y + 2 + fh / 2 + flagWave(t, amp, 0.5), fh * 0.3, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -945,47 +919,24 @@ function drawUmbrellaPerson(
 
 // --- Tokyo background drawer registry ---
 
+/**
+ * Element type → renderer. Adapters remain only where the element's `variant` is a
+ * seed (buildings, izakaya, screen, sakura) rather than a drawing variant.
+ */
 export const TOKYO_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
-  neon_building: (ctx, x, y, w, h, color, _palette, roofColor, variant = 0) => {
-    drawNeonBuilding(ctx, x, y, w, h, color, roofColor ?? color, variant);
-  },
-  konbini: (ctx, x, y, w, h) => {
-    drawKonbini(ctx, x, y, w, h);
-  },
-  izakaya: (ctx, x, y, w, h, _color, _palette, _roofColor, variant = 0) => {
-    drawIzakaya(ctx, x, y, w, h, variant);
-  },
-  tokyo_tower: (ctx, x, y, w, h) => {
-    drawTokyoTower(ctx, x, y, w, h);
-  },
-  skytree: (ctx, x, y, w, h) => {
-    drawSkytree(ctx, x, y, w, h);
-  },
-  pagoda: (ctx, x, y, w, h) => {
-    drawPagoda(ctx, x, y, w, h);
-  },
-  torii: (ctx, x, y, w, h) => {
-    drawTorii(ctx, x, y, w, h);
-  },
-  big_screen: (ctx, x, y, w, h, color, _palette, _roofColor, variant = 0) => {
-    drawBigScreen(ctx, x, y, w, h, color, variant);
-  },
-  train_viaduct: (ctx, x, y, w, h) => {
-    drawTrainViaduct(ctx, x, y, w, h);
-  },
-  sakura: (ctx, x, y, w, h, color, palette, _roofColor, variant = 0) => {
-    drawSakura(ctx, x, y, w, h, color, palette, variant);
-  },
-  japan_flag: (ctx, x, y, w, h, color) => {
-    drawJapanFlag(ctx, x, y, w, h, color);
-  },
-  street_lamp: (ctx, x, y, w, h, color) => {
-    drawStreetLamp(ctx, x, y, w, h, color);
-  },
-  umbrella_person: (ctx, x, y, w, h, color, palette, bottomColor, variant) => {
-    drawUmbrellaPerson(ctx, x, y, w, h, color, palette, bottomColor, variant);
-  },
-  walking_person: (ctx, x, y, w, h, color, palette, bottomColor, variant) => {
-    drawWalkingPerson(ctx, x, y, w, h, color, palette, bottomColor, variant);
-  },
+  neon_building: (ctx, x, y, w, h, color, _palette, roofColor, variant = 0) =>
+    drawNeonBuilding(ctx, x, y, w, h, color, roofColor ?? color, variant),
+  konbini: drawKonbini,
+  izakaya: (ctx, x, y, w, h, _color, _palette, _roofColor, variant = 0) => drawIzakaya(ctx, x, y, w, h, variant),
+  tokyo_tower: drawTokyoTower,
+  skytree: drawSkytree,
+  pagoda: drawPagoda,
+  torii: drawTorii,
+  big_screen: (ctx, x, y, w, h, color, _palette, _roofColor, variant = 0) => drawBigScreen(ctx, x, y, w, h, color, variant),
+  train_viaduct: drawTrainViaduct,
+  sakura: (ctx, x, y, w, h, color, palette, _roofColor, variant = 0) => drawSakura(ctx, x, y, w, h, color, palette, variant),
+  japan_flag: drawJapanFlag,
+  street_lamp: drawStreetLamp,
+  umbrella_person: drawUmbrellaPerson,
+  walking_person: drawWalkingPerson,
 };

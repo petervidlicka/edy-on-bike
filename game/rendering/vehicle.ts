@@ -5,6 +5,7 @@
  * lower cladding, light-rimmed tyres and a soft contact shadow.
  */
 import type { EnvironmentPalette } from "../environments/types";
+import { contactShadow } from "./drawHelpers";
 
 /** The few palette colours a vehicle needs (glass, tyres, lamps). */
 export type VehicleColors = Pick<EnvironmentPalette["obstacle"], "carWindow" | "carWheel" | "carTaillight" | "carHeadlight">;
@@ -173,10 +174,7 @@ export function drawVehicle(
   ctx.translate(x, y);
 
   // Soft contact shadow so the vehicle sits on the road.
-  ctx.fillStyle = "rgba(0,0,0,0.18)";
-  ctx.beginPath();
-  ctx.ellipse(w / 2, h - 0.5, w * 0.48, 1.8, 0, 0, Math.PI * 2);
-  ctx.fill();
+  contactShadow(ctx, w / 2, h, w * 0.48, 1.8, "rgba(0,0,0,0.18)");
 
   // Body.
   const body = paths.body;

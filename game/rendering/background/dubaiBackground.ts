@@ -1,6 +1,6 @@
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import { drawWalkingPerson } from "./shared";
-import { drawSprite } from "../drawHelpers";
+import { drawSprite, fillWindowGrid } from "../drawHelpers";
 
 // --- Dubai background elements ---
 
@@ -122,7 +122,8 @@ function drawMuseumRing(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.ellipse(cx - w * 0.06, cy - ry * 0.72, rx * 0.7, ry * 0.12, tilt, 0, Math.PI * 2);
   ctx.fill();
 
-  // Calligraphy windows: short flowing strokes that follow the ring.
+  // Calligraphy windows: short flowing strokes that follow the ring. The stroke
+  // positions use their own hash (not hash01) so the pattern stays as authored.
   ctx.strokeStyle = "#3b5161";
   ctx.lineCap = "round";
   for (let i = 0; i < 46; i++) {
@@ -337,16 +338,11 @@ function drawSteppedSkyscraper(
     ctx.fillStyle = wallColor;
     ctx.fillRect(tx, tier.top, tw, th);
     // Window grid per tier
-    ctx.fillStyle = palette.windowGlass;
     const cols = Math.max(2, Math.floor(tw / 9));
     const rows = Math.max(2, Math.floor(th / 12));
     const winW = (tw - 4) / cols - 2;
     const winH = (th - 4) / rows - 2;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        ctx.fillRect(tx + 2 + c * (winW + 2), tier.top + 3 + r * (winH + 2), winW, winH);
-      }
-    }
+    fillWindowGrid(ctx, tx + 2, tier.top + 3, cols, rows, winW + 2, winH + 2, winW, winH, palette.windowGlass);
     // Ledge at tier boundary
     ctx.fillStyle = roofColor;
     ctx.fillRect(tx, tier.top, tw, 2);
@@ -382,22 +378,21 @@ function drawDomeTopTower(
   ctx.fillStyle = wallColor;
   ctx.fillRect(x, bodyTop, w, bodyH);
 
-  // Window grid
-  ctx.fillStyle = palette.windowGlass;
-  const cols = Math.max(2, Math.floor(w / 8));
-  const rows = Math.max(4, Math.floor(bodyH / 10));
-  const winW = (w - 6) / cols - 2;
-  const winH = (bodyH - 8) / rows - 2;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      ctx.fillRect(x + 3 + c * (winW + 2), bodyTop + 5 + r * (winH + 2), winW, winH);
-    }
-  }
+  bodyWindowGrid(ctx, x, bodyTop, w, bodyH, palette.windowGlass);
 
   // Outline
   ctx.strokeStyle = roofColor;
   ctx.lineWidth = 0.6;
   ctx.strokeRect(x, bodyTop, w, bodyH);
+}
+
+/** The window grid shared by the dome-topped and angled towers' bodies. */
+function bodyWindowGrid(ctx: CanvasRenderingContext2D, x: number, bodyTop: number, w: number, bodyH: number, glass: string) {
+  const cols = Math.max(2, Math.floor(w / 8));
+  const rows = Math.max(4, Math.floor(bodyH / 10));
+  const winW = (w - 6) / cols - 2;
+  const winH = (bodyH - 8) / rows - 2;
+  fillWindowGrid(ctx, x + 3, bodyTop + 5, cols, rows, winW + 2, winH + 2, winW, winH, glass);
 }
 
 // Variant 3: Angled/pointed crown tower
@@ -424,17 +419,7 @@ function drawAngledTower(
   ctx.fillStyle = wallColor;
   ctx.fillRect(x, bodyTop, w, bodyH);
 
-  // Window grid
-  ctx.fillStyle = palette.windowGlass;
-  const cols = Math.max(2, Math.floor(w / 8));
-  const rows = Math.max(4, Math.floor(bodyH / 10));
-  const winW = (w - 6) / cols - 2;
-  const winH = (bodyH - 8) / rows - 2;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      ctx.fillRect(x + 3 + c * (winW + 2), bodyTop + 5 + r * (winH + 2), winW, winH);
-    }
-  }
+  bodyWindowGrid(ctx, x, bodyTop, w, bodyH, palette.windowGlass);
 
   // Outline
   ctx.strokeStyle = roofColor;
@@ -484,18 +469,11 @@ function drawGenericSkyscraper(
   ctx.fillRect(x, y, w, h);
 
   // Window grid
-  ctx.fillStyle = palette.windowGlass;
   const cols = Math.max(2, Math.floor(w / 8));
   const rows = Math.max(4, Math.floor(h / 10));
   const winW = (w - 6) / cols - 2;
   const winH = (h - 10) / rows - 2;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const wx = x + 3 + c * (winW + 2);
-      const wy = y + 6 + r * (winH + 2);
-      ctx.fillRect(wx, wy, winW, winH);
-    }
-  }
+  fillWindowGrid(ctx, x + 3, y + 6, cols, rows, winW + 2, winH + 2, winW, winH, palette.windowGlass);
 
   // Rooftop structure
   ctx.fillStyle = roofColor;
@@ -680,17 +658,10 @@ export function drawBackgroundCamel(
 
 // --- Dubai background drawer registry ---
 
+/** Element type → renderer. The palm keeps an adapter because its variant comes without a roof colour. */
 export const DUBAI_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
-  skyscraper: (ctx, x, y, w, h, color, palette, roofColor, variant) => {
-    drawSkyscraper(ctx, x, y, w, h, color, palette, roofColor, variant);
-  },
-  palm_tree: (ctx, x, y, w, h, color, palette, _roofColor, variant) => {
-    drawPalmTree(ctx, x, y, w, h, color, palette, variant);
-  },
-  bg_camel: (ctx, x, y, w, h, color, palette) => {
-    drawBackgroundCamel(ctx, x, y, w, h, color, palette);
-  },
-  walking_person: (ctx, x, y, w, h, color, palette, bottomColor, variant) => {
-    drawWalkingPerson(ctx, x, y, w, h, color, palette, bottomColor, variant);
-  },
+  skyscraper: drawSkyscraper,
+  palm_tree: (ctx, x, y, w, h, color, palette, _roofColor, variant) => drawPalmTree(ctx, x, y, w, h, color, palette, variant),
+  bg_camel: drawBackgroundCamel,
+  walking_person: drawWalkingPerson,
 };

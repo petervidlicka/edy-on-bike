@@ -6,12 +6,11 @@
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
 import { AUSTRIA_OBSTACLE_COLORS } from "./obstacleColors";
-import { EASING_OUT, stagedPool } from "./stages";
+import { EASING_OUT, stagedObstaclePool } from "./stages";
 import { AUSTRIA_BACKGROUND_DRAWERS, drawAlpineRange } from "../rendering";
 import type {
   EnvironmentDefinition,
   EnvironmentPalette,
-  WeightedType,
 } from "./types";
 
 // ── Snowy Austria palette — crisp blue sky, white snow, timber chalets ──
@@ -233,24 +232,22 @@ function generateAustriaElements(
 
 // ── Obstacle pool — Austria biome, time-staged ──
 
-// biomeMs = biome-relative elapsed time (0 = when this biome started, not game start)
-function austriaWeightedTypes(biomeMs: number): WeightedType[] {
-  return stagedPool(biomeMs, [
-    // Stage 1: village obstacles + a first cruising freerider
-    [ObstacleType.SNOWMAN, EASING_OUT],
-    [ObstacleType.FROZEN_LAKE, EASING_OUT],
-    [ObstacleType.RED_DEER, [0.8, 0.8, 0.8]],
-    [ObstacleType.BEER_CRATES, [0.7, 0.7, 0.7]],
-    [ObstacleType.FREERIDE_SKIER, [0.4, 0.6, 0.8]],
-    // Stage 2 (15s into Austria): kickers, rideables and the rest of the moving crowd
-    [ObstacleType.SNOW_KICKER, [null, 0.6, 0.6]],
-    [ObstacleType.SNOW_CAT, [null, 0.5, 0.7]],
-    [ObstacleType.BEER_CRATE_WALL, [null, 0.5, 0.7]],
-    [ObstacleType.SNOWBOARDER, [null, 0.5, 0.7]],
-    [ObstacleType.RACE_SKIER, [null, 0.4, 0.7]],
-    [ObstacleType.SNOW_SCOOTER, [null, 0.4, 0.6]],
-  ]);
-}
+// Standard stage starts (15 s / 30 s), measured from when this biome started, not game start
+const AUSTRIA_OBSTACLE_POOL = stagedObstaclePool([
+  // Stage 1: village obstacles + a first cruising freerider
+  [ObstacleType.SNOWMAN, EASING_OUT],
+  [ObstacleType.FROZEN_LAKE, EASING_OUT],
+  [ObstacleType.RED_DEER, [0.8, 0.8, 0.8]],
+  [ObstacleType.BEER_CRATES, [0.7, 0.7, 0.7]],
+  [ObstacleType.FREERIDE_SKIER, [0.4, 0.6, 0.8]],
+  // Stage 2 (15s into Austria): kickers, rideables and the rest of the moving crowd
+  [ObstacleType.SNOW_KICKER, [null, 0.6, 0.6]],
+  [ObstacleType.SNOW_CAT, [null, 0.5, 0.7]],
+  [ObstacleType.BEER_CRATE_WALL, [null, 0.5, 0.7]],
+  [ObstacleType.SNOWBOARDER, [null, 0.5, 0.7]],
+  [ObstacleType.RACE_SKIER, [null, 0.4, 0.7]],
+  [ObstacleType.SNOW_SCOOTER, [null, 0.4, 0.6]],
+]);
 
 // ── Full environment definition ──
 
@@ -265,9 +262,7 @@ export const AUSTRIA_ENVIRONMENT: EnvironmentDefinition = {
     generateElements: generateAustriaElements,
   },
   backgroundDrawers: AUSTRIA_BACKGROUND_DRAWERS,
-  obstaclePool: {
-    getWeightedTypes: austriaWeightedTypes,
-  },
+  obstaclePool: AUSTRIA_OBSTACLE_POOL,
   musicTrack: "/music-austria.mp3",
   particleOverlay: {
     type: "snow",

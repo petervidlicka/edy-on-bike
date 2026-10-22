@@ -206,8 +206,13 @@ export interface WeightedType {
 }
 
 export interface ObstaclePoolConfig {
-  /** Return weighted obstacle types available at the given elapsed time */
-  getWeightedTypes: (elapsedMs: number) => WeightedType[];
+  /** Return weighted obstacle types available at the given biome-relative time */
+  getWeightedTypes: (biomeMs: number) => WeightedType[];
+  /**
+   * Biome-relative time (ms) from which the full roster is in play. A revisited biome
+   * starts here on later laps (see EnvironmentManager.getBiomeElapsedMs).
+   */
+  fullRosterMs: number;
 }
 
 // ── Particle overlay (snow, sand, rain) ──

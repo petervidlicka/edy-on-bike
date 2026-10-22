@@ -1,10 +1,10 @@
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
+import { stagedObstaclePool, type StageWeights } from "./stages";
 import { SUBURBAN_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
   EnvironmentPalette,
-  WeightedType,
 } from "./types";
 
 // ── Suburban palette — extracted from constants.ts COLORS + inline hex values in Renderer.ts ──
@@ -200,39 +200,37 @@ function generateSuburbanElements(
   return elements;
 }
 
-// ── Obstacle pool — extracted from Obstacle.ts getWeightedTypes() ──
+// ── Obstacle pool — Suburban biome, time-staged ──
 
-function suburbanWeightedTypes(elapsedMs: number): WeightedType[] {
-  const basicWeight = elapsedMs >= 25_000 ? 0.4 : elapsedMs >= 10_000 ? 0.7 : 1.0;
+/**
+ * The opening biome teaches one thing at a time, so its four stages start later and
+ * are spread wider (10/25/40 s) than the other biomes' standard 15/30 s.
+ */
+const SUBURBAN_STAGE_STARTS_MS: readonly number[] = [10_000, 25_000, 40_000];
 
-  const types: WeightedType[] = [
-    { type: ObstacleType.ROCK, weight: basicWeight },
-    { type: ObstacleType.SMALL_TREE, weight: basicWeight },
-  ];
+/** Weights for the opening obstacles, which give way as harder ones arrive. */
+const BASICS: StageWeights = [1.0, 0.7, 0.4, 0.4];
+
+const SUBURBAN_OBSTACLE_POOL = stagedObstaclePool([
+  // Stage 1: rocks and small trees
+  [ObstacleType.ROCK, BASICS],
+  [ObstacleType.SMALL_TREE, BASICS],
   // Stage 2 (10s): tall trees, giant trees, trolleys, ramps
-  if (elapsedMs >= 10_000) {
-    types.push({ type: ObstacleType.TALL_TREE, weight: 0.8 });
-    types.push({ type: ObstacleType.GIANT_TREE, weight: 0.5 });
-    types.push({ type: ObstacleType.SHOPPING_TROLLEY, weight: 1.0 });
-    types.push({ type: ObstacleType.STRAIGHT_RAMP, weight: 0.4 });
-    types.push({ type: ObstacleType.CURVED_RAMP, weight: 0.4 });
-  }
+  [ObstacleType.TALL_TREE, [null, 0.8, 0.8, 0.8]],
+  [ObstacleType.GIANT_TREE, [null, 0.5, 0.5, 0.5]],
+  [ObstacleType.SHOPPING_TROLLEY, [null, 1.0, 1.0, 1.0]],
+  [ObstacleType.STRAIGHT_RAMP, [null, 0.4, 0.4, 0.4]],
+  [ObstacleType.CURVED_RAMP, [null, 0.4, 0.4, 0.4]],
   // Stage 3 (25s): rideable obstacles
-  if (elapsedMs >= 25_000) {
-    types.push({ type: ObstacleType.BUS_STOP, weight: 0.8 });
-    types.push({ type: ObstacleType.SHIPPING_CONTAINER, weight: 0.8 });
-    types.push({ type: ObstacleType.CONTAINER_WITH_RAMP, weight: 0.5 });
-  }
-  // Stage 4 (40s): cars + other riders
-  if (elapsedMs >= 40_000) {
-    // Traffic: split the old single car weight across three vehicle sizes.
-    types.push({ type: ObstacleType.CAR, weight: 0.4 });
-    types.push({ type: ObstacleType.SUV, weight: 0.35 });
-    types.push({ type: ObstacleType.DELIVERY_VAN, weight: 0.25 });
-    types.push({ type: ObstacleType.PERSON_ON_BIKE, weight: 1.0 });
-  }
-  return types;
-}
+  [ObstacleType.BUS_STOP, [null, null, 0.8, 0.8]],
+  [ObstacleType.SHIPPING_CONTAINER, [null, null, 0.8, 0.8]],
+  [ObstacleType.CONTAINER_WITH_RAMP, [null, null, 0.5, 0.5]],
+  // Stage 4 (40s): traffic (the old single car weight split across three sizes) + other riders
+  [ObstacleType.CAR, [null, null, null, 0.4]],
+  [ObstacleType.SUV, [null, null, null, 0.35]],
+  [ObstacleType.DELIVERY_VAN, [null, null, null, 0.25]],
+  [ObstacleType.PERSON_ON_BIKE, [null, null, null, 1.0]],
+], SUBURBAN_STAGE_STARTS_MS);
 
 // ── Full environment definition ──
 
@@ -247,8 +245,6 @@ export const SUBURBAN_ENVIRONMENT: EnvironmentDefinition = {
     generateElements: generateSuburbanElements,
   },
   backgroundDrawers: SUBURBAN_BACKGROUND_DRAWERS,
-  obstaclePool: {
-    getWeightedTypes: suburbanWeightedTypes,
-  },
+  obstaclePool: SUBURBAN_OBSTACLE_POOL,
   musicTrack: "/music.mp3",
 };

@@ -1,12 +1,11 @@
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
 import { DUBAI_OBSTACLE_COLORS } from "./obstacleColors";
-import { EASING_OUT, stagedPool } from "./stages";
+import { EASING_OUT, stagedObstaclePool } from "./stages";
 import { DUBAI_BACKGROUND_DRAWERS } from "../rendering";
 import type {
   EnvironmentDefinition,
   EnvironmentPalette,
-  WeightedType,
 } from "./types";
 
 // ── Desert City palette — Dubai/Miami inspired ──
@@ -257,27 +256,25 @@ function generateDubaiElements(
 
 // ── Obstacle pool — Dubai biome, time-staged ──
 
-// biomeMs = biome-relative elapsed time (0 = when this biome started, not game start)
-function dubaiWeightedTypes(biomeMs: number): WeightedType[] {
-  return stagedPool(biomeMs, [
-    // Stage 1: core desert obstacles + vehicle previews
-    [ObstacleType.SAND_TRAP, EASING_OUT],
-    [ObstacleType.CACTUS, EASING_OUT],
-    [ObstacleType.CAMEL, [0.8, 0.8, 0.8]],
-    [ObstacleType.LAND_CRUISER, [0.3, 0.7, 1.0]],
-    [ObstacleType.PINK_G_CLASS, [0.2, 0.5, 0.7]],
-    // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + supercars + billboard
-    [ObstacleType.STRAIGHT_RAMP, [null, 0.4, 0.4]],
-    [ObstacleType.CURVED_RAMP, [null, 0.4, 0.4]],
-    [ObstacleType.DUBAI_CHOCOLATE, [null, 0.7, 1.0]],
-    [ObstacleType.LAMBORGHINI_HURACAN, [null, 0.5, 0.8]],
-    [ObstacleType.FERRARI_458, [null, 0.4, 0.6]],
-    [ObstacleType.CONVERTIBLE, [null, 0.4, 0.6]],
-    [ObstacleType.ROLLS_ROYCE_PHANTOM, [null, 0.3, 0.5]],
-    [ObstacleType.PORSCHE_911, [null, 0.4, 0.6]],
-    [ObstacleType.DUBAI_BILLBOARD, [null, 0.4, 0.4]],
-  ]);
-}
+// Standard stage starts (15 s / 30 s), measured from when this biome started, not game start
+const DUBAI_OBSTACLE_POOL = stagedObstaclePool([
+  // Stage 1: core desert obstacles + vehicle previews
+  [ObstacleType.SAND_TRAP, EASING_OUT],
+  [ObstacleType.CACTUS, EASING_OUT],
+  [ObstacleType.CAMEL, [0.8, 0.8, 0.8]],
+  [ObstacleType.LAND_CRUISER, [0.3, 0.7, 1.0]],
+  [ObstacleType.PINK_G_CLASS, [0.2, 0.5, 0.7]],
+  // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + supercars + billboard
+  [ObstacleType.STRAIGHT_RAMP, [null, 0.4, 0.4]],
+  [ObstacleType.CURVED_RAMP, [null, 0.4, 0.4]],
+  [ObstacleType.DUBAI_CHOCOLATE, [null, 0.7, 1.0]],
+  [ObstacleType.LAMBORGHINI_HURACAN, [null, 0.5, 0.8]],
+  [ObstacleType.FERRARI_458, [null, 0.4, 0.6]],
+  [ObstacleType.CONVERTIBLE, [null, 0.4, 0.6]],
+  [ObstacleType.ROLLS_ROYCE_PHANTOM, [null, 0.3, 0.5]],
+  [ObstacleType.PORSCHE_911, [null, 0.4, 0.6]],
+  [ObstacleType.DUBAI_BILLBOARD, [null, 0.4, 0.4]],
+]);
 
 // ── Full environment definition ──
 
@@ -292,9 +289,7 @@ export const DUBAI_ENVIRONMENT: EnvironmentDefinition = {
     generateElements: generateDubaiElements,
   },
   backgroundDrawers: DUBAI_BACKGROUND_DRAWERS,
-  obstaclePool: {
-    getWeightedTypes: dubaiWeightedTypes,
-  },
+  obstaclePool: DUBAI_OBSTACLE_POOL,
   musicTrack: "/music-dubai.mp3",
   particleOverlay: {
     type: "sand",

@@ -26,12 +26,6 @@ const BIOME_CYCLE: EnvironmentDefinition[] = [
 /** How long each biome lasts before the next transition starts. */
 const BIOME_DURATION_MS = 60_000;
 
-/**
- * Biome-relative time reported on second and later laps, so a revisited biome starts on
- * its full obstacle roster instead of the gentle opening stages (the speed is high by then).
- */
-const LATER_LAP_STAGE_MS = 30_000;
-
 const NO_PASSES: readonly SkylinePass[] = [];
 
 /**
@@ -49,10 +43,10 @@ export interface EnvUpdateResult {
   biomeStarted?: BiomeId;
   /** If set, Engine should crossfade music to the new track. */
   musicCrossfade?: { track: string; durationMs: number };
-  /** If set, a transition just started: Engine queues the incoming biome's scenery behind the current one. */
-  appendBackground?: { fromEnv: EnvironmentDefinition; toEnv: EnvironmentDefinition };
-  /** If set, the transition into this environment just finished (outgoing clouds/weather are gone). */
-  regenerateBackground?: EnvironmentDefinition;
+  /** If set, a transition just started, from the biome being left to the one coming in. */
+  transitionStarted?: { from: EnvironmentDefinition; to: EnvironmentDefinition };
+  /** Set when a transition just finished: the incoming biome is now the only one on screen. */
+  transitionEnded?: true;
 }
 
 /**
@@ -103,8 +97,7 @@ export class EnvironmentManager {
         const nextEnv = this.advanceBiome();
         result.biomeStarted = nextEnv.id;
 
-        // Signal Engine to queue the new biome's scenery behind the current one
-        result.appendBackground = { fromEnv, toEnv: nextEnv };
+        result.transitionStarted = { from: fromEnv, to: nextEnv };
 
         // Signal Engine to crossfade music if track changed
         if (nextEnv.musicTrack !== this.fromEnv?.musicTrack) {
@@ -120,12 +113,8 @@ export class EnvironmentManager {
     if (this.transitioning) {
       this.transitionProgress += dt / this.transitionDuration;
       if (this.transitionProgress >= 1) {
-        const completedEnv = this.toEnv;
         this.completeTransition();
-        // Signal Engine to do a clean rebuild with just the new biome
-        if (completedEnv) {
-          result.regenerateBackground = completedEnv;
-        }
+        result.transitionEnded = true;
       }
     }
 
@@ -145,9 +134,16 @@ export class EnvironmentManager {
     this.lastElapsedMs = 0;
   }
 
-  /** Returns elapsed time relative to when the current biome started. */
+  /**
+   * Returns elapsed time relative to when the current biome started. On second and later
+   * laps the biome's own full-roster time is added, so a revisited biome skips its gentle
+   * opening stages (the speed is high by then). Measured against the environment whose
+   * pool is being sampled (`getCurrentEnvironment`), so the bonus matches its stage table.
+   */
   getBiomeElapsedMs(elapsedMs: number): number {
-    const lapBonus = this.currentBiomeIndex >= BIOME_CYCLE.length ? LATER_LAP_STAGE_MS : 0;
+    const lapBonus = this.currentBiomeIndex >= BIOME_CYCLE.length
+      ? this.getCurrentEnvironment().obstaclePool.fullRosterMs
+      : 0;
     return Math.max(0, elapsedMs - this.biomeStartMs) + lapBonus;
   }
 

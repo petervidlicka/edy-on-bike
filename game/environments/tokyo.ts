@@ -7,12 +7,11 @@
 import { ObstacleType, type BackgroundElement } from "../types";
 import { pickPedestrian } from "./pedestrians";
 import { TOKYO_OBSTACLE_COLORS } from "./obstacleColors";
-import { EASING_OUT, stagedPool } from "./stages";
+import { EASING_OUT, stagedObstaclePool } from "./stages";
 import { TOKYO_BACKGROUND_DRAWERS, drawTokyoNightSky, drawNeonReflections } from "../rendering";
 import type {
   EnvironmentDefinition,
   EnvironmentPalette,
-  WeightedType,
 } from "./types";
 
 // ── Night Tokyo palette — indigo sky, dark wet street, warm windows ──
@@ -236,28 +235,26 @@ function generateTokyoElements(
 
 // ── Obstacle pool — Tokyo biome, time-staged ──
 
-// biomeMs = biome-relative elapsed time (0 = when this biome started, not game start)
-function tokyoWeightedTypes(biomeMs: number): WeightedType[] {
-  return stagedPool(biomeMs, [
-    // Stage 1: street clutter + the first Kei cars
-    [ObstacleType.SHIBA_INU, EASING_OUT],
-    [ObstacleType.RAMEN_BOWL, EASING_OUT],
-    [ObstacleType.MANEKI_NEKO, EASING_OUT],
-    [ObstacleType.KAWAII_BARRIER, [0.8, 0.8, 0.8]],
-    [ObstacleType.KEI_CAR, [0.6, 0.8, 0.8]],
-    [ObstacleType.VENDING_MACHINE, [0.4, 0.6, 0.6]],
-    // Stage 2 (15s into Tokyo): ramps, rideables, samurai, traffic and moving riders
-    [ObstacleType.STRAIGHT_RAMP, [null, 0.4, 0.4]],
-    [ObstacleType.CURVED_RAMP, [null, 0.4, 0.4]],
-    [ObstacleType.SUSHI_ROLLS, [null, 0.5, 0.7]],
-    [ObstacleType.SAKE_BARRELS, [null, 0.5, 0.7]],
-    [ObstacleType.SAMURAI, [null, 0.6, 0.8]],
-    [ObstacleType.KEI_TRUCK, [null, 0.5, 0.5]],
-    [ObstacleType.JAPAN_TAXI, [null, 0.5, 0.7]],
-    [ObstacleType.DELIVERY_SCOOTER, [null, 0.5, 0.7]],
-    [ObstacleType.UMBRELLA_CYCLIST, [null, 0.4, 0.6]],
-  ]);
-}
+// Standard stage starts (15 s / 30 s), measured from when this biome started, not game start
+const TOKYO_OBSTACLE_POOL = stagedObstaclePool([
+  // Stage 1: street clutter + the first Kei cars
+  [ObstacleType.SHIBA_INU, EASING_OUT],
+  [ObstacleType.RAMEN_BOWL, EASING_OUT],
+  [ObstacleType.MANEKI_NEKO, EASING_OUT],
+  [ObstacleType.KAWAII_BARRIER, [0.8, 0.8, 0.8]],
+  [ObstacleType.KEI_CAR, [0.6, 0.8, 0.8]],
+  [ObstacleType.VENDING_MACHINE, [0.4, 0.6, 0.6]],
+  // Stage 2 (15s into Tokyo): ramps, rideables, samurai, traffic and moving riders
+  [ObstacleType.STRAIGHT_RAMP, [null, 0.4, 0.4]],
+  [ObstacleType.CURVED_RAMP, [null, 0.4, 0.4]],
+  [ObstacleType.SUSHI_ROLLS, [null, 0.5, 0.7]],
+  [ObstacleType.SAKE_BARRELS, [null, 0.5, 0.7]],
+  [ObstacleType.SAMURAI, [null, 0.6, 0.8]],
+  [ObstacleType.KEI_TRUCK, [null, 0.5, 0.5]],
+  [ObstacleType.JAPAN_TAXI, [null, 0.5, 0.7]],
+  [ObstacleType.DELIVERY_SCOOTER, [null, 0.5, 0.7]],
+  [ObstacleType.UMBRELLA_CYCLIST, [null, 0.4, 0.6]],
+]);
 
 // ── Full environment definition ──
 
@@ -272,9 +269,7 @@ export const TOKYO_ENVIRONMENT: EnvironmentDefinition = {
     generateElements: generateTokyoElements,
   },
   backgroundDrawers: TOKYO_BACKGROUND_DRAWERS,
-  obstaclePool: {
-    getWeightedTypes: tokyoWeightedTypes,
-  },
+  obstaclePool: TOKYO_OBSTACLE_POOL,
   musicTrack: "/music-tokyo.m4a",
   particleOverlay: {
     type: "rain",

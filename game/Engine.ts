@@ -1,4 +1,4 @@
-import { GameState, AmbulancePhase, AmbulanceState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
+import { GameState, ObstacleInstance, ObstacleType, TrickType, SkinDefinition } from "./types";
 import {
   GROUND_RATIO,
   INITIAL_SPEED,
@@ -8,7 +8,6 @@ import {
   MAX_SPEED_MULTIPLIER,
   FLIP_TOLERANCE,
   SKETCHY_TOLERANCE,
-  AMBULANCE_CHANCE,
   PLAYER_X_RATIO,
   CRASH_SKIP_AFTER_S,
 } from "./constants";
@@ -17,10 +16,10 @@ import {
   FloatingText,
   updateFloatingTexts,
   processTrickLanding,
-  resetAllTrickState,
   TrickContext
 } from "./TrickSystem";
 import { TrickScoring } from "./TrickScoring";
+import { AmbulanceSequence } from "./AmbulanceSequence";
 import { createPlayer, updatePlayer, jumpPlayer, startBackflip, startFrontflip, startSuperman, startNoHander } from "./Player";
 import { BiomeScenery } from "./BiomeScenery";
 import {
@@ -33,7 +32,6 @@ import { SoundManager } from "./SoundManager";
 import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
 import { voiceCueFor } from "./voiceLines";
-import { createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
 import {
   beginCrash, createCrashPopText, createCrashState, crashPopFor, drawCrash, pickVariant, stepCrash, tickCrashAnim,
 } from "./crashes";
@@ -111,9 +109,8 @@ export class Engine {
   private groundY: number = 0;
   private callbacks: EngineCallbacks;
   private sound = new SoundManager();
-  private ambulance: AmbulanceState | null = null;
-  private hasBeenResurrected = false;
-  private iddqdActive = false;
+  /** The ambulance that may follow a crash, with the one-rescue-per-run rule and the IDDQD cheat. */
+  private rescue: AmbulanceSequence;
   private skin: SkinDefinition = getSkinById("default");
   private debugSequence: ObstacleType[] | null = null;
   private debugIndex: number = 0;
@@ -121,11 +118,6 @@ export class Engine {
   /** Padding the last debug-spawned mover needs before the next spawn (see spawnGapPadding). */
   private nextDebugPadding = 0;
   private crashState = createCrashState();
-  /**
-   * Decided when the crash starts (not when it ends) so the player can skip a crash
-   * animation that no ambulance follows; an ambulance, once rolled, always plays.
-   */
-  private ambulancePending = false;
   private rng: { random(): number } = { random: Math.random };
   private multiplayer: MultiplayerAdapter | null = null;
   /** Zooms out for big air so the rider never leaves the screen. Render-only. */
@@ -153,6 +145,26 @@ export class Engine {
       emit: (event) => this.emit(event),
       addFloatingText: (text) => this.floatingTexts.push(text),
     });
+    this.rescue = new AmbulanceSequence({
+      multiplayer: this.multiplayer !== null,
+      sound: this.sound,
+      player: () => this.player,
+      obstacles: () => this.obstacles,
+      canvasW: () => this.canvasW,
+      groundY: () => this.groundY,
+      speed: () => this.speed,
+      setSpeed: (speed) => {
+        this.speed = speed;
+        this.callbacks.onSpeedUpdate?.(speed);
+      },
+      setSpawnGap: (gap) => {
+        this.distanceSinceLastObstacle = 0;
+        this.nextObstacleGap = gap;
+      },
+      setState: (state) => this.setState(state),
+      emit: (event) => this.emit(event),
+      addFloatingText: (text) => this.floatingTexts.push(text),
+    });
     this.loop = this.loop.bind(this);
     this.resize(window.innerWidth, window.innerHeight);
     this.rafId = requestAnimationFrame(this.loop);
@@ -174,7 +186,7 @@ export class Engine {
       const dy = this.groundY - prevGroundY;
       this.player.y = Math.min(this.player.y + dy, this.groundY - this.player.height);
       for (const obs of this.obstacles) obs.y += dy;
-      if (this.ambulance) this.ambulance.y += dy;
+      this.rescue.shiftY(dy);
     }
     // The loop is stopped while paused; setting the canvas size cleared it, so redraw the frozen frame.
     if (this.isPaused()) this.render();
@@ -188,20 +200,16 @@ export class Engine {
     // First user gesture: the one place the voice clips may be fetched and decoded
     this.sound.voice.preload();
     this.callbacks.onStateChange(this.state);
-    this.emit({ type: "runStart", ranked: !this.iddqdActive && !this.debugSequence });
+    this.emit({ type: "runStart", ranked: !this.rescue.cheatActive && !this.debugSequence });
   }
 
   restart(): void {
     // Drop only the player's pause: a phone still held in portrait (or a hidden tab) keeps the game frozen.
     const wasPaused = this.isPaused();
     const hadUserPause = this.pauseReasons.delete("user");
-    this.sound.stopSiren();
+    this.rescue.reset();
     this.scoring.reset();
     this.sound.reset();
-    this.ambulance = null;
-    this.ambulancePending = false;
-    this.hasBeenResurrected = false;
-    this.iddqdActive = false;
     this.state = GameState.IDLE;
     this.speed = INITIAL_SPEED;
     this.score = 0;
@@ -286,9 +294,7 @@ export class Engine {
 
     // After the revive the ambulance drives off on its own, even if the rider crashes
     // again meanwhile (skipped on the frame it already ran above)
-    if (frameState !== GameState.AMBULANCE && this.ambulance) {
-      if (updateAmbulanceLogic(this.ambulance, dt, rawDt) === AmbulanceAction.REMOVE) this.ambulance = null;
-    }
+    if (frameState !== GameState.AMBULANCE) this.rescue.driveOut(dt, rawDt);
 
     this.camera.update(rawDt, this.state === GameState.RUNNING ? this.player.y : null, this.groundY);
     this.render();
@@ -475,8 +481,7 @@ export class Engine {
     this.sound.stopMusic();
     this.sound.playCrash(variant);
     beginCrash(this.crashState, variant, { player: this.player, speed: this.speed, groundY: this.groundY, cause });
-    this.ambulancePending =
-      !this.multiplayer && !this.hasBeenResurrected && (this.iddqdActive || Math.random() < AMBULANCE_CHANCE);
+    this.rescue.decideOnCrash();
     this.floatingTexts.push(
       createCrashPopText(crashPopFor(variant), { x: this.player.x + this.player.width / 2 + 18, y: this.player.y - 36 }, this.canvasW),
     );
@@ -488,7 +493,7 @@ export class Engine {
    * played for a moment, and never when an ambulance is coming: that always plays out.
    */
   private skipCrash(): void {
-    if (this.state !== GameState.CRASHING || this.isPaused() || this.ambulancePending) return;
+    if (this.state !== GameState.CRASHING || this.isPaused() || this.rescue.pending) return;
     if (this.crashState.elapsed < CRASH_SKIP_AFTER_S) return;
     // The boings and rustles are timed to the animation being skipped
     this.sound.stopCrashSounds();
@@ -502,94 +507,33 @@ export class Engine {
       this.finalGameOver();
       return;
     }
-    if (this.ambulancePending) {
-      this.ambulancePending = false;
-      this.hasBeenResurrected = true;
-      this.iddqdActive = false;
-      this.startAmbulanceSequence();
+    if (this.rescue.begin()) {
+      this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
     } else {
       this.finalGameOver();
     }
   }
 
   private finalGameOver(): void {
-    this.state = GameState.GAME_OVER;
-    this.callbacks.onStateChange(this.state);
+    this.setState(GameState.GAME_OVER);
     this.callbacks.onGameOver(this.score);
   }
 
-  private startAmbulanceSequence(): void {
-    this.state = GameState.AMBULANCE;
-    this.ambulance = createAmbulanceState(this.player.x, this.player.width, this.canvasW, this.groundY);
-    this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
-    this.sound.playSiren();
-    this.callbacks.onStateChange(this.state);
+  /** Switches the run state and tells React. */
+  private setState(state: GameState): void {
+    this.state = state;
+    this.callbacks.onStateChange(state);
   }
 
   private updateAmbulance(dt: number, rawDt: number): void {
-    if (!this.ambulance) return;
+    if (!this.rescue.current) return;
 
     this.floatingTexts = updateFloatingTexts(this.floatingTexts, dt);
 
     // The crashed rider keeps wiggling while the ambulance drives up
-    if (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED) {
-      tickCrashAnim(this.crashState, rawDt);
-    }
+    if (this.rescue.riderStillDown) tickCrashAnim(this.crashState, rawDt);
 
-    const action = updateAmbulanceLogic(this.ambulance, dt, rawDt);
-
-    if (action === AmbulanceAction.STOP_SIREN) {
-      this.sound.stopSiren();
-    } else if (action === AmbulanceAction.REVIVE) {
-      this.revivePlayer();
-      this.sound.playRevive();
-    } else if (action === AmbulanceAction.RESUME_GAME) {
-      this.state = GameState.RUNNING;
-      this.sound.startMusic();
-      this.callbacks.onStateChange(this.state);
-    } else if (action === AmbulanceAction.REMOVE) {
-      this.ambulance = null;
-    }
-  }
-
-  private revivePlayer(): void {
-    // Clear obstacles near the player
-    const clearZone = this.player.x + this.player.width + 200;
-    this.obstacles = this.obstacles.filter((obs) => obs.x > clearZone);
-
-    // Reset player state to ground
-    this.player.y = this.groundY - this.player.height;
-    this.player.velocityY = 0;
-    this.player.isOnGround = true;
-    this.player.jumpCount = 0;
-    this.player.bikeTilt = 0;
-    this.player.riderLean = 0;
-    this.player.riderCrouch = 0;
-    this.player.legTuck = 0;
-    this.player.ridingObstacle = null;
-    // A crash mid-air skips the landing that normally clears these, and a leftover pose or
-    // ramp boost would carry into the next hop (free trick bonus, boosted jump)
-    resetAllTrickState(this.player);
-    this.player.rampBoost = null;
-    this.player.rampSurfaceAngle = 0;
-
-    // Mercy slowdown
-    this.speed *= 0.85;
-    this.callbacks.onSpeedUpdate?.(this.speed);
-
-    // Big gap after revive
-    this.distanceSinceLastObstacle = 0;
-    this.nextObstacleGap = 500;
-
-    this.emit({ type: "revive" });
-    this.floatingTexts.push({
-      text: "REVIVED!",
-      x: this.player.x + this.player.width / 2,
-      y: this.player.y - 20,
-      opacity: 1,
-      velocityY: -1.2,
-      color: "#00ff88",
-    });
+    this.rescue.update(dt, rawDt);
   }
 
   private updateCrash(dt: number, rawDt: number): void {
@@ -648,12 +592,11 @@ export class Engine {
       }
     }
 
-    const ambulancePreRevive = this.state === GameState.AMBULANCE
-      && this.ambulance
-      && (this.ambulance.phase === AmbulancePhase.DRIVING_IN || this.ambulance.phase === AmbulancePhase.STOPPED);
+    const ambulance = this.rescue.current;
+    const ambulancePreRevive = this.state === GameState.AMBULANCE && this.rescue.riderStillDown;
 
     // The ambulance sits in the far lane: drawn behind the rider so it can drive out past them.
-    if (this.ambulance) drawAmbulance(ctx, this.ambulance);
+    if (ambulance) drawAmbulance(ctx, ambulance);
 
     if (crashing || ambulancePreRevive || this.state === GameState.GAME_OVER) {
       drawCrash(ctx, this.crashState, { skin: this.skin, palette, groundY });
@@ -673,8 +616,8 @@ export class Engine {
     }
     ctx.restore();
 
-    if (this.ambulance && this.ambulance.reviveFlashOpacity > 0) {
-      drawReviveFlash(ctx, this.ambulance.reviveFlashOpacity, canvasW, canvasH);
+    if (ambulance && ambulance.reviveFlashOpacity > 0) {
+      drawReviveFlash(ctx, ambulance.reviveFlashOpacity, canvasW, canvasH);
     }
 
     // Launch higher than the zoomed-out camera can show: pin a height marker to the top edge
@@ -732,11 +675,7 @@ export class Engine {
     this.sound.playUnlock();
   }
   activateIddqd(): void {
-    this.iddqdActive = true;
-    // Typed mid-crash: the ambulance is already decided, so the cheat has to flip it
-    if (this.state === GameState.CRASHING && !this.multiplayer && !this.hasBeenResurrected) {
-      this.ambulancePending = true;
-    }
+    this.rescue.activateCheat(this.state === GameState.CRASHING);
     this.floatingTexts.push({
       text: "GOD MODE",
       x: this.canvasW / 2,
@@ -766,7 +705,7 @@ export class Engine {
       } else if (this.state === GameState.CRASHING) {
         this.sound.stopCrashSounds();
       } else if (this.state === GameState.AMBULANCE) {
-        this.sound.stopSiren();
+        this.rescue.pauseSiren();
       }
     }
     this.notifyPauseChange();
@@ -781,8 +720,8 @@ export class Engine {
       if (this.state === GameState.RUNNING) {
         this.sound.resumeMusic();
         if (this.scoring.grinding) this.sound.startGrind();
-      } else if (this.state === GameState.AMBULANCE && this.ambulance?.phase === AmbulancePhase.DRIVING_IN) {
-        this.sound.playSiren();
+      } else if (this.state === GameState.AMBULANCE) {
+        this.rescue.resumeSiren();
       }
     }
     this.notifyPauseChange();

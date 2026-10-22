@@ -218,6 +218,7 @@ export class Engine {
       // The rider's home x follows the width (the camera pivots on it); the multiplayer boost sets x each frame
       if (!this.boost) this.player.x = Math.floor(w * PLAYER_X_RATIO);
       for (const obs of this.obstacles) obs.y += dy;
+      for (const ft of this.floatingTexts) ft.y += dy;
       this.rescue.shiftY(dy);
       this.shiftCrashBy(dy);
     }

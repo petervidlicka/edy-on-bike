@@ -6,6 +6,7 @@
  * and ranks players; clients are untrusted (see validation.ts).
  */
 import { Server, type Connection } from "partyserver";
+import { closeUnlessBy, parseIncoming, sendJson } from "./socket";
 import {
   MAX_MESSAGE_CHARS,
   MESSAGE_BURST,
@@ -117,7 +118,8 @@ export class MultiplayerServer extends Server {
       conn.close(1008, "Invalid room code");
       return;
     }
-    if (this.pendingSocketCount() > MAX_PENDING_SOCKETS) {
+    // PartyServer has already registered `conn`, so count the *other* pending sockets
+    if (this.pendingSocketCount() - 1 >= MAX_PENDING_SOCKETS) {
       conn.close(1013, "Too many connections");
       return;
     }
@@ -125,23 +127,15 @@ export class MultiplayerServer extends Server {
     // Don't add as player yet — wait for "join" message. PartyServer tracks the
     // socket internally; we add it to our map only after a successful join.
     this.messageLimits.set(conn, new TokenBucket(MESSAGE_RATE_PER_SEC, MESSAGE_BURST, Date.now()));
-    setTimeout(() => {
-      if (!this.isPlayerSocket(conn)) conn.close(1008, "Join timeout");
-    }, JOIN_TIMEOUT_MS);
+    closeUnlessBy(conn, JOIN_TIMEOUT_MS, () => this.isPlayerSocket(conn), "Join timeout");
   }
 
   onMessage(sender: Connection, message: string | ArrayBuffer | ArrayBufferView) {
     if (typeof message !== "string" || message.length > MAX_MESSAGE_CHARS) return;
     if (!this.messageLimits.get(sender)?.take(Date.now())) return; // flooding — drop unparsed
 
-    let data: IncomingMessage;
-    try {
-      const parsed: unknown = JSON.parse(message);
-      if (typeof parsed !== "object" || parsed === null) return;
-      data = parsed as IncomingMessage;
-    } catch {
-      return;
-    }
+    const data = parseIncoming(message, MAX_MESSAGE_CHARS) as IncomingMessage | null;
+    if (!data) return;
 
     if (data.type === "join") {
       this.handleJoin(data, sender);
@@ -552,7 +546,7 @@ export class MultiplayerServer extends Server {
 
   /** JSON-encodes one message for one socket. */
   private send(conn: Connection, msg: ServerMessage) {
-    conn.send(JSON.stringify(msg));
+    sendJson(conn, msg);
   }
 
   /** JSON-encodes and sends to every joined player (unlike Server#broadcast, which hits all sockets). */

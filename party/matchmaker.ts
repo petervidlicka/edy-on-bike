@@ -14,6 +14,8 @@ import {
   randomRoomCode,
 } from "../game/multiplayer/protocol";
 import type { MatchmakerServerMessage } from "../game/multiplayer/protocol";
+import { MESSAGE_BURST, MESSAGE_RATE_PER_SEC, TokenBucket } from "./validation";
+import { closeUnlessBy, parseIncoming, sendJson } from "./socket";
 
 /** Only message the matchmaker accepts; anything bigger is junk. */
 const MAX_MESSAGE_CHARS = 64;
@@ -46,6 +48,8 @@ export class Matchmaker extends Server {
   socketIps: Map<string, string> = new Map();
   /** Recent match times per IP, pruned to MATCH_WINDOW_MS. */
   recentMatches: Map<string, number[]> = new Map();
+  /** Per-socket message budget, checked before parsing — the same budget a room socket gets. */
+  messageLimits: WeakMap<Connection, TokenBucket> = new WeakMap();
 
   onConnect(conn: Connection, ctx: ConnectionContext) {
     const ip = ctx.request.headers.get("cf-connecting-ip") ?? "unknown";
@@ -54,20 +58,19 @@ export class Matchmaker extends Server {
       return;
     }
     this.socketIps.set(conn.id, ip);
-    setTimeout(() => {
-      if (this.socketIps.has(conn.id) && !this.queue.has(conn.id)) conn.close(1008, "Queue timeout");
-    }, QUEUE_TIMEOUT_MS);
+    this.messageLimits.set(conn, new TokenBucket(MESSAGE_RATE_PER_SEC, MESSAGE_BURST, Date.now()));
+    closeUnlessBy(
+      conn,
+      QUEUE_TIMEOUT_MS,
+      () => !this.socketIps.has(conn.id) || this.queue.has(conn.id),
+      "Queue timeout",
+    );
   }
 
   onMessage(sender: Connection, message: string | ArrayBuffer | ArrayBufferView) {
-    if (typeof message !== "string" || message.length > MAX_MESSAGE_CHARS) return;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(message);
-    } catch {
-      return;
-    }
-    if (typeof parsed !== "object" || parsed === null || (parsed as { type?: unknown }).type !== "queue") return;
+    if (!this.messageLimits.get(sender)?.take(Date.now())) return; // flooding — drop unparsed
+    const parsed = parseIncoming(message, MAX_MESSAGE_CHARS);
+    if (!parsed || parsed.type !== "queue") return;
     // Only sockets we registered on connect (ids are server-generated, see index.ts) may queue
     const ip = this.socketIps.get(sender.id);
     if (ip === undefined || this.queue.has(sender.id)) return;
@@ -148,7 +151,7 @@ export class Matchmaker extends Server {
   }
 
   private send(conn: Connection, msg: MatchmakerServerMessage) {
-    conn.send(JSON.stringify(msg));
+    sendJson(conn, msg);
   }
 
   private countSocketsFrom(ip: string): number {

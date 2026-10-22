@@ -65,13 +65,15 @@ export function GameOverScreen({
   // (adjusting state during render, React's pattern for state derived from a transition)
   if (!locked && chosenView === null) setChosenView(qualifies ? "form" : "summary");
 
+  // Depends on the stable reload function, not the board object, which is new every render
+  const reloadBoard = board.reload;
   const handleSaved = useCallback(
     async (name: string) => {
       setSaved({ name, score });
-      await board.reload();
+      await reloadBoard();
       setChosenView("leaderboard");
     },
-    [board, score],
+    [reloadBoard, score],
   );
 
   return (

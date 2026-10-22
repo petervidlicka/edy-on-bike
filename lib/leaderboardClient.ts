@@ -70,11 +70,13 @@ async function request(init?: RequestInit, url = LEADERBOARD_URL): Promise<Respo
 
 /**
  * Loads the current top scores.
+ * @param signal - Aborts the request (e.g. when the game-over screen unmounts); the
+ *   rejection is a LeaderboardError whose `cause` is the AbortError.
  * @returns Only well-formed rows; a missing count reads as 0.
  * @throws LeaderboardError when the request fails or the API returns an error status.
  */
-export async function fetchLeaderboard(): Promise<LeaderboardData> {
-  const res = await request();
+export async function fetchLeaderboard(signal?: AbortSignal): Promise<LeaderboardData> {
+  const res = await request({ signal });
   if (!res.ok) throw await errorFromResponse(res);
   const data: unknown = await res.json().catch((err: unknown) => {
     throw new LeaderboardError("The leaderboard sent an unreadable response. Please try again later.", { cause: err });

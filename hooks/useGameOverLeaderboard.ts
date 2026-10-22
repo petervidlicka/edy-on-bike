@@ -23,6 +23,8 @@ export interface GameOverLeaderboard {
 /**
  * Loads the leaderboard on mount and exposes a reload for after a save.
  * Failures are surfaced as state, never thrown, so an outage can't block replaying.
+ * The in-flight request is aborted on unmount (and by a newer reload), so a late
+ * response can never set state on a screen that's gone.
  * @returns The board, its status, and a reload function.
  * @example
  * const { status, entries, reload } = useGameOverLeaderboard();
@@ -32,37 +34,36 @@ export function useGameOverLeaderboard(): GameOverLeaderboard {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(true);
+  /** Controller of the request in flight; aborted by the next load and on unmount. */
+  const controllerRef = useRef<AbortController | null>(null);
 
-  // Shared by the first load and later reloads; both ignore results that land after unmount
-  const applyBoard = useCallback((data: Awaited<ReturnType<typeof fetchLeaderboard>>) => {
-    if (!mountedRef.current) return;
-    setEntries(data.scores);
-    setTotalPlayers(data.totalPlayers);
-    setError(null);
-    setStatus("ready");
+  // Shared by the first load and later reloads
+  const load = useCallback(() => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    return fetchLeaderboard(controller.signal).then(
+      (data) => {
+        if (controller.signal.aborted) return;
+        setEntries(data.scores);
+        setTotalPlayers(data.totalPlayers);
+        setError(null);
+        setStatus("ready");
+      },
+      (err: unknown) => {
+        // An abort is ours (unmount or a newer reload), not a failure to report
+        if (controller.signal.aborted) return;
+        console.error("[leaderboard] Loading scores failed", err);
+        setError(err instanceof LeaderboardError ? err.message : "Couldn't load the leaderboard. Please try again later.");
+        setStatus("error");
+      },
+    );
   }, []);
-
-  const applyFailure = useCallback((err: unknown) => {
-    console.error("[leaderboard] Loading scores failed", err);
-    if (!mountedRef.current) return;
-    setError(err instanceof LeaderboardError ? err.message : "Couldn't load the leaderboard. Please try again later.");
-    setStatus("error");
-  }, []);
-
-  const reload = useCallback(
-    () => fetchLeaderboard().then(applyBoard, applyFailure),
-    [applyBoard, applyFailure],
-  );
 
   useEffect(() => {
-    mountedRef.current = true;
-    // Promise chain (not a direct reload() call) so state is only set from a callback
-    fetchLeaderboard().then(applyBoard, applyFailure);
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [applyBoard, applyFailure]);
+    void load();
+    return () => controllerRef.current?.abort();
+  }, [load]);
 
-  return { status, entries, totalPlayers, error, reload };
+  return { status, entries, totalPlayers, error, reload: load };
 }

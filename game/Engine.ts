@@ -202,14 +202,18 @@ export class Engine {
     this.widestView = getViewBounds(MIN_CAMERA_ZOOM, w, h, this.groundY);
     // Rebuilt for the new size; mid-transition it jumps straight to the incoming biome
     this.scenery.reset(this.envManager.getTargetEnvironment(), w, h, this.groundY);
-    if (this.state !== GameState.RUNNING && this.state !== GameState.AMBULANCE) {
+    if (this.state === GameState.IDLE) {
       this.player = createPlayer(this.groundY, w);
     } else {
-      // Everything standing on the road moves with it, so nothing floats or sinks
+      // Everything standing (or lying) on the road moves with it, so nothing floats or sinks;
+      // this includes the crashed rider on the crash and game-over screens
       const dy = this.groundY - prevGroundY;
       this.player.y = Math.min(this.player.y + dy, this.groundY - this.player.height);
+      // The rider's home x follows the width (the camera pivots on it); the multiplayer boost sets x each frame
+      if (!this.boost) this.player.x = Math.floor(w * PLAYER_X_RATIO);
       for (const obs of this.obstacles) obs.y += dy;
       this.rescue.shiftY(dy);
+      this.shiftCrashBy(dy);
     }
     // The loop is stopped while paused; setting the canvas size cleared it, so redraw the frozen frame.
     if (this.isPaused()) this.render();
@@ -557,6 +561,24 @@ export class Engine {
     if (this.rescue.riderStillDown) tickCrashAnim(this.crashState, rawDt);
 
     this.rescue.update(dt, rawDt);
+  }
+
+  /**
+   * Moves the crashed rider and bike with the road on resize, together with the variant's
+   * anchor points (the surface the head is planted in, the branch, the car roof) so the
+   * animation keeps settling where it should. Harmless while no crash is on screen.
+   */
+  private shiftCrashBy(dy: number): void {
+    const cs = this.crashState;
+    cs.riderY += dy;
+    cs.bikeY += dy;
+    const data = cs.data;
+    switch (data.kind) {
+      case "classic": break;
+      case "faceplant": data.startY += dy; data.surfaceY += dy; break;
+      case "treeHang": data.startY += dy; data.hookY += dy; data.tree.y += dy; break;
+      case "carBonk": data.startY += dy; data.roofY += dy; break;
+    }
   }
 
   private updateCrash(dt: number, rawDt: number): void {

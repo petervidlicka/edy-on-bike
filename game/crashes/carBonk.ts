@@ -4,35 +4,16 @@
  * ends up sprawled on their back with arms and legs in the air. The bike bounces off
  * the rear bumper and falls to the road.
  */
-import { INITIAL_SPEED, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
-import { ObstacleType } from "../types";
+import { INITIAL_SPEED } from "../constants";
 import { drawRiderFigure, UPRIGHT_SHOULDER } from "../rendering/CrashRenderer";
 import type { Offset } from "../rendering/CrashRenderer";
-import { clamp01, figurePoint, HEAD_OFFSET, launchBike, lerp, stepBike } from "./physics";
-import type { CarBonkData, CrashVariant } from "./types";
+import { clamp01, HIP_FROM_PLAYER, launchBikeFromRider, lerp, placeRider, riderHead } from "./physics";
+import type { CarBonkData, CrashVariant, RiderPlacement } from "./types";
 
-/** The obstacle types this variant handles: every one drawn as a car, plus the snow and Tokyo vehicles. */
-export const CAR_OBSTACLES: readonly ObstacleType[] = [
-  ObstacleType.CAR,
-  ObstacleType.SUV,
-  ObstacleType.DELIVERY_VAN,
-  ObstacleType.LAND_CRUISER,
-  ObstacleType.PINK_G_CLASS,
-  ObstacleType.LAMBORGHINI_HURACAN,
-  ObstacleType.FERRARI_458,
-  ObstacleType.CONVERTIBLE,
-  ObstacleType.ROLLS_ROYCE_PHANTOM,
-  ObstacleType.PORSCHE_911,
-  ObstacleType.SNOW_SCOOTER,
-  ObstacleType.SNOW_CAT,
-  ObstacleType.KEI_CAR,
-  ObstacleType.KEI_TRUCK,
-  ObstacleType.JAPAN_TAXI,
-];
+// Which obstacles play this variant is the `crashFamily: "car"` entry in OBSTACLE_SPECS.
 
 const DURATION = 2.3;
 const STARS_FROM = 1.55;
-const BIKE_REST = 20;
 
 /** Seconds of the toss onto the roof, then each boing: height above the roof, flight time. */
 const T_TOSS = 0.42;
@@ -55,9 +36,6 @@ const ROOF_CENTRE = 0.42;
 /** Where each landing is on the roof, relative to the centre: toss, boing 1, 2 and 3. */
 const LAND_DX = [-4, 0, 5, 8] as const;
 
-/** Hip of an upright rider on the bike, relative to the player box. */
-const HIP_FROM_PLAYER: Offset = [27, 24];
-
 /** Arms and legs flung wide while tumbling, and the sprawl once lying on the roof. */
 const FLAIL = {
   footL: [-6.5, 11] as Offset,
@@ -76,8 +54,8 @@ function mix(a: Offset, b: Offset, t: number): Offset {
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)];
 }
 
-/** Hip position and rotation of the rider at `t` seconds, plus the time since the latest landing. */
-function riderAt(data: CarBonkData, t: number): { x: number; y: number; angle: number } {
+/** Hip position and rotation of the rider at `t` seconds. */
+function riderAt(data: CarBonkData, t: number): RiderPlacement {
   const landY = data.roofY - LYING_HEIGHT;
   const landX = (i: number) => data.roofX + LAND_DX[i];
 
@@ -126,28 +104,13 @@ export const carBonkCrash: CrashVariant<CarBonkData> = {
       roofX: car ? car.x + car.width * ROOF_CENTRE : p.x + 80,
       roofY: car ? car.y : p.y + p.height * 0.6,
     };
-    cs.riderX = data.startX;
-    cs.riderY = data.startY;
-    cs.riderAngle = 0;
-    cs.riderVX = cs.riderVY = cs.riderAngularVel = 0;
-    cs.riderBounceCount = 0;
+    placeRider(cs, data.startX, data.startY);
     // The bike bounces back off the rear bumper and drops to the road
-    launchBike(
-      cs,
-      { x: p.x + PLAYER_WIDTH / 2, y: p.y + PLAYER_HEIGHT / 2 },
-      p.wheelRotation,
-      { vx: -(1.2 + speedFactor * 0.6), vy: -3.5, spin: 0.1 },
-    );
+    launchBikeFromRider(cs, p, { vx: -(1.2 + speedFactor * 0.6), vy: -3.5, spin: 0.1 });
     return data;
   },
 
-  update(cs, data, { dt, groundY }) {
-    stepBike(cs, dt, groundY, BIKE_REST);
-    const r = riderAt(data, cs.anim);
-    cs.riderX = r.x;
-    cs.riderY = r.y;
-    cs.riderAngle = r.angle;
-  },
+  riderAt,
 
   drawRider(ctx, cs, data, { skin }) {
     const t = cs.anim;
@@ -193,7 +156,5 @@ export const carBonkCrash: CrashVariant<CarBonkData> = {
     ctx.restore();
   },
 
-  headAnchor(cs) {
-    return figurePoint(cs.riderX, cs.riderY, cs.riderAngle, HEAD_OFFSET);
-  },
+  headAnchor: riderHead,
 };

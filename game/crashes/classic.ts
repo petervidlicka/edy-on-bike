@@ -3,13 +3,15 @@
  * both bounce twice before lying still. Also the fallback every other variant gives
  * way to now and then, so crashes stay surprising.
  */
-import { CRASH_BOUNCE_DAMPING, CRASH_DURATION, CRASH_GRAVITY, INITIAL_SPEED } from "../constants";
+import { CRASH_DURATION, INITIAL_SPEED } from "../constants";
 import { drawRiderFigure, UPRIGHT_SHOULDER } from "../rendering/CrashRenderer";
-import { CLASSIC_BIKE_REST, figurePoint, HEAD_OFFSET, stepBike } from "./physics";
+import { CLASSIC_BIKE_REST, riderHead, stepBike, stepBody } from "./physics";
 import type { ClassicCrashData, CrashVariant } from "./types";
 
-const FRICTION = 0.95;
-const ANGULAR_DAMPING = 0.7;
+/** The settled rider's hip rests this far above the ground. */
+const RIDER_REST = 15;
+/** Share of horizontal speed the rider keeps on each bounce. */
+const RIDER_LANDING_FRICTION = 0.7;
 
 export const classicCrash: CrashVariant<ClassicCrashData> = {
   id: "classic",
@@ -47,28 +49,7 @@ export const classicCrash: CrashVariant<ClassicCrashData> = {
   },
 
   update(cs, _data, { dt, groundY }) {
-    // Rider physics
-    const riderGroundY = groundY - 15;
-    const riderSettled = cs.riderBounceCount >= 2;
-    if (!riderSettled) cs.riderVY += CRASH_GRAVITY * dt;
-    cs.riderX += cs.riderVX * dt;
-    if (!riderSettled) cs.riderY += cs.riderVY * dt;
-    cs.riderAngle += cs.riderAngularVel * dt;
-    cs.riderVX *= Math.pow(FRICTION, dt);
-
-    if (cs.riderY >= riderGroundY && cs.riderVY > 0 && !riderSettled) {
-      cs.riderY = riderGroundY;
-      cs.riderBounceCount++;
-      if (cs.riderBounceCount >= 2) {
-        cs.riderVY = 0;
-        cs.riderAngularVel = 0;
-      } else {
-        cs.riderVY = -cs.riderVY * CRASH_BOUNCE_DAMPING;
-        cs.riderAngularVel *= ANGULAR_DAMPING;
-      }
-      cs.riderVX *= 0.7;
-    }
-
+    stepBody(cs, "rider", dt, groundY, RIDER_REST, RIDER_LANDING_FRICTION);
     stepBike(cs, dt, groundY, CLASSIC_BIKE_REST);
   },
 
@@ -90,7 +71,5 @@ export const classicCrash: CrashVariant<ClassicCrashData> = {
     ctx.restore();
   },
 
-  headAnchor(cs) {
-    return figurePoint(cs.riderX, cs.riderY, cs.riderAngle, HEAD_OFFSET);
-  },
+  headAnchor: riderHead,
 };

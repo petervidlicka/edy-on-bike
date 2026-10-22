@@ -43,103 +43,119 @@ export interface EnvironmentPalette {
     pants: string;
   };
 
-  // Obstacle colors
-  obstacle: {
-    rock: string;
-    rockHighlight: string;
-    rockShadow: string;
-    tree: string;
-    treeHighlight: string;
-    treeTrunk: string;
-    treeTrunkShadow: string;
-    trolley: string;
-    trolleyBasket: string;
-    trolleyAccent: string;
-    car: string;
-    carRoof: string;
-    carWindow: string;
-    carBumper: string;
-    carWheel: string;
-    carHeadlight: string;
-    carTaillight: string;
-    bikeRider: string;
-    bikeFrame: string;
-    busStopFrame: string;
-    busStopRoof: string;
-    busStopGlass: string;
-    busStopSign: string;
-    container: string;
-    containerDark: string;
-    containerDoor: string;
-    giantTreeCanopy: string;
-    giantTreeCanopyHighlight: string;
-    giantTreeTrunk: string;
-    giantTreeBark: string;
-    giantTreeOutline: string;
-    rampWood: string;
-    rampWoodDark: string;
-    rampWoodHighlight: string;
-    rampMetal: string;
-    rampMetalDark: string;
+  /**
+   * Obstacle colours: every biome defines the shared set (spread from
+   * sharedPalette.ts and restyled where it differs) and only its own biome-only keys.
+   */
+  obstacle: SharedObstacleColors & Partial<BiomeOnlyColors>;
+}
 
-    // Suburban traffic variants (optional — fall back to the car colours)
-    suv?: string;
-    suvDark?: string;
-    van?: string;
-    vanDark?: string;
-    vanAccent?: string;
+/**
+ * Colours of the obstacles that can appear on any course, so every biome must define
+ * them. Defaults live in sharedPalette.ts; a biome overrides the ones it restyles.
+ */
+export interface SharedObstacleColors {
+  rock: string;
+  rockHighlight: string;
+  rockShadow: string;
+  tree: string;
+  treeHighlight: string;
+  treeTrunk: string;
+  treeTrunkShadow: string;
+  trolley: string;
+  trolleyBasket: string;
+  trolleyAccent: string;
+  car: string;
+  carRoof: string;
+  carWindow: string;
+  carBumper: string;
+  carWheel: string;
+  carHeadlight: string;
+  carTaillight: string;
+  bikeRider: string;
+  bikeFrame: string;
+  busStopFrame: string;
+  busStopRoof: string;
+  busStopGlass: string;
+  busStopSign: string;
+  container: string;
+  containerDark: string;
+  containerDoor: string;
+  giantTreeCanopy: string;
+  giantTreeCanopyHighlight: string;
+  giantTreeTrunk: string;
+  giantTreeBark: string;
+  giantTreeOutline: string;
+  rampWood: string;
+  rampWoodDark: string;
+  rampWoodHighlight: string;
+  rampMetal: string;
+  rampMetalDark: string;
+}
 
-    // Dubai-specific (optional — not needed by suburban)
-    camel?: string;
-    camelLeg?: string;
-    camelSaddle?: string;
-    sand?: string;
-    sandHighlight?: string;
-    sandShadow?: string;
-    pinkGClass?: string;
-    pinkGClassRoof?: string;
-    cactus?: string;
-    cactusHighlight?: string;
-    cactusSpine?: string;
-    chocolate?: string;
-    chocolateDark?: string;
-    chocolateWrapper?: string;
-    lamboGreen?: string;
-    lamboGreenDark?: string;
-    lamboWindow?: string;
-    ferrariRed?: string;
-    ferrariRedDark?: string;
-    convertible?: string;
-    convertibleDark?: string;
-    porsche?: string;
-    porscheDark?: string;
-    billboardFrame?: string;
-    billboardPost?: string;
+/**
+ * Colours only some biomes define. The obstacle renderers fall back to
+ * obstacleColors.ts when the active palette lacks one (an obstacle can still be on
+ * screen after its biome hands over, or appear on the debug course).
+ */
+export interface BiomeOnlyColors {
+  // Suburban traffic variants (fall back to the car colours)
+  suv: string;
+  suvDark: string;
+  van: string;
+  vanDark: string;
+  vanAccent: string;
 
-    // Austria-specific (optional — fall back to built-in colours)
-    snow?: string;
-    snowShadow?: string;
-    ice?: string;
-    iceHighlight?: string;
-    beerCrate?: string;
-    beerCrateDark?: string;
-    snowCat?: string;
-    snowCatDark?: string;
-    snowCatTrack?: string;
-    redDeer?: string;
-    redDeerDark?: string;
-    antler?: string;
-    skiRacer?: string;
-    skiRacerDark?: string;
+  // Dubai
+  camel: string;
+  camelLeg: string;
+  camelSaddle: string;
+  sand: string;
+  sandHighlight: string;
+  sandShadow: string;
+  pinkGClass: string;
+  pinkGClassRoof: string;
+  cactus: string;
+  cactusHighlight: string;
+  cactusSpine: string;
+  chocolate: string;
+  chocolateDark: string;
+  chocolateWrapper: string;
+  lamboGreen: string;
+  lamboGreenDark: string;
+  lamboWindow: string;
+  ferrariRed: string;
+  ferrariRedDark: string;
+  convertible: string;
+  convertibleDark: string;
+  porsche: string;
+  porscheDark: string;
+  billboardFrame: string;
+  billboardPost: string;
 
-    // Tokyo-specific (optional — fall back to built-in colours)
-    keiCar?: string;
-    keiCarDark?: string;
-    taxi?: string;
-    taxiDark?: string;
-    neonPink?: string;
-    neonCyan?: string;
-  };
+  // Austria
+  snow: string;
+  snowShadow: string;
+  ice: string;
+  iceHighlight: string;
+  beerCrate: string;
+  beerCrateDark: string;
+  snowCat: string;
+  snowCatDark: string;
+  snowCatTrack: string;
+  redDeer: string;
+  redDeerDark: string;
+  antler: string;
+  skiRacer: string;
+  skiRacerDark: string;
+
+  // Tokyo
+  keiCar: string;
+  keiCarDark: string;
+  taxi: string;
+  taxiDark: string;
+  neonPink: string;
+  neonCyan: string;
 }
 
 /**
@@ -206,8 +222,13 @@ export interface WeightedType {
 }
 
 export interface ObstaclePoolConfig {
-  /** Return weighted obstacle types available at the given elapsed time */
-  getWeightedTypes: (elapsedMs: number) => WeightedType[];
+  /** Return weighted obstacle types available at the given biome-relative time */
+  getWeightedTypes: (biomeMs: number) => WeightedType[];
+  /**
+   * Biome-relative time (ms) from which the full roster is in play. A revisited biome
+   * starts here on later laps (see EnvironmentManager.getBiomeElapsedMs).
+   */
+  fullRosterMs: number;
 }
 
 // ── Particle overlay (snow, sand, rain) ──

@@ -44,52 +44,55 @@ export function easeInOutCubic(t: number): number {
 }
 
 // ── Deep palette lerp ──
-// Recursively walks the palette object and lerps every hex color string.
-
-type PaletteValue =
-  | string
-  | { [key: string]: PaletteValue }
-  | Array<{ [key: string]: PaletteValue }>;
+// Walks both palettes structurally and blends every pair of hex colour strings.
 
 function isHexColor(v: unknown): v is string {
   return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
 }
 
-function lerpValue(a: PaletteValue, b: PaletteValue, t: number): PaletteValue {
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Blends two values of the same shape: hex colours are mixed, arrays element by element
+ * (to the shorter length, e.g. the building schemes), objects key by key. Anything
+ * else switches from `a` to `b` halfway. Keys only one side has are kept as they are:
+ * biome-only colours (the incoming biome's obstacles) have nothing to blend with, and
+ * keeping them lets those obstacles draw right during the transition.
+ */
+function lerpValue(a: unknown, b: unknown, t: number): unknown {
   if (isHexColor(a) && isHexColor(b)) {
     return lerpColor(a, b, t);
   }
   if (Array.isArray(a) && Array.isArray(b)) {
-    // For arrays (e.g. buildings), lerp element-by-element up to min length
     const len = Math.min(a.length, b.length);
-    const result: Array<{ [key: string]: PaletteValue }> = [];
+    const result: unknown[] = [];
     for (let i = 0; i < len; i++) {
-      result.push(lerpValue(a[i], b[i], t) as { [key: string]: PaletteValue });
+      result.push(lerpValue(a[i], b[i], t));
     }
     return result;
   }
-  if (typeof a === "object" && typeof b === "object" && a !== null && b !== null && !Array.isArray(a) && !Array.isArray(b)) {
-    const result: { [key: string]: PaletteValue } = {};
+  if (isRecord(a) && isRecord(b)) {
+    const result: Record<string, unknown> = {};
     for (const key of Object.keys(a)) {
-      if (key in b) {
-        result[key] = lerpValue(
-          (a as Record<string, PaletteValue>)[key],
-          (b as Record<string, PaletteValue>)[key],
-          t
-        );
-      } else {
-        result[key] = (a as Record<string, PaletteValue>)[key];
-      }
+      result[key] = key in b ? lerpValue(a[key], b[key], t) : a[key];
     }
-    // Biome-only colours (e.g. the incoming biome's obstacle colours) have nothing to
-    // blend with; keep them so the new biome's obstacles draw right during the transition
     for (const key of Object.keys(b)) {
-      if (!(key in result)) result[key] = (b as Record<string, PaletteValue>)[key];
+      if (!(key in result)) result[key] = b[key];
     }
     return result;
   }
-  // Fallback: return 'a' when t < 0.5, 'b' when t >= 0.5
   return t < 0.5 ? a : b;
+}
+
+/**
+ * A blend of two palettes has the palette's shape, because `lerpValue` mirrors the
+ * structure of `from` (and `to` only adds keys to it); this is the one place that fact
+ * is asserted.
+ */
+function lerpPaletteShape(from: EnvironmentPalette, to: EnvironmentPalette, t: number): EnvironmentPalette {
+  return lerpValue(from, to, t) as EnvironmentPalette;
 }
 
 /**
@@ -119,11 +122,7 @@ export function lerpPalette(
   }
   let palette = paletteCache.byStep.get(step);
   if (!palette) {
-    palette = lerpValue(
-      from as unknown as PaletteValue,
-      to as unknown as PaletteValue,
-      step / PALETTE_STEPS
-    ) as unknown as EnvironmentPalette;
+    palette = lerpPaletteShape(from, to, step / PALETTE_STEPS);
     paletteCache.byStep.set(step, palette);
   }
   return palette;

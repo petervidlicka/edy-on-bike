@@ -35,7 +35,7 @@ import { EnvironmentManager } from "./environments";
 import { getSkinById } from "./skins";
 import { voiceCueFor } from "./voiceLines";
 import {
-  beginCrash, createCrashPopText, createCrashState, crashPopFor, drawCrash, pickVariant, stepCrash, tickCrashAnim,
+  beginCrash, createCrashPopText, createCrashState, crashPopFor, drawCrash, holdCrashVisible, pickVariant, stepCrash, tickCrashAnim,
 } from "./crashes";
 import type { CrashCause } from "./crashes";
 import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
@@ -444,13 +444,13 @@ export class Engine {
     if (envResult.musicCrossfade) {
       this.sound.crossfadeTo(envResult.musicCrossfade.track, envResult.musicCrossfade.durationMs);
     }
-    if (envResult.appendBackground) {
-      const { fromEnv, toEnv } = envResult.appendBackground;
-      const scrollPx = this.scenery.beginBiomeChange(fromEnv, toEnv, widestView);
+    if (envResult.transitionStarted) {
+      const { from, to } = envResult.transitionStarted;
+      const scrollPx = this.scenery.beginBiomeChange(from, to, widestView);
       // Time the colour blend to the buildings arriving, at the current scroll speed
-      this.envManager.setTransitionDuration(scrollPx / (this.speed * toEnv.background.buildingSpeedRatio));
+      this.envManager.setTransitionDuration(scrollPx / (this.speed * to.background.buildingSpeedRatio));
     }
-    if (envResult.regenerateBackground) this.scenery.endBiomeChange();
+    if (envResult.transitionEnded) this.scenery.endBiomeChange();
   }
 
   /** Run clock and the stepwise speed-up (capped at MAX_SPEED_MULTIPLIER). */
@@ -550,7 +550,7 @@ export class Engine {
       return;
     }
     if (this.rescue.begin()) {
-      this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
+      holdCrashVisible(this.crashState); // Keep ragdoll visible (alpha ~1)
     } else {
       this.finalGameOver();
     }

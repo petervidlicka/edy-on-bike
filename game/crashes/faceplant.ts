@@ -4,11 +4,13 @@
  * The head is buried by clipping the figure at the road line and covering the hole
  * with a mound of dirt.
  */
-import { INITIAL_SPEED, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
+import { INITIAL_SPEED } from "../constants";
 import { drawRiderFigure, UPRIGHT_SHOULDER } from "../rendering/CrashRenderer";
 import type { Offset } from "../rendering/CrashRenderer";
-import { clamp01, figurePoint, HEAD_OFFSET, launchBike, lerp, stepBike } from "./physics";
-import type { CrashVariant, FaceplantCrashData } from "./types";
+import {
+  BIKE_REST, clamp01, figurePoint, HEAD_OFFSET, HIP_FROM_PLAYER, launchBikeFromRider, lerp, placeRider, riderHead, stepBike,
+} from "./physics";
+import type { CrashVariant, FaceplantCrashData, RiderPlacement } from "./types";
 
 /** Seconds the dive lasts, how long the rider stays stuck, and how long the tip-over takes. */
 const T_FLY = 0.28;
@@ -21,10 +23,6 @@ const ARC_HEIGHT = 14;
 /** Head centre sits this far above the road when planted (smaller = deeper), and when lying. */
 const PLANTED_DEPTH = 2;
 const LYING_HEIGHT = 4;
-const BIKE_REST = 20;
-
-/** Hip of an upright rider on the bike, relative to the player box. */
-const HIP_FROM_PLAYER: Offset = [27, 24];
 
 /** Leg directions as angles from straight down the leg's own axis, and their lengths. */
 const LEG_L = { angle: -0.4, length: 12.5 };
@@ -36,7 +34,7 @@ function legEnd(leg: { angle: number; length: number }, wiggle: number): Offset 
 }
 
 /** Hip position and rotation of the rider at `t` seconds. */
-function riderAt(data: FaceplantCrashData, t: number): { x: number; y: number; angle: number } {
+function riderAt(data: FaceplantCrashData, t: number): RiderPlacement {
   // Upside down (angle PI) the hip sits 19px above the head and 3px in front of it
   const hipX = data.plantX + HEAD_OFFSET[0];
   const hipY = data.surfaceY - PLANTED_DEPTH + HEAD_OFFSET[1];
@@ -83,28 +81,18 @@ export const faceplantCrash: CrashVariant<FaceplantCrashData> = {
       surfaceY: cause.kind === "badLanding" ? cause.surfaceY : groundY,
       tipDir: cause.kind === "badLanding" && !cause.underRotated ? 1 : -1,
     };
-    cs.riderX = data.startX;
-    cs.riderY = data.startY;
-    cs.riderAngle = 0;
-    cs.riderVX = cs.riderVY = cs.riderAngularVel = 0;
-    cs.riderBounceCount = 0;
+    placeRider(cs, data.startX, data.startY);
     // The bike stays behind: it hops, drops and tips over where the rider left it
-    launchBike(
-      cs,
-      { x: p.x + PLAYER_WIDTH / 2, y: p.y + PLAYER_HEIGHT / 2 },
-      p.wheelRotation,
-      { vx: -0.8, vy: -3.5, spin: -0.1 },
-    );
+    launchBikeFromRider(cs, p, { vx: -0.8, vy: -3.5, spin: -0.1 });
     return data;
   },
 
+  // The bike lands on the surface the rider planted in, which may be an obstacle's top
   update(cs, data, { dt }) {
     stepBike(cs, dt, data.surfaceY, BIKE_REST);
-    const r = riderAt(data, cs.anim);
-    cs.riderX = r.x;
-    cs.riderY = r.y;
-    cs.riderAngle = r.angle;
   },
+
+  riderAt,
 
   drawRider(ctx, cs, data, { skin }) {
     const t = cs.anim;
@@ -161,7 +149,5 @@ export const faceplantCrash: CrashVariant<FaceplantCrashData> = {
     }
   },
 
-  headAnchor(cs) {
-    return figurePoint(cs.riderX, cs.riderY, cs.riderAngle, HEAD_OFFSET);
-  },
+  headAnchor: riderHead,
 };

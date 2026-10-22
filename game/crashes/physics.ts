@@ -1,15 +1,44 @@
 /**
- * Physics every crash variant shares: the screen shake and the tumbling bike. The
- * rider differs per variant (ragdoll, plant, hang, bounce), the bike does not.
+ * Physics and placement every crash variant shares: the screen shake, the tumbling
+ * bodies (rider or bike: gravity, two damped bounces, then still), where the rider's
+ * hip sits on the bike, and the bike kick-off every scripted variant starts with.
  */
-import { CRASH_BOUNCE_DAMPING, CRASH_GRAVITY, CRASH_SHAKE_INITIAL } from "../constants";
-import type { CrashState } from "./types";
+import { CRASH_BOUNCE_DAMPING, CRASH_GRAVITY, CRASH_SHAKE_INITIAL, PLAYER_HEIGHT, PLAYER_WIDTH } from "../constants";
+import type { PlayerState } from "../types";
+import type { CrashState, Point } from "./types";
 
+/** Horizontal speed kept per 60 fps frame while a body slides. */
 const FRICTION = 0.95;
+/** Spin kept on the first bounce. */
 const ANGULAR_DAMPING = 0.7;
+/** Share of horizontal speed the bike keeps on each bounce. */
+const BIKE_LANDING_FRICTION = 0.6;
 
 /** Centre of the settled bike sits this far above the ground in the classic crash. */
 export const CLASSIC_BIKE_REST = 12;
+/** Centre of the bike resting on the road in the scripted variants (faceplant, tree hang, car bonk). */
+export const BIKE_REST = 20;
+
+/** Hip of an upright rider on the bike, relative to the player box. */
+export const HIP_FROM_PLAYER: readonly [number, number] = [27, 24];
+
+/** The centre of the rider's head relative to the hip (matches `drawRiderFigure`). */
+export const HEAD_OFFSET: readonly [number, number] = [3, -19];
+
+/** The two bodies a crash moves. */
+export type CrashBody = "rider" | "bike";
+
+/** The `CrashState` fields that make up each body, so one tumble routine serves both. */
+const BODY_FIELDS = {
+  rider: {
+    x: "riderX", y: "riderY", vx: "riderVX", vy: "riderVY",
+    angle: "riderAngle", angularVel: "riderAngularVel", bounces: "riderBounceCount",
+  },
+  bike: {
+    x: "bikeX", y: "bikeY", vx: "bikeVX", vy: "bikeVY",
+    angle: "bikeAngle", angularVel: "bikeAngularVel", bounces: "bikeBounceCount",
+  },
+} as const satisfies Record<CrashBody, Record<string, keyof CrashState>>;
 
 /**
  * Resets the clocks and the shake so a new crash starts clean.
@@ -41,37 +70,69 @@ export function stepShake(cs: CrashState, dt: number): void {
 }
 
 /**
- * Tumbles the bike: gravity, two damped bounces on the ground, then it lies still
- * while the wheels spin down.
+ * Tumbles a body one frame: gravity, two damped bounces on the ground, then it lies
+ * still (only sliding to a stop).
+ * @param cs - Crash state whose body fields are advanced.
+ * @param body - Which body to move.
+ * @param dt - Frame delta in 60 fps units.
+ * @param groundY - The surface the body lands on.
+ * @param rest - How far above `groundY` the body's centre rests.
+ * @param landingFriction - Share of horizontal speed kept on each bounce.
+ */
+export function stepBody(
+  cs: CrashState,
+  body: CrashBody,
+  dt: number,
+  groundY: number,
+  rest: number,
+  landingFriction: number,
+): void {
+  const f = BODY_FIELDS[body];
+  const restY = groundY - rest;
+  const settled = cs[f.bounces] >= 2;
+  if (!settled) cs[f.vy] += CRASH_GRAVITY * dt;
+  cs[f.x] += cs[f.vx] * dt;
+  if (!settled) cs[f.y] += cs[f.vy] * dt;
+  cs[f.angle] += cs[f.angularVel] * dt;
+  cs[f.vx] *= Math.pow(FRICTION, dt);
+
+  if (cs[f.y] >= restY && cs[f.vy] > 0 && !settled) {
+    cs[f.y] = restY;
+    cs[f.bounces]++;
+    if (cs[f.bounces] >= 2) {
+      cs[f.vy] = 0;
+      cs[f.angularVel] = 0;
+    } else {
+      cs[f.vy] = -cs[f.vy] * CRASH_BOUNCE_DAMPING;
+      cs[f.angularVel] *= ANGULAR_DAMPING;
+    }
+    cs[f.vx] *= landingFriction;
+  }
+}
+
+/**
+ * Tumbles the bike (see `stepBody`) while the wheels spin down with its slide.
  * @param cs - Crash state whose bike fields are advanced.
  * @param dt - Frame delta in 60 fps units.
  * @param groundY - The surface the bike lands on.
  * @param rest - How far above `groundY` the bike's centre rests.
  */
 export function stepBike(cs: CrashState, dt: number, groundY: number, rest: number): void {
-  const bikeGroundY = groundY - rest;
-  const bikeSettled = cs.bikeBounceCount >= 2;
-  if (!bikeSettled) cs.bikeVY += CRASH_GRAVITY * dt;
-  cs.bikeX += cs.bikeVX * dt;
-  if (!bikeSettled) cs.bikeY += cs.bikeVY * dt;
-  cs.bikeAngle += cs.bikeAngularVel * dt;
-  cs.bikeVX *= Math.pow(FRICTION, dt);
-
-  if (cs.bikeY >= bikeGroundY && cs.bikeVY > 0 && !bikeSettled) {
-    cs.bikeY = bikeGroundY;
-    cs.bikeBounceCount++;
-    if (cs.bikeBounceCount >= 2) {
-      cs.bikeVY = 0;
-      cs.bikeAngularVel = 0;
-    } else {
-      cs.bikeVY = -cs.bikeVY * CRASH_BOUNCE_DAMPING;
-      cs.bikeAngularVel *= ANGULAR_DAMPING;
-    }
-    cs.bikeVX *= 0.6;
-  }
-
+  stepBody(cs, "bike", dt, groundY, rest, BIKE_LANDING_FRICTION);
   // Decelerating wheel spin
   cs.bikeWheelRotation += cs.bikeVX * dt * 0.08;
+}
+
+/**
+ * Puts the rider's hip at a point, at rest and upright, ready for a scripted path.
+ * @param cs - Crash state whose rider fields are set.
+ */
+export function placeRider(cs: CrashState, x: number, y: number): void {
+  cs.riderX = x;
+  cs.riderY = y;
+  cs.riderAngle = 0;
+  cs.riderVX = cs.riderVY = cs.riderAngularVel = 0;
+  cs.riderBounceCount = 0;
 }
 
 /**
@@ -83,7 +144,7 @@ export function stepBike(cs: CrashState, dt: number, groundY: number, rest: numb
  */
 export function launchBike(
   cs: CrashState,
-  at: { x: number; y: number },
+  at: Point,
   wheelRotation: number,
   kick: { vx: number; vy: number; spin: number },
 ): void {
@@ -95,6 +156,17 @@ export function launchBike(
   cs.bikeAngularVel = kick.spin;
   cs.bikeBounceCount = 0;
   cs.bikeWheelRotation = wheelRotation;
+}
+
+/**
+ * Kicks the bike off from under the rider, centred on the player box, with the
+ * riding wheel spin: how every scripted variant leaves the bike behind.
+ * @param cs - Crash state whose bike fields are set.
+ * @param p - The rider at the moment of impact.
+ * @param kick - Initial velocity and spin.
+ */
+export function launchBikeFromRider(cs: CrashState, p: PlayerState, kick: { vx: number; vy: number; spin: number }): void {
+  launchBike(cs, { x: p.x + PLAYER_WIDTH / 2, y: p.y + PLAYER_HEIGHT / 2 }, p.wheelRotation, kick);
 }
 
 /** Linear interpolation. */
@@ -114,7 +186,7 @@ export function clamp01(v: number): number {
  * @param angle - Figure rotation in radians, clockwise.
  * @param offset - Point relative to the hip in the figure's own (unrotated) frame.
  */
-export function figurePoint(hipX: number, hipY: number, angle: number, offset: readonly [number, number]): { x: number; y: number } {
+export function figurePoint(hipX: number, hipY: number, angle: number, offset: readonly [number, number]): Point {
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
   return {
@@ -123,5 +195,7 @@ export function figurePoint(hipX: number, hipY: number, angle: number, offset: r
   };
 }
 
-/** The centre of the rider's head relative to the hip (matches `drawRiderFigure`). */
-export const HEAD_OFFSET: readonly [number, number] = [3, -19];
+/** The rider's head in the world, for the circling stars (every variant anchors them there). */
+export function riderHead(cs: CrashState): Point {
+  return figurePoint(cs.riderX, cs.riderY, cs.riderAngle, HEAD_OFFSET);
+}

@@ -145,21 +145,34 @@ export interface CrashPopText {
   outline: string;
 }
 
+/** Where a scripted rider is at a moment: hip position and figure rotation (radians, clockwise). */
+export interface RiderPlacement extends Point {
+  angle: number;
+}
+
 /**
  * One crash animation. `D` is the variant's own data; `init` returns it and the
  * framework stores it in `CrashState.data`, so `update`/`draw` get it already narrowed.
+ * A scripted variant (one that animates the rider along keyframes rather than with
+ * physics) gives `riderAt` and leaves `update` out: the framework then tumbles the
+ * bike on the road and places the rider from the keyframes each frame.
  */
 export interface CrashVariant<D extends CrashVariantData> {
   readonly id: D["kind"];
-  /** Length of the animation in seconds, including the final 0.3 s fade-out. */
+  /** Length of the animation in seconds, including the final CRASH_FADE_OUT_S fade-out. */
   readonly duration: number;
   /** Anim time (s) at which the rider has settled and the stars may start. */
   readonly starsFrom: number;
   readonly pop: CrashPopText;
   /** Starts the crash: places the rider and the bike, returns the variant data. */
   init(cs: CrashState, ctx: CrashInitContext): D;
-  /** Advances the rider and bike one frame (the shake and clocks are handled by the framework). */
-  update(cs: CrashState, data: D, step: CrashStep): void;
+  /**
+   * Advances the rider and bike one frame (the shake and clocks are handled by the
+   * framework). Absent: the bike tumbles on the road at BIKE_REST and the rider follows `riderAt`.
+   */
+  update?(cs: CrashState, data: D, step: CrashStep): void;
+  /** The scripted rider's hip and rotation at anim time `t` (seconds). */
+  riderAt?(data: D, t: number): RiderPlacement;
   /** Draws the rider and variant decorations; the bike, stars and fade are handled by the framework. */
   drawRider(ctx: CanvasRenderingContext2D, cs: CrashState, data: D, env: CrashDrawEnv): void;
   /** World position of the rider's head, where the stars circle. */

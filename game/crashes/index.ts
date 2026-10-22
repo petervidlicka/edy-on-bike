@@ -9,7 +9,7 @@ import { carBonkCrash } from "./carBonk";
 import { classicCrash } from "./classic";
 import { faceplantCrash } from "./faceplant";
 import { drawCrashStars } from "./garnish";
-import { resetCrashClock, stepShake } from "./physics";
+import { BIKE_REST, resetCrashClock, stepBike, stepShake } from "./physics";
 import { treeHangCrash } from "./treeHang";
 import type {
   CrashDrawEnv,
@@ -19,7 +19,6 @@ import type {
   CrashVariant,
   CrashVariantData,
   CrashVariantId,
-  Point,
 } from "./types";
 
 export { pickVariant, variantForCause } from "./registry";
@@ -33,14 +32,31 @@ export type {
   CrashVariantId,
 } from "./types";
 
+/**
+ * Seconds at the end of a crash during which everything fades out. Every variant's
+ * duration includes it. `FADE_OUT_S` in rendering/CrashRenderer.ts draws the fade and
+ * must stay equal to this.
+ */
+export const CRASH_FADE_OUT_S = 0.3;
+
+/**
+ * A variant as the framework drives it, with its data type erased: `CrashVariant<D>`
+ * is assignable here because the variant only ever receives the data its own `init`
+ * returned (the map below is keyed by that data's `kind`).
+ */
+type AnyVariant = CrashVariant<CrashVariantData>;
+
+/** Every variant by id, so the framework looks one up instead of switching over the ids. */
+const VARIANTS: Record<CrashVariantId, AnyVariant> = {
+  classic: classicCrash,
+  faceplant: faceplantCrash,
+  treeHang: treeHangCrash,
+  carBonk: carBonkCrash,
+};
+
 /** The comic pop word of a variant, for the engine to put on screen at the impact. */
 export function crashPopFor(id: CrashVariantId): CrashPopText {
-  switch (id) {
-    case "classic": return classicCrash.pop;
-    case "faceplant": return faceplantCrash.pop;
-    case "treeHang": return treeHangCrash.pop;
-    case "carBonk": return carBonkCrash.pop;
-  }
+  return VARIANTS[id].pop;
 }
 
 /** A crash state at rest (classic, nothing running); the engine reuses one for every crash. */
@@ -64,15 +80,7 @@ export function createCrashState(): CrashState {
  * @param ctx - The rider, speed, ground and cause at the moment of impact.
  */
 export function beginCrash(cs: CrashState, id: CrashVariantId, ctx: CrashInitContext): void {
-  switch (id) {
-    case "classic": start(cs, classicCrash, ctx); break;
-    case "faceplant": start(cs, faceplantCrash, ctx); break;
-    case "treeHang": start(cs, treeHangCrash, ctx); break;
-    case "carBonk": start(cs, carBonkCrash, ctx); break;
-  }
-}
-
-function start<D extends CrashVariantData>(cs: CrashState, variant: CrashVariant<D>, ctx: CrashInitContext): void {
+  const variant = VARIANTS[id];
   resetCrashClock(cs, variant.duration, variant.starsFrom);
   cs.data = variant.init(cs, ctx);
 }
@@ -91,12 +99,17 @@ export function stepCrash(cs: CrashState, dt: number, rawDt: number, groundY: nu
   if (cs.elapsed >= cs.duration) return true;
 
   stepShake(cs, dt);
-  const step = { dt, groundY };
-  switch (cs.data.kind) {
-    case "classic": classicCrash.update(cs, cs.data, step); break;
-    case "faceplant": faceplantCrash.update(cs, cs.data, step); break;
-    case "treeHang": treeHangCrash.update(cs, cs.data, step); break;
-    case "carBonk": carBonkCrash.update(cs, cs.data, step); break;
+  const variant = VARIANTS[cs.data.kind];
+  if (variant.update) {
+    variant.update(cs, cs.data, { dt, groundY });
+  } else {
+    stepBike(cs, dt, groundY, BIKE_REST);
+  }
+  if (variant.riderAt) {
+    const r = variant.riderAt(cs.data, cs.anim);
+    cs.riderX = r.x;
+    cs.riderY = r.y;
+    cs.riderAngle = r.angle;
   }
   return false;
 }
@@ -112,6 +125,16 @@ export function tickCrashAnim(cs: CrashState, rawDt: number): void {
 }
 
 /**
+ * Parks the crash clock just short of the fade-out, so the crashed rider stays fully
+ * visible for as long as the caller holds it there (while the ambulance comes).
+ * @param cs - Crash on display.
+ */
+export function holdCrashVisible(cs: CrashState): void {
+  // A hair before the fade starts, so crashFadeAlpha still reports 1
+  cs.elapsed = cs.duration - CRASH_FADE_OUT_S - 0.01;
+}
+
+/**
  * Draws the crash: the bike, the variant's rider and decorations, and the stars once
  * the rider has settled, all fading out together at the end.
  * @param ctx - Canvas context (already shaken by the caller).
@@ -122,26 +145,8 @@ export function drawCrash(ctx: CanvasRenderingContext2D, cs: CrashState, env: Cr
   ctx.save();
   ctx.globalAlpha = crashFadeAlpha(cs);
   drawCrashBike(ctx, cs, env.skin);
-
-  let head: Point;
-  switch (cs.data.kind) {
-    case "classic":
-      classicCrash.drawRider(ctx, cs, cs.data, env);
-      head = classicCrash.headAnchor(cs, cs.data);
-      break;
-    case "faceplant":
-      faceplantCrash.drawRider(ctx, cs, cs.data, env);
-      head = faceplantCrash.headAnchor(cs, cs.data);
-      break;
-    case "treeHang":
-      treeHangCrash.drawRider(ctx, cs, cs.data, env);
-      head = treeHangCrash.headAnchor(cs, cs.data);
-      break;
-    case "carBonk":
-      carBonkCrash.drawRider(ctx, cs, cs.data, env);
-      head = carBonkCrash.headAnchor(cs, cs.data);
-      break;
-  }
-  drawCrashStars(ctx, head, cs.anim - cs.starsFrom);
+  const variant = VARIANTS[cs.data.kind];
+  variant.drawRider(ctx, cs, cs.data, env);
+  drawCrashStars(ctx, variant.headAnchor(cs, cs.data), cs.anim - cs.starsFrom);
   ctx.restore();
 }

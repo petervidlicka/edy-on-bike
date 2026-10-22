@@ -2,19 +2,13 @@
  * Decides which crash variant plays. Specific variants win over the generic one, but
  * a share of crashes still falls back to the classic tumble so they stay surprising.
  */
-import { ObstacleType } from "../types";
 import { CRASH_CLASSIC_CHANCE } from "../constants";
-import { carBonkCrash, CAR_OBSTACLES } from "./carBonk";
+import { OBSTACLE_SPECS } from "../Obstacle";
+import { carBonkCrash } from "./carBonk";
 import { faceplantCrash } from "./faceplant";
 import { treeHangCrash } from "./treeHang";
 import { classicCrash } from "./classic";
 import type { CrashCause, CrashVariantId } from "./types";
-
-const TREE_OBSTACLES: readonly ObstacleType[] = [
-  ObstacleType.SMALL_TREE,
-  ObstacleType.TALL_TREE,
-  ObstacleType.GIANT_TREE,
-];
 
 /**
  * The variant a cause calls for, ignoring the random classic fallback.
@@ -25,9 +19,11 @@ export function variantForCause(cause: CrashCause): CrashVariantId {
     case "badLanding":
       return faceplantCrash.id;
     case "obstacle":
-      if (TREE_OBSTACLES.includes(cause.obstacle.type)) return treeHangCrash.id;
-      if (CAR_OBSTACLES.includes(cause.obstacle.type)) return carBonkCrash.id;
-      return classicCrash.id;
+      switch (OBSTACLE_SPECS[cause.obstacle.type].crashFamily) {
+        case "tree": return treeHangCrash.id;
+        case "car": return carBonkCrash.id;
+        default: return classicCrash.id;
+      }
     case "eliminated":
       return classicCrash.id;
   }

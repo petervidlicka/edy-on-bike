@@ -24,8 +24,10 @@ export const color = {
   warnBg: "#fef3c7",
   warnInk: "#92400e",
   danger: "#b91c1c",
-  /** First-place medal. */
+  /** Race-result medals, first to third. */
   gold: "#fbbf24",
+  silver: "#cbd5e1",
+  bronze: "#d6a26a",
   white: "#ffffff",
 } as const;
 
@@ -123,6 +125,9 @@ export const badge: CSSProperties = {
 
 /** Highlight badge for achievements ("New personal best", "You made the top 10"). */
 export const badgeWarn: CSSProperties = { ...badge, background: color.warnBg, color: color.warnInk };
+
+/** Plain badge for facts that aren't achievements ("Best 00420", "Practice run · not ranked"). */
+export const badgeNeutral: CSSProperties = { ...badge, background: "rgba(255,255,255,0.7)", color: color.body, fontWeight: 700 };
 
 /** Text input on a glass panel. */
 export const input: CSSProperties = {

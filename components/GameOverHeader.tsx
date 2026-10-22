@@ -4,7 +4,7 @@
 import type { ReactNode } from "react";
 import { UnlockProgress } from "./UnlockProgress";
 import { ScreenTitle } from "./ui/ScreenTitle";
-import { badge, badgeWarn, color, font, formatScore, text } from "./ui/tokens";
+import { badgeNeutral, badgeWarn, font, formatScore, text } from "./ui/tokens";
 
 interface GameOverHeaderProps {
   score: number;
@@ -36,7 +36,7 @@ export function GameOverHeader({ score, bestScore, previousBest, cheatUnlocked, 
         {isNewBest ? (
           <span style={badgeWarn}>New personal best</span>
         ) : bestScore > 0 ? (
-          <span style={{ ...badge, background: "rgba(255,255,255,0.7)", color: color.body, fontWeight: 700 }}>
+          <span style={badgeNeutral}>
             Best <span style={{ fontFamily: font.mono }}>{formatScore(bestScore)}</span>
           </span>
         ) : null}

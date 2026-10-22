@@ -9,6 +9,7 @@ import { GameOverLinkButton } from "./GameOverLinkButton";
 import { loadPlayerName, savePlayerName } from "@/game/storage";
 import { LeaderboardError, submitScore } from "@/lib/leaderboardClient";
 import { useGamepadPress } from "@/hooks/useGamepad";
+import { isButton, isTyping } from "@/lib/dom";
 import { color, input, text } from "./ui/tokens";
 
 interface LeaderboardFormProps {
@@ -107,11 +108,10 @@ export function LeaderboardForm({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "Space" && e.code !== "Enter") return;
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (isTyping(e.target)) return;
       e.stopImmediatePropagation();
       // A focused button handles the key natively, so Skip / change name stay reachable by keyboard
-      if (tag === "BUTTON") return;
+      if (isButton(e.target)) return;
       e.preventDefault();
       if (e.repeat) return; // holding the key must not resubmit
       submit();

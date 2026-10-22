@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Engine } from "@/game/Engine";
 import { useGamepadPress } from "@/hooks/useGamepad";
 import { useCanVibrate } from "@/hooks/useHapticFeedback";
+import { isTyping } from "@/lib/dom";
 import { CountdownOverlay } from "./CountdownOverlay";
 import { GlassPanel } from "./ui/GlassPanel";
 import { ScreenTitle } from "./ui/ScreenTitle";
@@ -92,8 +93,7 @@ export function PauseMenu({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (isTyping(e.target)) return;
       if (e.code === "Space") {
         // Capture phase + stop: the same press must not also reach the jump handler.
         e.preventDefault();

@@ -10,6 +10,7 @@ import { HUD } from "./HUD";
 import { GameOverScreen } from "./GameOverScreen";
 import { PauseMenu } from "./PauseMenu";
 import { UnlockToast } from "./UnlockToast";
+import { DebugControls } from "./DebugControls";
 import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 import { haptic } from "@/lib/haptics";
 import { startRun } from "@/lib/leaderboardClient";
@@ -92,6 +93,7 @@ export function GameCanvas() {
   const handleFrontflip = useCallback(() => engineRef.current?.frontflip(), [engineRef]);
   const handleSuperman = useCallback(() => engineRef.current?.superman(), [engineRef]);
   const handleNoHander = useCallback(() => engineRef.current?.noHander(), [engineRef]);
+  const handleNextBiome = useCallback(() => engineRef.current?.forceNextBiome(), [engineRef]);
 
   // Sync skin to engine on mount, after hydration swaps in the saved skin, and on selection
   useEffect(() => {
@@ -204,48 +206,11 @@ export function GameCanvas() {
       )}
 
       {process.env.NODE_ENV !== "production" && (
-        <>
-          <button
-            onClick={toggleDebugObstacles}
-            style={{
-              position: "fixed",
-              top: 8,
-              right: 8,
-              padding: "4px 10px",
-              fontSize: "0.7rem",
-              fontFamily: "monospace",
-              background: debugObstacles ? "#d44" : "#555",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              opacity: 0.85,
-              zIndex: 9999,
-            }}
-          >
-            Debug: {debugObstacles ? "ON" : "OFF"}
-          </button>
-          <button
-            onClick={() => engineRef.current?.forceNextBiome()}
-            style={{
-              position: "fixed",
-              top: 8,
-              right: 110,
-              padding: "4px 10px",
-              fontSize: "0.7rem",
-              fontFamily: "monospace",
-              background: "#c87020",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              opacity: 0.85,
-              zIndex: 9999,
-            }}
-          >
-            Next Biome
-          </button>
-        </>
+        <DebugControls
+          debugObstacles={debugObstacles}
+          onToggleDebugObstacles={toggleDebugObstacles}
+          onNextBiome={handleNextBiome}
+        />
       )}
     </>
   );

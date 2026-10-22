@@ -8,6 +8,7 @@ import { GameOverPrimaryButton } from "./GameOverPrimaryButton";
 import { GameOverLinkButton } from "./GameOverLinkButton";
 import { loadPlayerName, savePlayerName } from "@/game/storage";
 import { LeaderboardError, submitScore } from "@/lib/leaderboardClient";
+import { MAX_LEADERBOARD_NAME_LENGTH, validateLeaderboardName } from "@/lib/leaderboardConfig";
 import { useGamepadPress } from "@/hooks/useGamepad";
 import { isButton, isTyping } from "@/lib/dom";
 import { color, input, text } from "./ui/tokens";
@@ -91,12 +92,18 @@ export function LeaderboardForm({
       void save(savedName, true);
       return;
     }
-    const trimmed = name.trim();
-    if (!trimmed) {
+    // An empty field gets a prompt rather than the API's terse "Name is required."
+    if (!name.trim()) {
       setError("Please enter your name to appear on the leaderboard");
       return;
     }
-    void save(trimmed, false);
+    // Same cleaning and rules as the API, so a rejected name never costs a request
+    const result = validateLeaderboardName(name);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    void save(result.name, false);
   }, [locked, oneTap, savedName, name, save]);
 
   const handleSkip = () => {
@@ -178,7 +185,7 @@ export function LeaderboardForm({
               }}
               onKeyDown={handleInputKeyDown}
               placeholder="Your name"
-              maxLength={20}
+              maxLength={MAX_LEADERBOARD_NAME_LENGTH}
               aria-invalid={error ? true : undefined}
               style={{
                 ...input,

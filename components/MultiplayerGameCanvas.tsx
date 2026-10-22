@@ -6,18 +6,20 @@
  * a waiting state once the local rider has crashed.
  */
 import { useRef, useEffect, useState } from "react";
-import { INITIAL_SPEED } from "@/game/constants";
 import { getSkinById } from "@/game/skins";
 import { MultiplayerAdapter } from "@/game/multiplayer/MultiplayerAdapter";
 import { SeededRNG } from "@/game/multiplayer/SeededRNG";
 import { PlayerInfo } from "@/game/multiplayer/protocol";
 import { useHapticFeedback } from "@/hooks/useHapticFeedback";
-import { AudioControls, TrickFeedbackPopup, TrickDpad } from "./HUD";
+import { AudioControls } from "./AudioControls";
+import { CountdownOverlay } from "./CountdownOverlay";
+import { LiveHudChip } from "./LiveHudChip";
+import { TrickDpad } from "./TrickDpad";
+import { TrickFeedbackPopup } from "./TrickFeedbackPopup";
 import { GlassButton } from "./ui/GlassButton";
 import { GlassPanel } from "./ui/GlassPanel";
-import { HudChip } from "./ui/HudChip";
 import { ScreenTitle } from "./ui/ScreenTitle";
-import { badge, color, font, formatScore, glassSurfaceSmall, radius, text } from "./ui/tokens";
+import { badge, color, font, formatScore, glassSurfaceSmall, radius, safeInset, text } from "./ui/tokens";
 import { usePauseOnHidden } from "@/hooks/usePauseOnHidden";
 import { useGameEngine } from "@/hooks/useGameEngine";
 import { useEngineInput } from "@/hooks/useEngineInput";
@@ -54,7 +56,7 @@ export function MultiplayerGameCanvas({
   /** Local rider is out but others may still be racing — show a waiting state with a way out. */
   const [crashed, setCrashed] = useState(false);
   const { onGameEvent, vibrationOn, toggleVibration } = useHapticFeedback();
-  const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
+  const { engineRef, stats, finalScore, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
     useGameEngine(canvasRef, {
       // Engine already calls adapter.sendCrashed() in its gameOver() method
       onGameOver: () => setCrashed(true),
@@ -99,8 +101,6 @@ export function MultiplayerGameCanvas({
   useEngineInput(engineRef, canvasRef, { allowIdleStart: false });
 
   usePauseOnHidden(engineRef);
-
-  const multiplier = (speed / INITIAL_SPEED).toFixed(1);
 
   return (
     <>
@@ -149,7 +149,7 @@ export function MultiplayerGameCanvas({
         >
           <GlassPanel style={{ pointerEvents: "auto", fontFamily: font.ui }}>
             <ScreenTitle>You Crashed</ScreenTitle>
-            <span style={text.numberXl}>{formatScore(score)}</span>
+            <span style={text.numberXl}>{formatScore(finalScore)}</span>
             <p style={{ ...text.body, fontSize: "0.875rem" }}>Waiting for the others to finish…</p>
             <GlassButton variant="quiet" onClick={onLeave}>
               Leave race
@@ -159,32 +159,7 @@ export function MultiplayerGameCanvas({
       )}
 
       {/* Countdown overlay */}
-      {overlay !== null && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 100,
-            pointerEvents: "none",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "5rem",
-              fontFamily: "var(--font-fredoka), sans-serif",
-              fontWeight: 700,
-              color: "#fff",
-              textShadow:
-                "0 4px 24px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3)",
-            }}
-          >
-            {overlay === "GO" ? "GO!" : overlay}
-          </span>
-        </div>
-      )}
+      {overlay !== null && <CountdownOverlay label={overlay === "GO" ? "GO!" : overlay} />}
 
       {/* Multiplayer HUD — player standings + speed + tricks */}
       {overlay === null && (
@@ -192,8 +167,8 @@ export function MultiplayerGameCanvas({
           <div
             style={{
               position: "fixed",
-              top: "1rem",
-              right: "1.5rem",
+              top: safeInset.top,
+              right: safeInset.right,
               display: "flex",
               flexDirection: "column",
               alignItems: "flex-end",
@@ -202,7 +177,7 @@ export function MultiplayerGameCanvas({
               pointerEvents: "none",
             }}
           >
-            <HudChip score={score} multiplier={multiplier} />
+            <LiveHudChip stats={stats} />
             <TrickFeedbackPopup trickFeedback={trickFeedback} />
             <ol
               aria-label="Standings"

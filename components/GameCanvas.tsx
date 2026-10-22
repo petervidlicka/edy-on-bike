@@ -10,6 +10,7 @@ import { HUD } from "./HUD";
 import { GameOverScreen } from "./GameOverScreen";
 import { PauseMenu } from "./PauseMenu";
 import { UnlockToast } from "./UnlockToast";
+import { DebugControls } from "./DebugControls";
 import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 import { haptic } from "@/lib/haptics";
 import { startRun } from "@/lib/leaderboardClient";
@@ -64,7 +65,7 @@ export function GameCanvas() {
     if (event.type === "runStart") setRunTicket(event.ranked ? startRun() : null);
   }, [hapticsOnGameEvent]);
 
-  const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
+  const { engineRef, stats, finalScore, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
     useGameEngine(canvasRef, {
       onGameOver: (finalScore, engine) => {
         setGameState(GameState.GAME_OVER);
@@ -83,7 +84,16 @@ export function GameCanvas() {
       onPauseChange: (_paused, reasons) => setUserPaused(reasons.includes("user")),
     });
 
-  const unlockToast = useUnlockToast(engineRef, gameState, score, bestScore, cheatUnlocked);
+  const unlockToast = useUnlockToast(engineRef, gameState, stats, bestScore, cheatUnlocked);
+
+  // HUD handlers, created once: the HUD and its buttons are memoised on them
+  const handleJump = useCallback(() => engineRef.current?.jump(), [engineRef]);
+  const handlePause = useCallback(() => engineRef.current?.pause("user"), [engineRef]);
+  const handleBackflip = useCallback(() => engineRef.current?.backflip(), [engineRef]);
+  const handleFrontflip = useCallback(() => engineRef.current?.frontflip(), [engineRef]);
+  const handleSuperman = useCallback(() => engineRef.current?.superman(), [engineRef]);
+  const handleNoHander = useCallback(() => engineRef.current?.noHander(), [engineRef]);
+  const handleNextBiome = useCallback(() => engineRef.current?.forceNextBiome(), [engineRef]);
 
   // Sync skin to engine on mount, after hydration swaps in the saved skin, and on selection
   useEffect(() => {
@@ -145,14 +155,13 @@ export function GameCanvas() {
           cheatUnlocked={cheatUnlocked}
           selectedSkinId={selectedSkinId}
           onSelectSkin={chooseSkin}
-          onStart={() => engineRef.current?.jump()}
+          onStart={handleJump}
         />
       )}
 
       {gameState === GameState.RUNNING && (
         <HUD
-          score={score}
-          speed={speed}
+          stats={stats}
           trickFeedback={trickFeedback}
           musicMuted={musicMuted}
           sfxMuted={sfxMuted}
@@ -160,12 +169,12 @@ export function GameCanvas() {
           onToggleSfx={toggleSfx}
           vibrationOn={vibrationOn}
           onToggleVibration={toggleVibration}
-          onPause={() => engineRef.current?.pause("user")}
-          onJump={() => engineRef.current?.jump()}
-          onBackflip={() => engineRef.current?.backflip()}
-          onFrontflip={() => engineRef.current?.frontflip()}
-          onSuperman={() => engineRef.current?.superman()}
-          onNoHander={() => engineRef.current?.noHander()}
+          onPause={handlePause}
+          onJump={handleJump}
+          onBackflip={handleBackflip}
+          onFrontflip={handleFrontflip}
+          onSuperman={handleSuperman}
+          onNoHander={handleNoHander}
         />
       )}
 
@@ -185,7 +194,7 @@ export function GameCanvas() {
 
       {gameState === GameState.GAME_OVER && (
         <GameOverScreen
-          score={score}
+          score={finalScore}
           bestScore={bestScore}
           skinName={getSkinById(selectedSkinId).name}
           previousBest={previousBest}
@@ -197,48 +206,11 @@ export function GameCanvas() {
       )}
 
       {process.env.NODE_ENV !== "production" && (
-        <>
-          <button
-            onClick={toggleDebugObstacles}
-            style={{
-              position: "fixed",
-              top: 8,
-              right: 8,
-              padding: "4px 10px",
-              fontSize: "0.7rem",
-              fontFamily: "monospace",
-              background: debugObstacles ? "#d44" : "#555",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              opacity: 0.85,
-              zIndex: 9999,
-            }}
-          >
-            Debug: {debugObstacles ? "ON" : "OFF"}
-          </button>
-          <button
-            onClick={() => engineRef.current?.forceNextBiome()}
-            style={{
-              position: "fixed",
-              top: 8,
-              right: 110,
-              padding: "4px 10px",
-              fontSize: "0.7rem",
-              fontFamily: "monospace",
-              background: "#c87020",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              opacity: 0.85,
-              zIndex: 9999,
-            }}
-          >
-            Next Biome
-          </button>
-        </>
+        <DebugControls
+          debugObstacles={debugObstacles}
+          onToggleDebugObstacles={toggleDebugObstacles}
+          onNextBiome={handleNextBiome}
+        />
       )}
     </>
   );

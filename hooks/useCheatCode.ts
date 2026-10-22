@@ -2,14 +2,7 @@
  * Classic typed cheat codes (IDKFA, IDDQD) for the single-player screen.
  */
 import { useRef, useEffect } from "react";
-
-/** Whether a key press is text entry (name field etc.) rather than input to the game. */
-function isTyping(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")
-  );
-}
+import { isTyping } from "@/lib/dom";
 
 /**
  * Calls `onActivate` when `code` is typed anywhere on the page except into a text field,

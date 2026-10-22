@@ -5,10 +5,10 @@
  * of the locked bike, the points still missing, and a fill bar. With `animateFrom` it
  * animates from the previous best to `bestScore`, celebrating each bike it crosses.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SkinDefinition } from "@/game/types";
 import { SKINS, getNextUnlock } from "@/game/skins";
-import { drawSkinPreview } from "@/game/rendering";
+import { SkinPreview } from "./SkinPreview";
 import { color, font, radius } from "./ui/tokens";
 
 interface UnlockProgressProps {
@@ -19,8 +19,6 @@ interface UnlockProgressProps {
   animateFrom?: number;
 }
 
-const PREVIEW_W = 72;
-const PREVIEW_H = 79;
 const FILL_MS = 800;
 const CELEBRATE_MS = 1100;
 
@@ -64,21 +62,8 @@ function buildStages(from: number, to: number): Stage[] {
   return stages;
 }
 
-function MiniBike({ skin }: { skin: SkinDefinition }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const ctx = canvasRef.current?.getContext("2d");
-    if (ctx) drawSkinPreview(ctx, skin, PREVIEW_W, PREVIEW_H);
-  }, [skin]);
-  return (
-    <canvas
-      ref={canvasRef}
-      width={PREVIEW_W}
-      height={PREVIEW_H}
-      style={{ width: 36, height: 40, flexShrink: 0, imageRendering: "pixelated" }}
-    />
-  );
-}
+/** On-screen size of the locked bike's preview in the strip. */
+const MINI_BIKE_STYLE = { width: 36, height: 40, flexShrink: 0 } as const;
 
 /**
  * @param props - Best score, cheat state and optional animation start.
@@ -145,7 +130,7 @@ export function UnlockProgress({ bestScore, cheatUnlocked, animateFrom }: Unlock
   return (
     <div style={glass}>
       <div style={{ opacity: celebrating ? 1 : 0.7, transform: celebrating ? "scale(1.25)" : "none", transition: "transform 0.3s" }}>
-        <MiniBike skin={stage.skin} />
+        <SkinPreview skin={stage.skin} style={MINI_BIKE_STYLE} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ margin: 0, color: celebrating ? color.warnInk : color.ink, fontSize: "0.78rem", fontWeight: 700, lineHeight: 1.2 }}>

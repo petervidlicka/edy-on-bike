@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { LEADERBOARD_SIZE, scoreQualifies } from "./leaderboardConfig";
+import { LEADERBOARD_SIZE, MAX_LEADERBOARD_NAME_LENGTH, scoreQualifies, validateLeaderboardName } from "./leaderboardConfig";
+
+describe("validateLeaderboardName", () => {
+  it("returns the cleaned name", () => {
+    expect(validateLeaderboardName("  Edy​  Rider ")).toEqual({ ok: true, name: "Edy Rider" });
+  });
+
+  it("rejects empty, over-long and blocked names with player-facing messages", () => {
+    expect(validateLeaderboardName(" ​ ")).toEqual({ ok: false, error: "Name is required." });
+    expect(validateLeaderboardName("x".repeat(MAX_LEADERBOARD_NAME_LENGTH + 1))).toEqual({
+      ok: false,
+      error: `Name must be ${MAX_LEADERBOARD_NAME_LENGTH} characters or less.`,
+    });
+    expect(validateLeaderboardName("sh1t rider")).toEqual({ ok: false, error: "Please pick a different name." });
+  });
+});
 
 const fullBoard = Array.from({ length: LEADERBOARD_SIZE }, (_, i) => ({ score: 100 + i * 10 }));
 

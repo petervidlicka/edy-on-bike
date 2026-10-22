@@ -5,6 +5,7 @@
  */
 import { useEffect } from "react";
 import { useGamepadPress } from "@/hooks/useGamepad";
+import { isButton, isTyping } from "@/lib/dom";
 
 /**
  * Mount in at most one game-over view at a time; two capture listeners would both fire.
@@ -18,11 +19,10 @@ export function useRestartKeys(onAction: () => void, locked: boolean): void {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "Space" && e.code !== "Enter" && e.code !== "KeyR") return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (isTyping(e.target)) return;
       e.stopImmediatePropagation();
       // A focused button handles Space/Enter natively, so links like "Home" stay keyboard-reachable
-      if (tag === "BUTTON" && e.code !== "KeyR") return;
+      if (isButton(e.target) && e.code !== "KeyR") return;
       e.preventDefault();
       if (e.repeat || locked) return;
       onAction();

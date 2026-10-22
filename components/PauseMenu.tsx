@@ -9,6 +9,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { Engine } from "@/game/Engine";
 import { useGamepadPress } from "@/hooks/useGamepad";
 import { useCanVibrate } from "@/hooks/useHapticFeedback";
+import { isTyping } from "@/lib/dom";
+import { CountdownOverlay } from "./CountdownOverlay";
 import { GlassPanel } from "./ui/GlassPanel";
 import { ScreenTitle } from "./ui/ScreenTitle";
 import { GlassButton } from "./ui/GlassButton";
@@ -91,8 +93,7 @@ export function PauseMenu({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (isTyping(e.target)) return;
       if (e.code === "Space") {
         // Capture phase + stop: the same press must not also reach the jump handler.
         e.preventDefault();
@@ -136,18 +137,7 @@ export function PauseMenu({
       }}
     >
       {countdown !== null ? (
-        <span
-          key={countdown}
-          style={{
-            color: "#fff",
-            fontFamily: font.display,
-            fontSize: "6rem",
-            fontWeight: 600,
-            textShadow: "0 4px 24px rgba(0,0,0,0.35)",
-          }}
-        >
-          {countdown}
-        </span>
+        <CountdownOverlay label={countdown} />
       ) : (
         <GlassPanel style={{ minWidth: "min(300px, 90vw)" }}>
           <ScreenTitle>Paused</ScreenTitle>

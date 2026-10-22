@@ -29,8 +29,9 @@ const RUN_TTL_SECONDS = 3 * 60 * 60;
  * `storage_KV_*` comes first: the current Vercel Marketplace connection uses
  * that prefix, while the unprefixed `KV_*` vars are left over from a deleted
  * database. Then the plain Upstash names (`UPSTASH_REDIS_REST_*`).
+ * Exported so the "Redis is not configured" message can list every accepted pair.
  */
-const REDIS_ENV_CANDIDATES = [
+export const REDIS_ENV_CANDIDATES = [
   ["storage_KV_REST_API_URL", "storage_KV_REST_API_TOKEN"],
   ["KV_REST_API_URL", "KV_REST_API_TOKEN"],
   ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
@@ -57,12 +58,19 @@ export function getRedisConfig(): RedisConfig | null {
 // undefined = not created yet; null = Redis not configured
 let redisClient: Redis | null | undefined;
 
-function getRedis(): Redis | null {
+/**
+ * The one Redis client for the leaderboard store and the API rate limiter, created on
+ * first use (so importing a route never opens a connection) and only when credentials
+ * exist. Names are arbitrary player input: with automatic deserialization the client
+ * JSON-parses every reply, so a stored name like "true" or "123" would come back as a
+ * boolean or number instead of the string the player typed. The rate limiter's Lua
+ * scripts return integer arrays, which the REST reply carries as JSON numbers either
+ * way, so it can share this client.
+ * @returns The client, or null when Redis is not configured (callers fall back to memory/file).
+ */
+export function getRedis(): Redis | null {
   if (redisClient === undefined) {
     const config = getRedisConfig();
-    // Names are arbitrary player input. With automatic deserialization the client
-    // JSON-parses every reply, so a stored name like "true" or "123" would come
-    // back as a boolean or number instead of the string the player typed.
     redisClient = config ? new Redis({ ...config, automaticDeserialization: false }) : null;
   }
   return redisClient;

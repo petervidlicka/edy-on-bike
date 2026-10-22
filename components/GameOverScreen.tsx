@@ -15,7 +15,7 @@ import { LEADERBOARD_SIZE, scoreQualifies } from "@/lib/leaderboardConfig";
 import { useGameOverLeaderboard } from "@/hooks/useGameOverLeaderboard";
 import { useInputLockout, GAME_OVER_LOCKOUT_MS } from "@/hooks/useInputLockout";
 import { GlassPanel } from "./ui/GlassPanel";
-import { badge, badgeWarn, color, font } from "./ui/tokens";
+import { badgeNeutral, badgeWarn, font } from "./ui/tokens";
 
 interface GameOverScreenProps {
   score: number;
@@ -65,13 +65,15 @@ export function GameOverScreen({
   // (adjusting state during render, React's pattern for state derived from a transition)
   if (!locked && chosenView === null) setChosenView(qualifies ? "form" : "summary");
 
+  // Depends on the stable reload function, not the board object, which is new every render
+  const reloadBoard = board.reload;
   const handleSaved = useCallback(
     async (name: string) => {
       setSaved({ name, score });
-      await board.reload();
+      await reloadBoard();
       setChosenView("leaderboard");
     },
-    [board, score],
+    [reloadBoard, score],
   );
 
   return (
@@ -102,7 +104,7 @@ export function GameOverScreen({
                   You made the top {LEADERBOARD_SIZE}
                 </span>
               ) : !ranked ? (
-                <span style={{ ...badge, background: "rgba(255,255,255,0.7)", color: color.body, fontWeight: 700 }}>
+                <span style={badgeNeutral}>
                   Practice run · not ranked
                 </span>
               ) : null

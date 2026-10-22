@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import type { Engine } from "@/game/Engine";
 import { GameState } from "@/game/types";
 import { addGamepadPressListener, type GamepadPressEvent } from "@/lib/gamepad";
+import { isButton, isTyping } from "@/lib/dom";
 
 /** The four trick directions, shared by the arrow keys, the D-pad and the left stick. */
 type TrickDirection = "Up" | "Down" | "Left" | "Right";
@@ -73,13 +74,11 @@ export function useEngineInput(
       const engine = engineRef.current;
       // Esc/P only pause here; resuming is the pause menu's job (it shows the countdown).
       if (allowPause && (e.code === "Escape" || e.code === "KeyP") && !e.repeat) {
-        const tag = (e.target as HTMLElement)?.tagName;
-        if (tag !== "INPUT" && tag !== "TEXTAREA") engine?.pause("user");
+        if (!isTyping(e.target)) engine?.pause("user");
         return;
       }
       if (e.code === "Space") {
-        const tag = (e.target as HTMLElement)?.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (isTyping(e.target)) return;
         e.preventDefault();
         jumpIfAllowed(e.repeat);
       }
@@ -100,8 +99,7 @@ export function useEngineInput(
     };
 
     const handleTouch = (e: TouchEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "BUTTON") return;
+      if (isTyping(e.target) || isButton(e.target)) return;
       e.preventDefault();
       jumpIfAllowed();
     };

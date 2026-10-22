@@ -35,7 +35,7 @@ import { getSkinById } from "./skins";
 import { voiceCueFor } from "./voiceLines";
 import { createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
 import {
-  beginCrash, createCrashPopText, createCrashState, crashPopFor, drawCrash, pickVariant, stepCrash, tickCrashAnim,
+  beginCrash, createCrashPopText, createCrashState, crashPopFor, drawCrash, holdCrashVisible, pickVariant, stepCrash, tickCrashAnim,
 } from "./crashes";
 import type { CrashCause } from "./crashes";
 import type { MultiplayerAdapter } from "./multiplayer/MultiplayerAdapter";
@@ -521,7 +521,7 @@ export class Engine {
   private startAmbulanceSequence(): void {
     this.state = GameState.AMBULANCE;
     this.ambulance = createAmbulanceState(this.player.x, this.player.width, this.canvasW, this.groundY);
-    this.crashState.elapsed = this.crashState.duration - 0.31; // Keep ragdoll visible (alpha ~1)
+    holdCrashVisible(this.crashState); // Keep ragdoll visible (alpha ~1)
     this.sound.playSiren();
     this.callbacks.onStateChange(this.state);
   }

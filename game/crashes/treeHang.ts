@@ -5,27 +5,24 @@
  * and falls to the road below. A few clumps of foliage are painted over the rider's
  * back so they look caught in the branches rather than stuck on in front.
  */
-import { INITIAL_SPEED, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
+import { INITIAL_SPEED } from "../constants";
 import { ObstacleType } from "../types";
 import { OBSTACLE_SPECS } from "../Obstacle";
 import { drawRiderFigure, UPRIGHT_SHOULDER } from "../rendering/CrashRenderer";
 import type { Offset } from "../rendering/CrashRenderer";
 import type { EnvironmentPalette } from "../environments/types";
-import { figurePoint, HEAD_OFFSET, launchBike, lerp, stepBike } from "./physics";
-import type { CrashVariant, TreeHangData } from "./types";
+import { figurePoint, HIP_FROM_PLAYER, launchBikeFromRider, lerp, placeRider, riderHead } from "./physics";
+import type { CrashVariant, RiderPlacement, TreeHangData } from "./types";
 
 const T_FLY = 0.32;
 const DURATION = 2.1;
 const STARS_FROM = 0.75;
-const BIKE_REST = 20;
 
 /** Swing of the dangling rider: first peak in radians, decay per second, angular speed. */
 const SWING_AMPLITUDE = 0.5;
 const SWING_DECAY = 1.5;
 const SWING_SPEED = 6;
 
-/** Hip of an upright rider on the bike, relative to the player box. */
-const HIP_FROM_PLAYER: Offset = [27, 24];
 /** Where the branch catches the shirt: between the shoulder blades, relative to the hip. */
 const HOOK_OFFSET: Offset = [1, -12];
 
@@ -65,7 +62,7 @@ function swingAngle(s: number): number {
 }
 
 /** Hip position and rotation of the rider at `t` seconds. */
-function riderAt(data: TreeHangData, t: number): { x: number; y: number; angle: number } {
+function riderAt(data: TreeHangData, t: number): RiderPlacement {
   // Upright and hanging straight, the hip sits below the hook by the hook's own offset
   const restX = data.hookX - HOOK_OFFSET[0];
   const restY = data.hookY - HOOK_OFFSET[1];
@@ -110,28 +107,13 @@ export const treeHangCrash: CrashVariant<TreeHangData> = {
       hookY: treeBox.y + treeBox.height * (OBSTACLE_SPECS[treeBox.type].hookDepth ?? DEFAULT_HOOK_DEPTH),
       tree: treeBox,
     };
-    cs.riderX = data.startX;
-    cs.riderY = data.startY;
-    cs.riderAngle = 0;
-    cs.riderVX = cs.riderVY = cs.riderAngularVel = 0;
-    cs.riderBounceCount = 0;
+    placeRider(cs, data.startX, data.startY);
     // The bike bounces back off the trunk and drops to the road
-    launchBike(
-      cs,
-      { x: p.x + PLAYER_WIDTH / 2, y: p.y + PLAYER_HEIGHT / 2 },
-      p.wheelRotation,
-      { vx: -(1 + speedFactor * 0.6), vy: -3, spin: 0.12 },
-    );
+    launchBikeFromRider(cs, p, { vx: -(1 + speedFactor * 0.6), vy: -3, spin: 0.12 });
     return data;
   },
 
-  update(cs, data, { dt, groundY }) {
-    stepBike(cs, dt, groundY, BIKE_REST);
-    const r = riderAt(data, cs.anim);
-    cs.riderX = r.x;
-    cs.riderY = r.y;
-    cs.riderAngle = r.angle;
-  },
+  riderAt,
 
   drawRider(ctx, cs, data, { skin, palette, groundY }) {
     const t = cs.anim;
@@ -190,7 +172,5 @@ export const treeHangCrash: CrashVariant<TreeHangData> = {
     }
   },
 
-  headAnchor(cs) {
-    return figurePoint(cs.riderX, cs.riderY, cs.riderAngle, HEAD_OFFSET);
-  },
+  headAnchor: riderHead,
 };

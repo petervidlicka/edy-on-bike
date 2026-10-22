@@ -47,6 +47,11 @@ import { drawHeightMarker } from "./rendering/HeightMarker";
 
 /** Milliseconds per 60fps frame; converts the capped `dt` into game time for the chain timers. */
 const FRAME_MS = 1000 / 60;
+/** The "GOD MODE" pop shown when IDDQD is typed: centred, a third of the way down, rising slowly. */
+const GOD_MODE_TEXT = "GOD MODE";
+const GOD_MODE_TEXT_COLOR = "#ff4444";
+const GOD_MODE_TEXT_RISE = -0.8;
+const GOD_MODE_TEXT_Y_RATIO = 0.35;
 
 /**
  * Why the engine is paused. The loop runs only while no reason is held, so the
@@ -59,7 +64,10 @@ export type EngineCallbacks = {
   onGameOver: (score: number) => void;
   onStateChange: (state: GameState) => void;
   onSpeedUpdate?: (speed: number) => void;
-  /** Legacy trick callback, kept alongside `onGameEvent` for the HUD's trick popup. */
+  /**
+   * Legacy trick callback, kept alongside `onGameEvent` for the HUD's trick popup.
+   * @deprecated Listen for the `trickLanded` event on `onGameEvent` instead; this goes once the React layer has moved over.
+   */
   onTrickLanded?: (trickName: string, points: number, sketchy?: boolean, multiplier?: number) => void;
   /** Receives every game event (run start, tricks, crashes, ...) for React-side reactions. */
   onGameEvent?: (event: GameEvent) => void;
@@ -303,12 +311,21 @@ export class Engine {
     startNoHander(this.player);
   }
 
+  /**
+   * One animation frame. Time units, by convention throughout the engine:
+   * - `rawDt`: real milliseconds since the last frame (uncapped) — clocks that must track
+   *   wall time (run clock, speed-up schedule, crash length, ambulance phases, camera).
+   * - `dt`: the same in 60fps frame units (1 = one 60fps frame), capped at 3 so a tab switch
+   *   can't spiral — anything that moves (physics, scrolling, floating texts).
+   * - `dtMs`: `dt` back in milliseconds (capped game time) — timers that should freeze with
+   *   the game, like the combo chain and the grind; computed once per frame in `update`.
+   */
   private loop(timestamp: number): void {
     if (this.lastTime === 0) this.lastTime = timestamp;
     const rawDt = timestamp - this.lastTime;
     this.lastTime = timestamp;
     // Normalize to 60fps units — dt=1 at 60fps, capped to avoid spiral on tab switch
-    const dt = Math.min(rawDt / (1000 / 60), 3);
+    const dt = Math.min(rawDt / FRAME_MS, 3);
 
     const frameState = this.state;
     if (frameState === GameState.RUNNING) {
@@ -335,6 +352,8 @@ export class Engine {
       return;
     }
 
+    // Capped game time in ms for the timers that freeze with the game (see the convention at `loop`)
+    const dtMs = dt * FRAME_MS;
     // Spawning, culling and scenery all work to the widest zoomed-out view, so nothing pops in or out on screen
     const widestView = this.widestView;
     this.progressBiomes(dt, widestView);
@@ -367,7 +386,6 @@ export class Engine {
       if (processTrickLanding(trickCtx, hadFlip, hadPose, prevBackflipAngle, prevFlipDirection, FULL_FLIP, FLIP_TOLERANCE, SKETCHY_TOLERANCE)) return;
     }
 
-    const dtMs = dt * FRAME_MS;
     this.scoring.tick(dtMs, dt);
 
     // Update floating texts (float up + fade out)
@@ -721,12 +739,12 @@ export class Engine {
   activateIddqd(): void {
     this.rescue.activateCheat(this.state === GameState.CRASHING);
     this.floatingTexts.push({
-      text: "GOD MODE",
+      text: GOD_MODE_TEXT,
       x: this.canvasW / 2,
-      y: this.canvasH * 0.35,
+      y: this.canvasH * GOD_MODE_TEXT_Y_RATIO,
       opacity: 1,
-      velocityY: -0.8,
-      color: "#ff4444",
+      velocityY: GOD_MODE_TEXT_RISE,
+      color: GOD_MODE_TEXT_COLOR,
     });
   }
 

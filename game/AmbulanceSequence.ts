@@ -14,6 +14,21 @@ import type { FloatingText } from "./TrickSystem";
 import type { SoundManager } from "./SoundManager";
 import { createAmbulanceState, updateAmbulanceLogic, AmbulanceAction } from "./CrashSequence";
 
+/** Obstacles closer than this (px past the rider's front) are removed on revive, so the rider has room to get going. */
+const REVIVE_CLEAR_ZONE_PX = 200;
+/** Mercy slowdown: the run speed is multiplied by this on revive. */
+const REVIVE_SPEED_FACTOR = 0.85;
+/**
+ * Distance (px) before the first obstacle after a revive. Only for the regular course:
+ * a debug course (`?obstacles=`) keeps its own fixed gap.
+ */
+const REVIVE_SPAWN_GAP_PX = 500;
+/** The "REVIVED!" pop over the rider: colour, rise speed and how far above the rider it starts. */
+const REVIVE_TEXT = "REVIVED!";
+const REVIVE_TEXT_COLOR = "#00ff88";
+const REVIVE_TEXT_RISE = -1.2;
+const REVIVE_TEXT_OFFSET_Y = 20;
+
 /**
  * What the sequence needs from the run around it. Getters where the Engine replaces the
  * value on restart/resize (player, size, speed); setters where the run must be told.
@@ -170,7 +185,7 @@ export class AmbulanceSequence {
     const player = host.player();
 
     // Clear obstacles near the player (compacted in place: the Engine keeps the same array)
-    const clearZone = player.x + player.width + 200;
+    const clearZone = player.x + player.width + REVIVE_CLEAR_ZONE_PX;
     const obstacles = host.obstacles();
     let kept = 0;
     for (let i = 0; i < obstacles.length; i++) {
@@ -195,20 +210,17 @@ export class AmbulanceSequence {
     player.rampBoost = null;
     player.rampSurfaceAngle = 0;
 
-    // Mercy slowdown
-    host.setSpeed(host.speed() * 0.85);
-
-    // Big gap after revive
-    host.setSpawnGap(500);
+    host.setSpeed(host.speed() * REVIVE_SPEED_FACTOR);
+    host.setSpawnGap(REVIVE_SPAWN_GAP_PX);
 
     host.emit({ type: "revive" });
     host.addFloatingText({
-      text: "REVIVED!",
+      text: REVIVE_TEXT,
       x: player.x + player.width / 2,
-      y: player.y - 20,
+      y: player.y - REVIVE_TEXT_OFFSET_Y,
       opacity: 1,
-      velocityY: -1.2,
-      color: "#00ff88",
+      velocityY: REVIVE_TEXT_RISE,
+      color: REVIVE_TEXT_COLOR,
     });
   }
 }

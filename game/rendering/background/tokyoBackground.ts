@@ -103,6 +103,60 @@ function aviationLight(ctx: CanvasRenderingContext2D, x: number, y: number, seed
 // --- Night sky (skyline band) ---
 
 /**
+ * Per-star constants, grown on demand: x and y as fractions of the sky, twinkle rate
+ * and size. Star i is the same star every frame (the same hash01 draws as before), so
+ * the table replaces four sin() calls per star per frame with one.
+ */
+const starX: number[] = [];
+const starY: number[] = [];
+const starRate: number[] = [];
+const starSize: number[] = [];
+/** This frame's twinkle bucket per star (scratch, reused). */
+const starBucket: number[] = [];
+/** Twinkle levels: stars sharing a level are drawn under one globalAlpha write. */
+const STAR_LEVELS = 16;
+
+function ensureStars(count: number): void {
+  for (let i = starX.length; i < count; i++) {
+    starX.push(hash01(i, 1));
+    starY.push(hash01(i, 2));
+    starRate.push(1 + hash01(i, 3) * 2);
+    starSize.push(hash01(i, 4) < 0.15 ? 1.6 : 1);
+    starBucket.push(0);
+  }
+}
+
+/**
+ * Distant-skyline blocks by index: [height fraction, lit window count, then (x, y)
+ * fractions per lit window]. Scrolling brings new indices forever, so the map is
+ * bounded and sheds its oldest blocks (long since scrolled off).
+ */
+const skylineBlocks = new Map<number, Float32Array>();
+const MAX_SKYLINE_BLOCKS = 192;
+const SKYLINE_WINDOWS = 6;
+
+function skylineBlock(i: number): Float32Array {
+  let block = skylineBlocks.get(i);
+  if (block) return block;
+  block = new Float32Array(2 + SKYLINE_WINDOWS * 2);
+  block[0] = 0.12 + hash01(i, 7) * 0.2;
+  let n = 0;
+  for (let k = 0; k < SKYLINE_WINDOWS; k++) {
+    if (hash01(i, k, 9) > 0.5) continue;
+    block[2 + n * 2] = hash01(i, k, 11);
+    block[3 + n * 2] = hash01(i, k, 13);
+    n++;
+  }
+  block[1] = n;
+  if (skylineBlocks.size >= MAX_SKYLINE_BLOCKS) {
+    const oldest = skylineBlocks.keys().next();
+    if (!oldest.done) skylineBlocks.delete(oldest.value);
+  }
+  skylineBlocks.set(i, block);
+  return block;
+}
+
+/**
  * Night sky behind the street: twinkling stars and a moon fixed in the sky, Mt Fuji far
  * off, and a distant skyline of lit windows; the last two scroll at slow parallax.
  */
@@ -114,13 +168,23 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBound
   const fade = ctx.globalAlpha;
 
   // Stars in the upper sky, spread over the whole view (it widens when the camera zooms out).
+  // Each star's twinkle is bucketed into STAR_LEVELS so the stars are drawn level by level
+  // under a handful of globalAlpha writes instead of one per star.
   ctx.fillStyle = "#ffffff";
   const starCount = Math.floor(viewW / 9);
+  ensureStars(starCount);
+  const skyH = groundY * 0.45 - skyTop;
   for (let i = 0; i < starCount; i++) {
-    const sx = view.left + hash01(i, 1) * viewW;
-    const sy = skyTop + hash01(i, 2) * (groundY * 0.45 - skyTop);
-    ctx.globalAlpha = fade * (0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * (1 + hash01(i, 3) * 2) + i)));
-    ctx.fillRect(sx, sy, hash01(i, 4) < 0.15 ? 1.6 : 1, hash01(i, 4) < 0.15 ? 1.6 : 1);
+    const twinkle = 0.5 + 0.5 * Math.sin(t * starRate[i] + i);
+    starBucket[i] = Math.round(twinkle * (STAR_LEVELS - 1));
+  }
+  for (let level = 0; level < STAR_LEVELS; level++) {
+    ctx.globalAlpha = fade * (0.25 + 0.55 * (level / (STAR_LEVELS - 1)));
+    for (let i = 0; i < starCount; i++) {
+      if (starBucket[i] !== level) continue;
+      const size = starSize[i];
+      ctx.fillRect(view.left + starX[i] * viewW, skyTop + starY[i] * skyH, size, size);
+    }
   }
   ctx.globalAlpha = fade;
 
@@ -176,19 +240,24 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBound
   const off = offset * 0.55;
   const first = Math.floor((off + view.left) / blockW) - 1;
   const last = Math.ceil((off + view.right) / blockW) + 1;
+  // Silhouettes first, then the windows at half opacity under one alpha write.
+  ctx.fillStyle = "#1a1838";
   for (let i = first; i <= last; i++) {
-    const bx = i * blockW - off;
-    const bh = groundY * (0.12 + hash01(i, 7) * 0.2);
-    ctx.fillStyle = "#1a1838";
-    ctx.fillRect(bx, baseY - bh, blockW + 1, bh);
-    ctx.fillStyle = "#ffd890";
-    for (let k = 0; k < 6; k++) {
-      if (hash01(i, k, 9) > 0.5) continue;
-      ctx.globalAlpha = fade * 0.5;
-      ctx.fillRect(bx + 3 + hash01(i, k, 11) * (blockW - 6), baseY - bh + 4 + hash01(i, k, 13) * (bh - 8), 1.4, 1.4);
-    }
-    ctx.globalAlpha = fade;
+    const bh = groundY * skylineBlock(i)[0];
+    ctx.fillRect(i * blockW - off, baseY - bh, blockW + 1, bh);
   }
+  ctx.fillStyle = "#ffd890";
+  ctx.globalAlpha = fade * 0.5;
+  for (let i = first; i <= last; i++) {
+    const block = skylineBlock(i);
+    const bx = i * blockW - off;
+    const bh = groundY * block[0];
+    const n = block[1];
+    for (let k = 0; k < n; k++) {
+      ctx.fillRect(bx + 3 + block[2 + k * 2] * (blockW - 6), baseY - bh + 4 + block[3 + k * 2] * (bh - 8), 1.4, 1.4);
+    }
+  }
+  ctx.globalAlpha = fade;
 }
 
 // --- Wet road reflections (road overlay) ---

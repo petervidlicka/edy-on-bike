@@ -5,8 +5,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
-import { getRedisConfig } from "./leaderboard";
+import { getRedis, REDIS_ENV_CANDIDATES } from "./leaderboard";
 
 // Origins of the Capacitor native apps. iOS serves the app from capacitor://localhost;
 // Android uses https://localhost because Capacitor 6+ defaults androidScheme to "https".
@@ -53,23 +52,31 @@ const LIMITS = {
 /** Which endpoint a request counts against. */
 export type RateLimitBucket = keyof typeof LIMITS;
 
-const redisConfig = getRedisConfig();
+// undefined = not created yet; null = Redis not configured
+let limiters: Record<RateLimitBucket, Ratelimit> | null | undefined;
 
-// Production: Redis-backed sliding windows (survive serverless cold starts). The limiters
-// share a client with default deserialization; the store's client turns it off so player
-// names always come back as strings.
-const limiters: Record<RateLimitBucket, Ratelimit> | null = redisConfig
-  ? (() => {
-      const redis = new Redis(redisConfig);
+/**
+ * Production: Redis-backed sliding windows (survive serverless cold starts), on the same
+ * lazily created client as the store, so the two can never disagree about whether Redis
+ * is available. Null without credentials.
+ */
+function getLimiters(): Record<RateLimitBucket, Ratelimit> | null {
+  if (limiters === undefined) {
+    const redis = getRedis();
+    if (redis) {
       const make = (bucket: RateLimitBucket) =>
         new Ratelimit({
           redis,
           limiter: Ratelimit.slidingWindow(LIMITS[bucket].requests, `${LIMITS[bucket].windowSec} s`),
           prefix: `edy-on-bike:rl:${bucket}`,
         });
-      return { read: make("read"), submit: make("submit"), run: make("run") };
-    })()
-  : null;
+      limiters = { read: make("read"), submit: make("submit"), run: make("run") };
+    } else {
+      limiters = null;
+    }
+  }
+  return limiters;
+}
 
 // Local dev without Redis: per-process fixed windows, capped to prevent memory growth
 const memoryWindows = new Map<string, { startedAt: number; count: number }>();
@@ -80,16 +87,17 @@ let warnedMissingRedis = false;
  * @returns True when the caller is over the limit and should get a 429.
  */
 export async function isRateLimited(bucket: RateLimitBucket, ip: string): Promise<boolean> {
-  if (limiters) {
-    const { success } = await limiters[bucket].limit(ip);
+  const redisLimiters = getLimiters();
+  if (redisLimiters) {
+    const { success } = await redisLimiters[bucket].limit(ip);
     return !success;
   }
   if (process.env.VERCEL && !warnedMissingRedis) {
     warnedMissingRedis = true;
+    const pairs = REDIS_ENV_CANDIDATES.map(([url, token]) => `${url}/${token}`).join(", ");
     console.error(
       "[leaderboard] Redis is not configured: rate limiting is per-instance and scores go to the " +
-        "local file store, which does not persist on Vercel. Set KV_REST_API_URL/KV_REST_API_TOKEN " +
-        "or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN.",
+        `local file store, which does not persist on Vercel. Set one of these env var pairs: ${pairs}.`,
     );
   }
   if (memoryWindows.size > 1000) memoryWindows.clear();

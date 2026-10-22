@@ -90,6 +90,12 @@ export enum TrickType {
   NO_HANDER = "NO_HANDER",
 }
 
+/** Profile of a ramp the rider is on or just left: a straight wedge or a curved kicker. */
+export type RampType = "straight" | "curved";
+
+/** Rotation direction of a flip: 1 = backflip (CCW), -1 = frontflip (CW). */
+export type FlipDirection = 1 | -1;
+
 export interface PlayerState {
   x: number;
   y: number;
@@ -113,7 +119,11 @@ export interface PlayerState {
   backflipAngle: number;
   /** Whether a flip trick is in progress. */
   isBackflipping: boolean;
-  /** Rotation direction: 1 = backflip (CCW), -1 = frontflip (CW). */
+  /**
+   * Rotation direction, always a `FlipDirection` (1 = backflip, -1 = frontflip). Typed
+   * `number` only because multiplayer ghost snapshots carry it as a plain number
+   * (`GhostSnapshot.fd`); narrow it together with the protocol.
+   */
   flipDirection: number;
   /** How many flips the player intends to complete. Starts at 1, incremented by additional input. */
   targetFlipCount: number;
@@ -128,7 +138,7 @@ export interface PlayerState {
   /** How many pose trick cycles the player intends to complete. Starts at 1, incremented by additional input. */
   targetTrickCount: number;
   /** Pending ramp boost type. 'straight' = more distance, 'curved' = more height. */
-  rampBoost: "straight" | "curved" | null;
+  rampBoost: RampType | null;
   /** Current ramp surface angle in radians for bike tilt matching. */
   rampSurfaceAngle: number;
 }
@@ -196,9 +206,13 @@ export interface SkinUnlockState {
   cheatUnlocked: boolean;
 }
 
-export interface BackgroundElement {
-  /** Element type — extensible per biome (e.g. "house", "skyscraper", "palm_tree") */
-  type: string;
+/**
+ * One piece of a parallax layer. `T` is the biome's element-type union (e.g. "house" |
+ * "deer"), which picks the drawer; layers that mix biomes use the default `string`.
+ */
+export interface BackgroundElement<T extends string = string> {
+  /** Element type — picks the drawer in the biome's `backgroundDrawers` map. */
+  type: T;
   x: number;
   y: number;
   width: number;

@@ -8,6 +8,13 @@ import type { ObstacleInstance, PlayerState, SkinDefinition } from "../types";
 import type { EnvironmentPalette } from "../environments/types";
 
 /**
+ * Seconds at the end of a crash during which everything fades out. Every variant's
+ * duration includes it. Lives here (a leaf module) so both the crash framework and
+ * rendering/CrashRenderer.ts read the one value without an import cycle.
+ */
+export const CRASH_FADE_OUT_S = 0.3;
+
+/**
  * Why the rider crashed. Variants are picked from this, so every `startCrash` call site
  * says what happened instead of the engine guessing afterwards.
  * - `obstacle`: ran into (or under-jumped) an obstacle; `obstacle` is the one that was hit.
@@ -145,21 +152,34 @@ export interface CrashPopText {
   outline: string;
 }
 
+/** Where a scripted rider is at a moment: hip position and figure rotation (radians, clockwise). */
+export interface RiderPlacement extends Point {
+  angle: number;
+}
+
 /**
  * One crash animation. `D` is the variant's own data; `init` returns it and the
  * framework stores it in `CrashState.data`, so `update`/`draw` get it already narrowed.
+ * A scripted variant (one that animates the rider along keyframes rather than with
+ * physics) gives `riderAt` and leaves `update` out: the framework then tumbles the
+ * bike on the road and places the rider from the keyframes each frame.
  */
 export interface CrashVariant<D extends CrashVariantData> {
   readonly id: D["kind"];
-  /** Length of the animation in seconds, including the final 0.3 s fade-out. */
+  /** Length of the animation in seconds, including the final CRASH_FADE_OUT_S fade-out. */
   readonly duration: number;
   /** Anim time (s) at which the rider has settled and the stars may start. */
   readonly starsFrom: number;
   readonly pop: CrashPopText;
   /** Starts the crash: places the rider and the bike, returns the variant data. */
   init(cs: CrashState, ctx: CrashInitContext): D;
-  /** Advances the rider and bike one frame (the shake and clocks are handled by the framework). */
-  update(cs: CrashState, data: D, step: CrashStep): void;
+  /**
+   * Advances the rider and bike one frame (the shake and clocks are handled by the
+   * framework). Absent: the bike tumbles on the road at BIKE_REST and the rider follows `riderAt`.
+   */
+  update?(cs: CrashState, data: D, step: CrashStep): void;
+  /** The scripted rider's hip and rotation at anim time `t` (seconds). */
+  riderAt?(data: D, t: number): RiderPlacement;
   /** Draws the rider and variant decorations; the bike, stars and fade are handled by the framework. */
   drawRider(ctx: CanvasRenderingContext2D, cs: CrashState, data: D, env: CrashDrawEnv): void;
   /** World position of the rider's head, where the stars circle. */

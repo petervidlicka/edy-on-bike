@@ -28,7 +28,7 @@ Open [http://localhost:3000](http://localhost:3000) and press **Space** to start
 | Command | Does |
 |---|---|
 | `npm run dev` | Next.js dev server |
-| `npm run build` / `npm run lint` / `npx tsc --noEmit` | Checks to run before committing |
+| `npm run build` / `npm run lint` / `npx tsc --noEmit` | Checks to run before committing (CI runs the same on every PR, plus the Worker's `npm run typecheck`) |
 | `npm test` | Unit tests (Vitest) for the pure modules: combos, tricks, collisions, score bounds, names, multiplayer validation |
 | `cd party && npm run dev` | Local multiplayer server on port 8787 |
 | `npm run build:mobile` | Static export for the native apps (env from `.env.capacitor`) + `cap sync` |

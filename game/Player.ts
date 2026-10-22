@@ -150,6 +150,15 @@ export function startNoHander(player: PlayerState): boolean {
   return true;
 }
 
+/**
+ * Share of the gap to a pose target closed this frame: `k` per 60 fps frame, compounded
+ * over `dt` frames so the ease looks the same at any refresh rate. Exactly `k` at
+ * dt = 1 (the 60 fps path returns `k` itself, so values there are bit-identical).
+ */
+function easeRate(k: number, dt: number): number {
+  return dt === 1 ? k : 1 - Math.pow(1 - k, dt);
+}
+
 export function updatePlayer(
   player: PlayerState,
   dt: number,
@@ -161,10 +170,10 @@ export function updatePlayer(
     player.wheelRotation += speed * dt * 0.08;
     // Grind pose: ease into a low crouch with the nose slightly down so riding a
     // surface reads differently from rolling on the ground; the rest returns to neutral
-    player.bikeTilt += (GRIND_BIKE_TILT - player.bikeTilt) * 0.25 * dt;
-    player.riderLean += (0 - player.riderLean) * 0.2 * dt;
-    player.riderCrouch += (GRIND_RIDER_CROUCH - player.riderCrouch) * 0.2 * dt;
-    player.legTuck += (0 - player.legTuck) * 0.2 * dt;
+    player.bikeTilt += (GRIND_BIKE_TILT - player.bikeTilt) * easeRate(0.25, dt);
+    player.riderLean += (0 - player.riderLean) * easeRate(0.2, dt);
+    player.riderCrouch += (GRIND_RIDER_CROUCH - player.riderCrouch) * easeRate(0.2, dt);
+    player.legTuck += (0 - player.legTuck) * easeRate(0.2, dt);
     return;
   }
 
@@ -232,10 +241,10 @@ export function updatePlayer(
   if (!player.isOnGround) {
     if (player.isBackflipping) {
       // Suppress bunnyhop tilt during backflip — return to neutral
-      player.bikeTilt += (0 - player.bikeTilt) * 0.3 * dt;
-      player.riderLean += (0 - player.riderLean) * 0.3 * dt;
-      player.riderCrouch += (0 - player.riderCrouch) * 0.3 * dt;
-      player.legTuck += (0 - player.legTuck) * 0.3 * dt;
+      player.bikeTilt += (0 - player.bikeTilt) * easeRate(0.3, dt);
+      player.riderLean += (0 - player.riderLean) * easeRate(0.3, dt);
+      player.riderCrouch += (0 - player.riderCrouch) * easeRate(0.3, dt);
+      player.legTuck += (0 - player.legTuck) * easeRate(0.3, dt);
     } else {
       // BMX bunnyhop phases driven by normalizedVel (1 = launch, 0 = peak, <0 = descent)
       const normalizedVel = -player.velocityY / 12;
@@ -243,14 +252,14 @@ export function updatePlayer(
       // Phase 1 (early ascent): Rider leans back hard and crouches low — loading the rear
       const leanBack = Math.max(0, normalizedVel) ** 0.7 * 0.55;
       const targetLean = leanBack;
-      player.riderLean += (targetLean - player.riderLean) * 0.18 * dt;
+      player.riderLean += (targetLean - player.riderLean) * easeRate(0.18, dt);
 
       // Rider crouch: LOW early (crouching into the jump), then extends/stands up at peak
       // Negative normalizedVel-offset makes crouch peak during early ascent
       const crouchDown = Math.max(0, normalizedVel - 0.2) * 1.2; // crouch in early ascent
       const standUp = Math.max(0, 0.3 - Math.abs(normalizedVel)) * 2.5; // stand near peak
       const targetCrouch = Math.min(1, Math.max(standUp - crouchDown * 0.5, -0.3));
-      player.riderCrouch += (targetCrouch - player.riderCrouch) * 0.15 * dt;
+      player.riderCrouch += (targetCrouch - player.riderCrouch) * easeRate(0.15, dt);
 
       // Phase 2 (slightly delayed): Bike tilts backward — front wheel lifts
       // Delayed onset: only kicks in once normalizedVel drops below ~0.85
@@ -258,23 +267,23 @@ export function updatePlayer(
       const ascentTilt = tiltPhase * Math.max(0, normalizedVel) * 0.35;
       const descentTilt = Math.min(0, normalizedVel) * 0.03;
       const targetTilt = Math.max(-0.04, Math.min(0.35, ascentTilt + descentTilt));
-      player.bikeTilt += (targetTilt - player.bikeTilt) * 0.14 * dt;
+      player.bikeTilt += (targetTilt - player.bikeTilt) * easeRate(0.14, dt);
 
       // Phase 4 (descent): Leg tuck peaks just past peak
       const targetTuck = Math.max(0, 1 - Math.abs(normalizedVel + 0.15) * 2);
-      player.legTuck += (targetTuck - player.legTuck) * 0.13 * dt;
+      player.legTuck += (targetTuck - player.legTuck) * easeRate(0.13, dt);
     }
   } else {
     // Smoothly return all to neutral on ground
     if (player.rampSurfaceAngle !== 0) {
       // Match bike tilt to ramp surface
       const targetTilt = -player.rampSurfaceAngle;
-      player.bikeTilt += (targetTilt - player.bikeTilt) * 0.3 * dt;
+      player.bikeTilt += (targetTilt - player.bikeTilt) * easeRate(0.3, dt);
     } else {
-      player.bikeTilt += (0 - player.bikeTilt) * 0.25 * dt;
+      player.bikeTilt += (0 - player.bikeTilt) * easeRate(0.25, dt);
     }
-    player.riderLean += (0 - player.riderLean) * 0.2 * dt;
-    player.riderCrouch += (0 - player.riderCrouch) * 0.2 * dt;
-    player.legTuck += (0 - player.legTuck) * 0.2 * dt;
+    player.riderLean += (0 - player.riderLean) * easeRate(0.2, dt);
+    player.riderCrouch += (0 - player.riderCrouch) * easeRate(0.2, dt);
+    player.legTuck += (0 - player.legTuck) * easeRate(0.2, dt);
   }
 }

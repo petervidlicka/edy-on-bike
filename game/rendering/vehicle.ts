@@ -5,6 +5,7 @@
  * lower cladding, light-rimmed tyres and a soft contact shadow.
  */
 import type { EnvironmentPalette } from "../environments/types";
+import { contactShadow } from "./drawHelpers";
 
 /** The few palette colours a vehicle needs (glass, tyres, lamps). */
 export type VehicleColors = Pick<EnvironmentPalette["obstacle"], "carWindow" | "carWheel" | "carTaillight" | "carHeadlight">;
@@ -84,8 +85,79 @@ export function roundedPath(pts: Array<{ x: number; y: number }>, r: number): Pa
 }
 
 /**
+ * A vehicle model's outline paths at one box size, in local space (box at the origin).
+ * Box sizes are fixed per obstacle type, so these are built once and translated into place.
+ */
+export interface VehiclePaths {
+  /** Rounded silhouette. */
+  body: Path2D;
+  /** Rounded side-window polygon. */
+  glass: Path2D;
+  tail: Path2D | null;
+  head: Path2D | null;
+  /** Left and top of the window band, where the reflection and pillars start. */
+  glassLeft: number;
+  glassTop: number;
+  /** y of the beltline (the lowest window edge). */
+  beltY: number;
+}
+
+/** Paths per shape, then per `w|h`. Shapes are module-level constants, so a WeakMap keys them directly. */
+const pathCache = new WeakMap<VehicleShape, Map<string, VehiclePaths>>();
+
+/** A rounded box path from a light box's fractions. */
+function lightPath(w: number, h: number, [fx, fy, fw, fh]: LightBox): Path2D {
+  return roundedPath([
+    { x: w * fx, y: h * fy },
+    { x: w * (fx + fw), y: h * fy },
+    { x: w * (fx + fw), y: h * (fy + fh) },
+    { x: w * fx, y: h * (fy + fh) },
+  ], 1);
+}
+
+/**
+ * Returns `shape`'s paths for a `w`×`h` box, building them on first use. Lets callers
+ * (the ambulance's chequer band) clip to the same silhouette drawVehicle fills.
+ * @example
+ * ctx.translate(x, y); ctx.clip(vehiclePaths(SHAPE, w, h).body);
+ */
+export function vehiclePaths(shape: VehicleShape, w: number, h: number): VehiclePaths {
+  let bySize = pathCache.get(shape);
+  if (!bySize) {
+    bySize = new Map();
+    pathCache.set(shape, bySize);
+  }
+  const key = `${w}|${h}`;
+  let paths = bySize.get(key);
+  if (paths) return paths;
+
+  const at = ([fx, fy]: Pt) => ({ x: w * fx, y: h * fy });
+  const win = shape.windows.map(at);
+  let glassLeft = Infinity;
+  let glassTop = Infinity;
+  for (const p of win) {
+    glassLeft = Math.min(glassLeft, p.x);
+    glassTop = Math.min(glassTop, p.y);
+  }
+  let beltFy = 0;
+  for (const [, fy] of shape.windows) beltFy = Math.max(beltFy, fy);
+  paths = {
+    body: roundedPath(shape.outline.map(at), 3),
+    glass: roundedPath(win, 1.5),
+    tail: shape.tailLight ? lightPath(w, h, shape.tailLight) : null,
+    head: shape.headLight ? lightPath(w, h, shape.headLight) : null,
+    glassLeft,
+    glassTop,
+    beltY: h * beltFy,
+  };
+  bySize.set(key, paths);
+  return paths;
+}
+
+/**
  * Draws a vehicle facing right inside the box (x, y, w, h); the tyres touch y + h.
- * Shared by every road vehicle so they read as one family.
+ * Shared by every road vehicle so they read as one family. Drawn in the box's local
+ * space so the outline paths come from the per-size cache rather than being retraced.
  *
  * @param colors Biome glass, tyre and lamp colours.
  * @param shape Module-level geometry for the model.
@@ -95,19 +167,17 @@ export function drawVehicle(
   ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number,
   colors: VehicleColors, shape: VehicleShape, paint: VehiclePaint,
 ) {
-  const at = ([fx, fy]: Pt) => ({ x: x + w * fx, y: y + h * fy });
-  const wheelY = y + h - shape.wheelR;
+  const paths = vehiclePaths(shape, w, h);
+  const wheelY = h - shape.wheelR;
 
   ctx.save();
+  ctx.translate(x, y);
 
   // Soft contact shadow so the vehicle sits on the road.
-  ctx.fillStyle = "rgba(0,0,0,0.18)";
-  ctx.beginPath();
-  ctx.ellipse(x + w / 2, y + h - 0.5, w * 0.48, 1.8, 0, 0, Math.PI * 2);
-  ctx.fill();
+  contactShadow(ctx, w / 2, h, w * 0.48, 1.8, "rgba(0,0,0,0.18)");
 
   // Body.
-  const body = roundedPath(shape.outline.map(at), 3);
+  const body = paths.body;
   ctx.fillStyle = paint.body;
   ctx.fill(body);
 
@@ -117,58 +187,52 @@ export function drawVehicle(
   if (paint.lowerTone) {
     const [tone, from, to] = paint.lowerTone;
     ctx.fillStyle = tone;
-    ctx.fillRect(x, y + h * from, w, h * (to - from));
+    ctx.fillRect(0, h * from, w, h * (to - from));
   }
   ctx.fillStyle = paint.cladding ?? paint.bodyDark;
-  ctx.fillRect(x, y + h * shape.claddingFrom, w, h);
+  ctx.fillRect(0, h * shape.claddingFrom, w, h);
   ctx.fillStyle = "#1f1f1e";
   for (const fx of shape.wheels) {
-    const wx = x + w * fx;
+    const wx = w * fx;
     const ar = shape.wheelR + 1.6;
     ctx.beginPath();
     if (shape.angularArches) {
-      ctx.moveTo(wx - ar - 0.6, y + h);
+      ctx.moveTo(wx - ar - 0.6, h);
       ctx.lineTo(wx - ar, wheelY - ar * 0.35);
       ctx.lineTo(wx - ar * 0.45, wheelY - ar);
       ctx.lineTo(wx + ar * 0.45, wheelY - ar);
       ctx.lineTo(wx + ar, wheelY - ar * 0.35);
-      ctx.lineTo(wx + ar + 0.6, y + h);
+      ctx.lineTo(wx + ar + 0.6, h);
     } else {
       ctx.arc(wx, wheelY, ar, Math.PI, 0);
-      ctx.lineTo(wx + ar, y + h);
-      ctx.lineTo(wx - ar, y + h);
+      ctx.lineTo(wx + ar, h);
+      ctx.lineTo(wx - ar, h);
     }
     ctx.fill();
   }
   // Beltline highlight just under the windows.
-  let beltY = 0;
-  for (const [, fy] of shape.windows) beltY = Math.max(beltY, fy);
+  const beltY = paths.beltY;
   ctx.fillStyle = "rgba(255,255,255,0.14)";
-  ctx.fillRect(x, y + h * beltY + 1.5, w, 1.2);
+  ctx.fillRect(0, beltY + 1.5, w, 1.2);
   ctx.restore();
 
   // Windows with pillars and a soft reflection.
-  const win = shape.windows.map(at);
-  const glass = roundedPath(win, 1.5);
+  const glass = paths.glass;
   ctx.fillStyle = paint.window ?? colors.carWindow;
   ctx.fill(glass);
   ctx.save();
   ctx.clip(glass);
   ctx.fillStyle = "rgba(255,255,255,0.28)";
-  let wy0 = Infinity;
-  let wx0 = Infinity;
-  for (const p of win) {
-    wy0 = Math.min(wy0, p.y);
-    wx0 = Math.min(wx0, p.x);
-  }
+  const wx0 = paths.glassLeft;
+  const wy0 = paths.glassTop;
   ctx.beginPath();
   ctx.moveTo(wx0 + 4, wy0);
   ctx.lineTo(wx0 + 9, wy0);
-  ctx.lineTo(wx0 + 3, y + h * beltY);
-  ctx.lineTo(wx0 - 2, y + h * beltY);
+  ctx.lineTo(wx0 + 3, beltY);
+  ctx.lineTo(wx0 - 2, beltY);
   ctx.fill();
   ctx.fillStyle = paint.body;
-  for (const fx of shape.pillars) ctx.fillRect(x + w * fx - 1.2, wy0 - 1, 2.4, h);
+  for (const fx of shape.pillars) ctx.fillRect(w * fx - 1.2, wy0 - 1, 2.4, h);
   ctx.restore();
 
   // Body outline.
@@ -177,21 +241,18 @@ export function drawVehicle(
   ctx.stroke(body);
 
   // Lights.
-  const light = ([fx, fy, fw, fh]: LightBox, color: string) => {
-    ctx.fillStyle = color;
-    ctx.fill(roundedPath([
-      { x: x + w * fx, y: y + h * fy },
-      { x: x + w * (fx + fw), y: y + h * fy },
-      { x: x + w * (fx + fw), y: y + h * (fy + fh) },
-      { x: x + w * fx, y: y + h * (fy + fh) },
-    ], 1));
-  };
-  if (shape.tailLight) light(shape.tailLight, colors.carTaillight);
-  if (shape.headLight) light(shape.headLight, colors.carHeadlight);
+  if (paths.tail) {
+    ctx.fillStyle = colors.carTaillight;
+    ctx.fill(paths.tail);
+  }
+  if (paths.head) {
+    ctx.fillStyle = colors.carHeadlight;
+    ctx.fill(paths.head);
+  }
 
   // Wheels: tyre, light rim, dark hub.
   for (const fx of shape.wheels) {
-    const wx = x + w * fx;
+    const wx = w * fx;
     ctx.fillStyle = colors.carWheel;
     ctx.beginPath();
     ctx.arc(wx, wheelY, shape.wheelR, 0, Math.PI * 2);

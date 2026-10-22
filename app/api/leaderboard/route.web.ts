@@ -6,8 +6,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getTopScores, getTotalPlayers, addScore, consumeRun, restoreRun } from "@/lib/leaderboard";
-import { LEADERBOARD_SIZE, MAX_LEADERBOARD_NAME_LENGTH } from "@/lib/leaderboardConfig";
-import { cleanPlayerName, isPlayerNameAllowed } from "@/lib/playerName";
+import { LEADERBOARD_SIZE, validateLeaderboardName } from "@/lib/leaderboardConfig";
 import { maxPlausibleScore, MAX_SCORE } from "@/game/scoreBounds";
 import {
   badRequest, clientIp, corsHeaders, isRateLimited, tooManyRequests, unavailable,
@@ -70,12 +69,10 @@ export async function POST(request: NextRequest) {
 
     const { name: rawName, score, skin, runId } = body as Record<string, unknown>;
 
-    const name = typeof rawName === "string" ? cleanPlayerName(rawName) : "";
-    if (name.length === 0) return badRequest(cors, "Name is required.");
-    if (name.length > MAX_LEADERBOARD_NAME_LENGTH) {
-      return badRequest(cors, `Name must be ${MAX_LEADERBOARD_NAME_LENGTH} characters or less.`);
-    }
-    if (!isPlayerNameAllowed(name)) return badRequest(cors, "Please pick a different name.");
+    // Same cleaning and rules the form applied before sending; checked again on what arrived
+    const nameResult = validateLeaderboardName(typeof rawName === "string" ? rawName : "");
+    if (!nameResult.ok) return badRequest(cors, nameResult.error);
+    const { name } = nameResult;
 
     if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > MAX_SCORE) {
       return badRequest(cors, "Score out of range.");

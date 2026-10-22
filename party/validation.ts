@@ -110,7 +110,15 @@ const TRICK_TYPES: ReadonlySet<string> = new Set(
   Object.keys({ NONE: true, SUPERMAN: true, NO_HANDER: true } satisfies Record<`${TrickType}`, true>),
 );
 
-const NUMERIC_FIELDS = ["t", "h", "wr", "bt", "rl", "rc", "lt", "ba", "fd", "tp", "s"] as const;
+/**
+ * How each GhostSnapshot field is validated. Keyed by the interface (like SKIN_IDS) so a
+ * field added to the protocol fails to compile until it's listed here, instead of the relay
+ * silently dropping it. "ratio" is an optional 0–1 screen fraction, clamped rather than rejected.
+ */
+const SNAPSHOT_FIELDS = {
+  t: "number", h: "number", og: "boolean", wr: "number", bt: "number", rl: "number", rc: "number",
+  lt: "number", ba: "number", fd: "number", at: "trick", tp: "number", s: "number", x: "ratio",
+} satisfies Record<keyof GhostSnapshot, "number" | "boolean" | "trick" | "ratio">;
 
 /**
  * Normalises a display name (see cleanPlayerName: NFKC, invisible characters stripped,
@@ -152,29 +160,35 @@ export function sanitizeSkinId(raw: unknown): SkinId {
 /**
  * Rebuilds a snapshot from the expected fields only (exactly GhostSnapshot), so a
  * client can't use the relay to push arbitrary payloads to other players.
- * @returns The clean snapshot, or null if any field has the wrong type.
+ * @returns The clean snapshot, or null if any required field has the wrong type.
  */
 export function sanitizeSnapshot(raw: unknown): GhostSnapshot | null {
   if (typeof raw !== "object" || raw === null) return null;
   const src = raw as Record<string, unknown>;
+  const clean: Partial<Record<keyof GhostSnapshot, unknown>> = {};
 
-  for (const key of NUMERIC_FIELDS) {
+  for (const key of Object.keys(SNAPSHOT_FIELDS) as (keyof GhostSnapshot)[]) {
     const value = src[key];
-    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    switch (SNAPSHOT_FIELDS[key]) {
+      case "number":
+        if (typeof value !== "number" || !Number.isFinite(value)) return null;
+        clean[key] = value;
+        break;
+      case "boolean":
+        if (typeof value !== "boolean") return null;
+        clean[key] = value;
+        break;
+      case "trick":
+        if (typeof value !== "string" || !TRICK_TYPES.has(value)) return null;
+        clean[key] = value;
+        break;
+      case "ratio":
+        // Optional (older clients don't send it); clamped to the screen so a ghost can't be pushed off it
+        if (typeof value === "number" && Number.isFinite(value)) clean[key] = Math.min(1, Math.max(0, value));
+        break;
+    }
   }
-  if (typeof src.og !== "boolean") return null;
-  if (typeof src.at !== "string" || !TRICK_TYPES.has(src.at)) return null;
-
-  const n = (key: (typeof NUMERIC_FIELDS)[number]) => src[key] as number;
-  const snapshot: GhostSnapshot = {
-    t: n("t"), h: n("h"), og: src.og, wr: n("wr"), bt: n("bt"), rl: n("rl"),
-    rc: n("rc"), lt: n("lt"), ba: n("ba"), fd: n("fd"), at: src.at as TrickType, tp: n("tp"), s: n("s"),
-  };
-  // Optional (older clients don't send it); clamped to the screen so a ghost can't be pushed off it
-  if (typeof src.x === "number" && Number.isFinite(src.x)) {
-    snapshot.x = Math.min(1, Math.max(0, src.x));
-  }
-  return snapshot;
+  return clean as GhostSnapshot;
 }
 
 /**

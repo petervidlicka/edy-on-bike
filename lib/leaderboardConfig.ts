@@ -3,6 +3,7 @@
  * screen (client). This module must stay free of server-only imports
  * (Redis, fs) so client components can import it without bloating the bundle.
  */
+import { cleanPlayerName, isPlayerNameAllowed } from "./playerName";
 
 /** One row of the public leaderboard, as the API returns it and the game-over screen renders it. */
 export interface LeaderboardEntry {
@@ -13,6 +14,28 @@ export interface LeaderboardEntry {
 
 /** Longest display name the leaderboard stores. */
 export const MAX_LEADERBOARD_NAME_LENGTH = 20;
+
+/** Outcome of {@link validateLeaderboardName}: the cleaned name, or a message fit to show the player. */
+export type LeaderboardNameResult = { ok: true; name: string } | { ok: false; error: string };
+
+/**
+ * Cleans and checks a display name the same way on both sides: the form runs it before
+ * submitting (instant feedback, no wasted request) and the API runs it again on what
+ * actually arrives. Error copy lives here so the two can't say different things.
+ * @param raw - Whatever the player typed (or the client sent).
+ * @example
+ * const result = validateLeaderboardName(" Edy ");
+ * if (result.ok) submit(result.name); else setError(result.error);
+ */
+export function validateLeaderboardName(raw: string): LeaderboardNameResult {
+  const name = cleanPlayerName(raw);
+  if (name.length === 0) return { ok: false, error: "Name is required." };
+  if (name.length > MAX_LEADERBOARD_NAME_LENGTH) {
+    return { ok: false, error: `Name must be ${MAX_LEADERBOARD_NAME_LENGTH} characters or less.` };
+  }
+  if (!isPlayerNameAllowed(name)) return { ok: false, error: "Please pick a different name." };
+  return { ok: true, name };
+}
 
 /**
  * Number of entries the leaderboard API returns and the game-over screen shows.

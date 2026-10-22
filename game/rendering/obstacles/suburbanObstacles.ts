@@ -1,7 +1,12 @@
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
+import { drawCachedText, type TextLabel } from "../drawHelpers";
+import { CONTAINER_RAMP } from "../../rampGeometry";
 
 // --- Suburban biome obstacle draw functions ---
+
+/** The "B" on the bus stop's sign disc. */
+const BUS_STOP_LABEL: TextLabel = { text: "B", font: "bold 6px sans-serif", color: "#fff" };
 
 export function drawRock(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
@@ -656,11 +661,7 @@ export function drawBusStop(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.beginPath();
   ctx.arc(x + 6, y + 18, 5, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 6px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("B", x + 6, y + 18);
+  drawCachedText(ctx, BUS_STOP_LABEL, x + 6, y + 18);
 }
 
 export function drawShippingContainer(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
@@ -706,8 +707,8 @@ export function drawContainerWithRamp(ctx: CanvasRenderingContext2D, x: number, 
 
   // Draw a curved ramp on top of the right end (last 75px of width)
   const c = palette.obstacle;
-  const rampW = 75;
-  const rampH = 36;
+  const rampW = CONTAINER_RAMP.width;
+  const rampH = CONTAINER_RAMP.height;
   const rampX = x + w - rampW;
   const rampY = y - rampH;
 

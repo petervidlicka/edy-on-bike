@@ -7,6 +7,7 @@
 import { useCallback } from "react";
 import { SkinId, SkinDefinition } from "@/game/types";
 import { SKINS, isSkinUnlocked } from "@/game/skins";
+import { isGhostClick, markTouchHandled } from "@/lib/dom";
 import { SkinPreview, SKIN_PREVIEW_H, SKIN_PREVIEW_W } from "./SkinPreview";
 import { color, font, radius } from "./ui/tokens";
 
@@ -28,9 +29,20 @@ function SkinCard({
   isUnlocked: boolean;
   onSelect: () => void;
 }) {
-  const handleClick = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
+  // Touch selects on touchend (no tap delay); the click the browser then synthesises is
+  // ignored, so one tap is one save instead of two
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
       e.stopPropagation();
+      markTouchHandled();
+      if (isUnlocked) onSelect();
+    },
+    [isUnlocked, onSelect]
+  );
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (isGhostClick()) return;
       if (isUnlocked) onSelect();
     },
     [isUnlocked, onSelect]
@@ -40,7 +52,7 @@ function SkinCard({
     <button
       type="button"
       onClick={handleClick}
-      onTouchEnd={handleClick}
+      onTouchEnd={handleTouchEnd}
       aria-pressed={isSelected}
       aria-disabled={!isUnlocked}
       title={isUnlocked ? skin.name : `${skin.name}: reach a best of ${skin.unlockScore} to unlock`}

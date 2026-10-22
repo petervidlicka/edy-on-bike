@@ -11,7 +11,19 @@
 import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
 import type { ViewBounds } from "../../Camera";
 import { drawWalkingPerson } from "./shared";
-import { cachedGradient, glow, hash01 } from "../drawHelpers";
+import { cachedGradient, fillTransformed, glow, hash01, drawSprite, drawCachedText, fillWindowGrid, drawFlagPole, fillFlagBand, flagWave, type TextLabel } from "../drawHelpers";
+import { sceneTimeMs } from "../sceneClock";
+
+/** y fractions of the konbini's shelves. */
+const KONBINI_SHELF_Y = [0.56, 0.72, 0.88];
+/** x fractions of the izakaya's lanterns. */
+const LANTERN_X = [0.12, 0.32, 0.96];
+/** Height fractions of Tokyo Tower's white paint bands. */
+const TOWER_BAND_F = [0.2, 0.3];
+/** Tokyo Tower's observation decks as [height fraction, deck height fraction]. */
+const TOWER_DECKS = [[0.56, 0.05], [0.28, 0.03]] as const;
+/** Skytree's ring decks as [height fraction, ring height fraction]. */
+const SKYTREE_DECKS = [[0.42, 0.035], [0.27, 0.02]] as const;
 
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
@@ -84,7 +96,7 @@ function getNeonSign(text: string, color: string, vertical: boolean, fontPx: num
 /** Draws a cached sign with its panel's top-left at (x, y); `flicker` seeds an occasional blink-off. */
 function drawNeonSign(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string, vertical: boolean, fontPx: number, flicker: number) {
   // About one sign in six has a dodgy tube that cuts out now and then
-  if (flicker < 0.16 && Math.sin(performance.now() / 70 + flicker * 999) > 0.93) return;
+  if (flicker < 0.16 && Math.sin(sceneTimeMs() / 70 + flicker * 999) > 0.93) return;
   const sign = getNeonSign(text, color, vertical, fontPx);
   const glowPad = 6;
   ctx.drawImage(sign, x - glowPad, y - glowPad, sign.width / SIGN_SCALE, sign.height / SIGN_SCALE);
@@ -92,7 +104,7 @@ function drawNeonSign(ctx: CanvasRenderingContext2D, x: number, y: number, text:
 
 /** Blinking red aviation light on a rooftop or mast. */
 function aviationLight(ctx: CanvasRenderingContext2D, x: number, y: number, seed: number) {
-  const on = Math.floor(performance.now() / 700 + seed) % 2 === 0;
+  const on = Math.floor(sceneTimeMs() / 700 + seed) % 2 === 0;
   ctx.fillStyle = on ? "#ff3a3a" : "#5a1a1a";
   ctx.beginPath();
   ctx.arc(x, y, 1.4, 0, Math.PI * 2);
@@ -103,24 +115,88 @@ function aviationLight(ctx: CanvasRenderingContext2D, x: number, y: number, seed
 // --- Night sky (skyline band) ---
 
 /**
+ * Per-star constants, grown on demand: x and y as fractions of the sky, twinkle rate
+ * and size. Star i is the same star every frame (the same hash01 draws as before), so
+ * the table replaces four sin() calls per star per frame with one.
+ */
+const starX: number[] = [];
+const starY: number[] = [];
+const starRate: number[] = [];
+const starSize: number[] = [];
+/** This frame's twinkle bucket per star (scratch, reused). */
+const starBucket: number[] = [];
+/** Twinkle levels: stars sharing a level are drawn under one globalAlpha write. */
+const STAR_LEVELS = 16;
+
+function ensureStars(count: number): void {
+  for (let i = starX.length; i < count; i++) {
+    starX.push(hash01(i, 1));
+    starY.push(hash01(i, 2));
+    starRate.push(1 + hash01(i, 3) * 2);
+    starSize.push(hash01(i, 4) < 0.15 ? 1.6 : 1);
+    starBucket.push(0);
+  }
+}
+
+/**
+ * Distant-skyline blocks by index: [height fraction, lit window count, then (x, y)
+ * fractions per lit window]. Scrolling brings new indices forever, so the map is
+ * bounded and sheds its oldest blocks (long since scrolled off).
+ */
+const skylineBlocks = new Map<number, Float32Array>();
+const MAX_SKYLINE_BLOCKS = 192;
+const SKYLINE_WINDOWS = 6;
+
+function skylineBlock(i: number): Float32Array {
+  let block = skylineBlocks.get(i);
+  if (block) return block;
+  block = new Float32Array(2 + SKYLINE_WINDOWS * 2);
+  block[0] = 0.12 + hash01(i, 7) * 0.2;
+  let n = 0;
+  for (let k = 0; k < SKYLINE_WINDOWS; k++) {
+    if (hash01(i, k, 9) > 0.5) continue;
+    block[2 + n * 2] = hash01(i, k, 11);
+    block[3 + n * 2] = hash01(i, k, 13);
+    n++;
+  }
+  block[1] = n;
+  if (skylineBlocks.size >= MAX_SKYLINE_BLOCKS) {
+    const oldest = skylineBlocks.keys().next();
+    if (!oldest.done) skylineBlocks.delete(oldest.value);
+  }
+  skylineBlocks.set(i, block);
+  return block;
+}
+
+/**
  * Night sky behind the street: twinkling stars and a moon fixed in the sky, Mt Fuji far
  * off, and a distant skyline of lit windows; the last two scroll at slow parallax.
  */
 export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, offset: number) {
-  const t = performance.now() / 1000;
+  const t = sceneTimeMs() / 1000;
   const viewW = view.right - view.left;
   const skyTop = Math.min(0, view.top);
   // Fade alpha set by drawBackground across a biome transition; every opacity here scales it
   const fade = ctx.globalAlpha;
 
   // Stars in the upper sky, spread over the whole view (it widens when the camera zooms out).
+  // Each star's twinkle is bucketed into STAR_LEVELS so the stars are drawn level by level
+  // under a handful of globalAlpha writes instead of one per star.
   ctx.fillStyle = "#ffffff";
   const starCount = Math.floor(viewW / 9);
+  ensureStars(starCount);
+  const skyH = groundY * 0.45 - skyTop;
   for (let i = 0; i < starCount; i++) {
-    const sx = view.left + hash01(i, 1) * viewW;
-    const sy = skyTop + hash01(i, 2) * (groundY * 0.45 - skyTop);
-    ctx.globalAlpha = fade * (0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * (1 + hash01(i, 3) * 2) + i)));
-    ctx.fillRect(sx, sy, hash01(i, 4) < 0.15 ? 1.6 : 1, hash01(i, 4) < 0.15 ? 1.6 : 1);
+    const twinkle = 0.5 + 0.5 * Math.sin(t * starRate[i] + i);
+    starBucket[i] = Math.round(twinkle * (STAR_LEVELS - 1));
+  }
+  for (let level = 0; level < STAR_LEVELS; level++) {
+    ctx.globalAlpha = fade * (0.25 + 0.55 * (level / (STAR_LEVELS - 1)));
+    for (let i = 0; i < starCount; i++) {
+      if (starBucket[i] !== level) continue;
+      const size = starSize[i];
+      ctx.fillRect(view.left + starX[i] * viewW, skyTop + starY[i] * skyH, size, size);
+    }
   }
   ctx.globalAlpha = fade;
 
@@ -176,19 +252,24 @@ export function drawTokyoNightSky(ctx: CanvasRenderingContext2D, view: ViewBound
   const off = offset * 0.55;
   const first = Math.floor((off + view.left) / blockW) - 1;
   const last = Math.ceil((off + view.right) / blockW) + 1;
+  // Silhouettes first, then the windows at half opacity under one alpha write.
+  ctx.fillStyle = "#1a1838";
   for (let i = first; i <= last; i++) {
-    const bx = i * blockW - off;
-    const bh = groundY * (0.12 + hash01(i, 7) * 0.2);
-    ctx.fillStyle = "#1a1838";
-    ctx.fillRect(bx, baseY - bh, blockW + 1, bh);
-    ctx.fillStyle = "#ffd890";
-    for (let k = 0; k < 6; k++) {
-      if (hash01(i, k, 9) > 0.5) continue;
-      ctx.globalAlpha = fade * 0.5;
-      ctx.fillRect(bx + 3 + hash01(i, k, 11) * (blockW - 6), baseY - bh + 4 + hash01(i, k, 13) * (bh - 8), 1.4, 1.4);
-    }
-    ctx.globalAlpha = fade;
+    const bh = groundY * skylineBlock(i)[0];
+    ctx.fillRect(i * blockW - off, baseY - bh, blockW + 1, bh);
   }
+  ctx.fillStyle = "#ffd890";
+  ctx.globalAlpha = fade * 0.5;
+  for (let i = first; i <= last; i++) {
+    const block = skylineBlock(i);
+    const bx = i * blockW - off;
+    const bh = groundY * block[0];
+    const n = block[1];
+    for (let k = 0; k < n; k++) {
+      ctx.fillRect(bx + 3 + block[2 + k * 2] * (blockW - 6), baseY - bh + 4 + block[3 + k * 2] * (bh - 8), 1.4, 1.4);
+    }
+  }
+  ctx.globalAlpha = fade;
 }
 
 // --- Wet road reflections (road overlay) ---
@@ -249,17 +330,14 @@ function drawTowerBody(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.fillStyle = "rgba(255,255,255,0.04)";
   ctx.fillRect(x + w - 3, y, 3, h);
 
-  // Window grid.
+  // Window grid: warm lit, cool lit or dark per window, from the seed.
   const cols = Math.max(2, Math.floor((w - 6) / 8));
   const rows = Math.max(3, Math.floor((h - 14) / 9));
   const gx = (w - 6) / cols;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const v = hash01(seed, r, c);
-      ctx.fillStyle = v < 0.32 ? "#ffd890" : v < 0.46 ? "#bfe4ff" : "#2a2e48";
-      ctx.fillRect(x + 3 + c * gx + gx * 0.2, y + 8 + r * 9, gx * 0.6, 5);
-    }
-  }
+  fillWindowGrid(ctx, x + 3 + gx * 0.2, y + 8, cols, rows, gx, 9, gx * 0.6, 5, (r, c) => {
+    const v = hash01(seed, r, c);
+    return v < 0.32 ? "#ffd890" : v < 0.46 ? "#bfe4ff" : "#2a2e48";
+  });
 }
 
 /**
@@ -328,8 +406,15 @@ function drawNeonBuilding(ctx: CanvasRenderingContext2D, x: number, y: number, w
 
 /** A 24-hour convenience store: bright glass front, striped fascia, shelves inside. */
 function drawKonbini(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  ctx.save();
   glow(ctx, x + w / 2, y + h * 0.7, w * 0.8, "#e8f6ff", 0.22);
+  // The shopfront (sign text, shelves, door) never changes, so it is rasterised once
+  drawSprite(ctx, "konbini", x, y, w, h, drawKonbiniFront);
+}
+
+/** The konbini shopfront in local space (element box at the origin). */
+function drawKonbiniFront(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const x = 0;
+  const y = 0;
   ctx.fillStyle = "#e8ecf0";
   ctx.fillRect(x, y, w, h);
   // Fascia with colour stripes and the sign.
@@ -348,20 +433,48 @@ function drawKonbini(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.fillStyle = "#f6fcff";
   ctx.fillRect(x + 3, y + h * 0.42, w - 6, h * 0.58);
   ctx.fillStyle = "#c8d8e4";
-  for (const fy of [0.56, 0.72, 0.88]) ctx.fillRect(x + 6, y + h * fy, w * 0.55, 1.4);
+  for (const fy of KONBINI_SHELF_Y) ctx.fillRect(x + 6, y + h * fy, w * 0.55, 1.4);
   ctx.fillStyle = "#f2a83a";
   for (let i = 0; i < 8; i++) ctx.fillRect(x + 8 + i * (w * 0.065), y + h * 0.5, 2.4, 3);
   ctx.strokeStyle = "#9aa8b4";
   ctx.lineWidth = 1;
   ctx.strokeRect(x + w * 0.68, y + h * 0.46, w * 0.24, h * 0.54);
-  ctx.restore();
 }
 
 // --- Izakaya ---
 
+/** How far the izakaya's awning overhangs its box on each side. */
+const IZAKAYA_EAVES = 4;
+
 /** A small izakaya: dark timber front, glowing red lanterns, an indigo noren over the door. */
 function drawIzakaya(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, seed: number) {
   ctx.save();
+  // Front, lattice window and noren are fixed, so they come from one cached sprite
+  drawSprite(ctx, "izakaya", x, y, w, h, drawIzakayaFront, { pad: IZAKAYA_EAVES });
+
+  // Red lanterns, gently swaying.
+  const sway = Math.sin(sceneTimeMs() / 800 + seed) * 0.8;
+  for (const fx of LANTERN_X) {
+    const lx = x + w * fx + sway;
+    const ly = y + h * 0.3;
+    glow(ctx, lx, ly, 10, "#ff5a3a", 0.5);
+    ctx.fillStyle = "#e8302a";
+    ctx.beginPath();
+    ctx.ellipse(lx, ly, 3.4, 4.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#1e1e24";
+    ctx.fillRect(lx - 2, ly - 5, 4, 1);
+    ctx.fillRect(lx - 2, ly + 4, 4, 1);
+    ctx.fillStyle = "rgba(255,230,180,0.6)";
+    ctx.fillRect(lx - 3, ly - 1, 6, 0.6);
+  }
+  ctx.restore();
+}
+
+/** The izakaya front in local space (element box at the origin; the awning spills IZAKAYA_EAVES px either side). */
+function drawIzakayaFront(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const x = 0;
+  const y = 0;
   // Tiled awning and timber front.
   ctx.fillStyle = "#3a2a22";
   ctx.fillRect(x, y + h * 0.18, w, h * 0.82);
@@ -397,24 +510,6 @@ function drawIzakaya(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.fillText("酒", nx + nw / 2, y + h * 0.47);
   ctx.fillStyle = "#ffcf80";
   ctx.fillRect(nx, y + h * 0.64, nw, h * 0.36);
-
-  // Red lanterns, gently swaying.
-  const sway = Math.sin(performance.now() / 800 + seed) * 0.8;
-  for (const fx of [0.12, 0.32, 0.96]) {
-    const lx = x + w * fx + sway;
-    const ly = y + h * 0.3;
-    glow(ctx, lx, ly, 10, "#ff5a3a", 0.5);
-    ctx.fillStyle = "#e8302a";
-    ctx.beginPath();
-    ctx.ellipse(lx, ly, 3.4, 4.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#1e1e24";
-    ctx.fillRect(lx - 2, ly - 5, 4, 1);
-    ctx.fillRect(lx - 2, ly + 4, 4, 1);
-    ctx.fillStyle = "rgba(255,230,180,0.6)";
-    ctx.fillRect(lx - 3, ly - 1, 6, 0.6);
-  }
-  ctx.restore();
 }
 
 // --- Tokyo Tower ---
@@ -452,7 +547,7 @@ function drawTokyoTower(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   ctx.stroke();
   // White bands near the top, like the real paint scheme.
   ctx.fillStyle = "#f4f0ea";
-  for (const f of [0.2, 0.3]) ctx.fillRect(cx - halfAt(f), y + h * f, halfAt(f) * 2, h * 0.03);
+  for (const f of TOWER_BAND_F) ctx.fillRect(cx - halfAt(f), y + h * f, halfAt(f) * 2, h * 0.03);
   // Arch between the legs at the base.
   ctx.fillStyle = "#1e1a2a";
   ctx.beginPath();
@@ -462,7 +557,7 @@ function drawTokyoTower(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   ctx.fill();
 
   // Observation decks, glazed and lit.
-  for (const [f, dh] of [[0.56, 0.05], [0.28, 0.03]] as const) {
+  for (const [f, dh] of TOWER_DECKS) {
     const hw = halfAt(f) + 3;
     ctx.fillStyle = "#3a2a3a";
     ctx.fillRect(cx - hw, y + h * f, hw * 2, h * dh);
@@ -516,7 +611,7 @@ function drawSkytree(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.stroke();
 
   // Two ring decks.
-  for (const [f, ringH] of [[0.42, 0.035], [0.27, 0.02]] as const) {
+  for (const [f, ringH] of SKYTREE_DECKS) {
     const hw = halfAt(f) + 4;
     ctx.fillStyle = "#3a3a5a";
     ctx.fillRect(cx - hw, y + h * f, hw * 2, h * ringH);
@@ -608,40 +703,46 @@ function drawTorii(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 const TICKER = "ようこそ東京へ  WELCOME TO TOKYO  ";
 /** Three copies, so the strip stays full while it scrolls one copy's width. */
 const TICKER_LOOP = TICKER.repeat(3);
+const TICKER_FONT = `bold 6px ${JP_FONT}`;
+/** The scrolling strip as one cached label, drawn left-aligned at its scroll offset. */
+const TICKER_LABEL: TextLabel = { text: TICKER_LOOP, font: TICKER_FONT, color: "#ffd23d", align: "left" };
 /** Ticker text width at its fixed font, measured on first draw. */
 let tickerWidth: number | null = null;
+/** The headline the screen cycles through. */
+const SCREEN_LINES = ["東京", "TOKYO", "♪ ♪ ♪", "ラーメン"];
 
 /** A corner building with a huge video screen cycling colour and text (Shibuya-style). */
 function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, wall: string, seed: number) {
-  const t = performance.now() / 1000;
+  const t = sceneTimeMs() / 1000;
   ctx.save();
   ctx.fillStyle = wall;
   ctx.fillRect(x, y, w, h);
   // Lit floors below the screen.
-  for (let r = 0; r < 6; r++) {
-    for (let c = 0; c < 8; c++) {
-      ctx.fillStyle = hash01(seed, r, c) < 0.5 ? "#ffd890" : "#2a2e48";
-      ctx.fillRect(x + 4 + c * ((w - 8) / 8), y + h * 0.62 + r * 9, (w - 8) / 8 - 3, 4);
-    }
-  }
+  const bay = (w - 8) / 8;
+  fillWindowGrid(ctx, x + 4, y + h * 0.62, 8, 6, bay, 9, bay - 3, 4, (r, c) => (hash01(seed, r, c) < 0.5 ? "#ffd890" : "#2a2e48"));
   // Screen: animated gradient with a bold line of text.
   const sx = x + w * 0.08;
   const sy = y + h * 0.1;
   const sw = w * 0.84;
   const sh = h * 0.42;
   glow(ctx, sx + sw / 2, sy + sh / 2, sw * 0.9, "#7a9aff", 0.2);
-  const hue = (t * 40) % 360;
-  const g = ctx.createLinearGradient(sx, sy, sx + sw, sy + sh);
-  g.addColorStop(0, `hsl(${hue}, 85%, 55%)`);
-  g.addColorStop(1, `hsl(${(hue + 120) % 360}, 85%, 45%)`);
-  ctx.fillStyle = g;
-  ctx.fillRect(sx, sy, sw, sh);
-  const lines = ["東京", "TOKYO", "♪ ♪ ♪", "ラーメン"];
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `bold ${Math.round(sh * 0.36)}px ${JP_FONT}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(lines[Math.floor(t / 2.5) % lines.length], sx + sw / 2, sy + sh / 2, sw * 0.9);
+  // One unit gradient per whole degree of hue (360 at most), laid along the screen's diagonal
+  const hue = Math.floor((t * 40) % 360);
+  const g = cachedGradient(ctx, `screen|${hue}`, () => {
+    const unit = ctx.createLinearGradient(0, 0, 1, 0);
+    unit.addColorStop(0, `hsl(${hue}, 85%, 55%)`);
+    unit.addColorStop(1, `hsl(${(hue + 120) % 360}, 85%, 45%)`);
+    return unit;
+  });
+  ctx.beginPath();
+  ctx.rect(sx, sy, sw, sh);
+  fillTransformed(ctx, g, sx, sy, Math.hypot(sw, sh), Math.hypot(sw, sh), Math.atan2(sh, sw));
+  drawCachedText(ctx, {
+    text: SCREEN_LINES[Math.floor(t / 2.5) % SCREEN_LINES.length],
+    font: `bold ${Math.round(sh * 0.36)}px ${JP_FONT}`,
+    color: "#ffffff",
+    maxWidth: sw * 0.9,
+  }, sx + sw / 2, sy + sh / 2);
   ctx.strokeStyle = "#0e0e18";
   ctx.lineWidth = 2;
   ctx.strokeRect(sx, sy, sw, sh);
@@ -652,12 +753,12 @@ function drawBigScreen(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.beginPath();
   ctx.rect(sx, sy + sh + 4, sw, 7);
   ctx.clip();
-  ctx.fillStyle = "#ffd23d";
-  ctx.font = `bold 6px ${JP_FONT}`;
-  ctx.textAlign = "left";
-  const tw = (tickerWidth ??= ctx.measureText(TICKER).width);
-  const tx = sx - ((t * 30) % tw);
-  ctx.fillText(TICKER_LOOP, tx, sy + sh + 8);
+  if (tickerWidth === null) {
+    ctx.font = TICKER_FONT;
+    tickerWidth = ctx.measureText(TICKER).width;
+  }
+  const tx = sx - ((t * 30) % tickerWidth);
+  drawCachedText(ctx, TICKER_LABEL, tx, sy + sh + 8);
   ctx.restore();
   aviationLight(ctx, x + w * 0.85, y - 1, seed);
   ctx.restore();
@@ -688,7 +789,7 @@ function drawTrainViaduct(ctx: CanvasRenderingContext2D, x: number, y: number, w
   const carW = 58;
   const trainW = carW * 5;
   const period = 9;
-  const t = (performance.now() / 1000) % period;
+  const t = (sceneTimeMs() / 1000) % period;
   const travel = (w + trainW * 2) * (t / (period * 0.6));
   if (t < period * 0.6) {
     const tx = x + w + trainW - travel;
@@ -748,34 +849,15 @@ function drawSakura(ctx: CanvasRenderingContext2D, x: number, y: number, w: numb
 /** Hinomaru on a white pole, rippling. */
 function drawJapanFlag(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   ctx.save();
-  ctx.fillStyle = "#d8d8e0";
-  ctx.fillRect(x, y, 1.6, h);
-  ctx.fillStyle = "#c8a040";
-  ctx.beginPath();
-  ctx.arc(x + 0.8, y, 1.4, 0, Math.PI * 2);
-  ctx.fill();
+  drawFlagPole(ctx, x, y, h, "#d8d8e0");
   const fw = w * 1.4;
   const fh = h * 0.3;
-  const t = performance.now() / 300;
-  const wave = (fx: number) => Math.sin(t + fx * 5) * 1.3 * fx;
-  ctx.fillStyle = "#f6f6f8";
-  ctx.beginPath();
-  const steps = 8;
-  for (let i = 0; i <= steps; i++) {
-    const fx = i / steps;
-    const px = x + 1.6 + fx * fw;
-    if (i === 0) ctx.moveTo(px, y + 2 + wave(fx));
-    else ctx.lineTo(px, y + 2 + wave(fx));
-  }
-  for (let i = steps; i >= 0; i--) {
-    const fx = i / steps;
-    ctx.lineTo(x + 1.6 + fx * fw, y + 2 + fh + wave(fx));
-  }
-  ctx.closePath();
-  ctx.fill();
+  const t = sceneTimeMs() / 300;
+  const amp = 1.3;
+  fillFlagBand(ctx, x + 1.6, y + 2, fw, fh, 0, 1, t, amp, "#f6f6f8");
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(x + 1.6 + fw * 0.5, y + 2 + fh / 2 + wave(0.5), fh * 0.3, 0, Math.PI * 2);
+  ctx.arc(x + 1.6 + fw * 0.5, y + 2 + fh / 2 + flagWave(t, amp, 0.5), fh * 0.3, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -785,17 +867,19 @@ function drawJapanFlag(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 /** A curved street lamp throwing a warm cone of light down through the rain. */
 function drawStreetLamp(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   ctx.save();
-  // Light cone.
-  const g = ctx.createLinearGradient(0, y + 6, 0, y + h);
-  g.addColorStop(0, "rgba(255,226,160,0.32)");
-  g.addColorStop(1, "rgba(255,226,160,0)");
-  ctx.fillStyle = g;
+  // Light cone: a unit downward fade stretched from the lamp head to the ground.
+  const g = cachedGradient(ctx, "lamp-cone", () => {
+    const unit = ctx.createLinearGradient(0, 0, 0, 1);
+    unit.addColorStop(0, "rgba(255,226,160,0.32)");
+    unit.addColorStop(1, "rgba(255,226,160,0)");
+    return unit;
+  });
   ctx.beginPath();
   ctx.moveTo(x + w * 0.9, y + 6);
   ctx.lineTo(x + w * 0.9 + 16, y + h);
   ctx.lineTo(x + w * 0.9 - 16, y + h);
   ctx.closePath();
-  ctx.fill();
+  fillTransformed(ctx, g, 0, y + 6, 1, h - 6);
   // Pole and curved arm.
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
@@ -846,47 +930,24 @@ function drawUmbrellaPerson(
 
 // --- Tokyo background drawer registry ---
 
+/**
+ * Element type → renderer. Adapters remain only where the element's `variant` is a
+ * seed (buildings, izakaya, screen, sakura) rather than a drawing variant.
+ */
 export const TOKYO_BACKGROUND_DRAWERS: Record<string, BackgroundDrawFn> = {
-  neon_building: (ctx, x, y, w, h, color, _palette, roofColor, variant = 0) => {
-    drawNeonBuilding(ctx, x, y, w, h, color, roofColor ?? color, variant);
-  },
-  konbini: (ctx, x, y, w, h) => {
-    drawKonbini(ctx, x, y, w, h);
-  },
-  izakaya: (ctx, x, y, w, h, _color, _palette, _roofColor, variant = 0) => {
-    drawIzakaya(ctx, x, y, w, h, variant);
-  },
-  tokyo_tower: (ctx, x, y, w, h) => {
-    drawTokyoTower(ctx, x, y, w, h);
-  },
-  skytree: (ctx, x, y, w, h) => {
-    drawSkytree(ctx, x, y, w, h);
-  },
-  pagoda: (ctx, x, y, w, h) => {
-    drawPagoda(ctx, x, y, w, h);
-  },
-  torii: (ctx, x, y, w, h) => {
-    drawTorii(ctx, x, y, w, h);
-  },
-  big_screen: (ctx, x, y, w, h, color, _palette, _roofColor, variant = 0) => {
-    drawBigScreen(ctx, x, y, w, h, color, variant);
-  },
-  train_viaduct: (ctx, x, y, w, h) => {
-    drawTrainViaduct(ctx, x, y, w, h);
-  },
-  sakura: (ctx, x, y, w, h, color, palette, _roofColor, variant = 0) => {
-    drawSakura(ctx, x, y, w, h, color, palette, variant);
-  },
-  japan_flag: (ctx, x, y, w, h, color) => {
-    drawJapanFlag(ctx, x, y, w, h, color);
-  },
-  street_lamp: (ctx, x, y, w, h, color) => {
-    drawStreetLamp(ctx, x, y, w, h, color);
-  },
-  umbrella_person: (ctx, x, y, w, h, color, palette, bottomColor, variant) => {
-    drawUmbrellaPerson(ctx, x, y, w, h, color, palette, bottomColor, variant);
-  },
-  walking_person: (ctx, x, y, w, h, color, palette, bottomColor, variant) => {
-    drawWalkingPerson(ctx, x, y, w, h, color, palette, bottomColor, variant);
-  },
+  neon_building: (ctx, x, y, w, h, color, _palette, roofColor, variant = 0) =>
+    drawNeonBuilding(ctx, x, y, w, h, color, roofColor ?? color, variant),
+  konbini: drawKonbini,
+  izakaya: (ctx, x, y, w, h, _color, _palette, _roofColor, variant = 0) => drawIzakaya(ctx, x, y, w, h, variant),
+  tokyo_tower: drawTokyoTower,
+  skytree: drawSkytree,
+  pagoda: drawPagoda,
+  torii: drawTorii,
+  big_screen: (ctx, x, y, w, h, color, _palette, _roofColor, variant = 0) => drawBigScreen(ctx, x, y, w, h, color, variant),
+  train_viaduct: drawTrainViaduct,
+  sakura: (ctx, x, y, w, h, color, palette, _roofColor, variant = 0) => drawSakura(ctx, x, y, w, h, color, palette, variant),
+  japan_flag: drawJapanFlag,
+  street_lamp: drawStreetLamp,
+  umbrella_person: drawUmbrellaPerson,
+  walking_person: drawWalkingPerson,
 };

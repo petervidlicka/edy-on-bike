@@ -7,11 +7,12 @@
 * **Game Engine:** Custom HTML5 `<canvas>` rendering and custom physics. No external physics libraries are used.
 
 ## 2. Architecture & File Structure
-* **`/app/`:** Next.js App Router files, global CSS, and API routes (e.g., `/api/leaderboard`).
-* **`/components/`:** Functional React UI components (`GameCanvas.tsx`, `HUD.tsx`, `StartScreen.tsx`).
-* **`/game/`:** Core game logic and engine.
-* **`/game/environments/`:** Biome configurations and definitions.
-* **`/data/` & `/lib/`:** Server-side logic, database connections, and static data.
+* **`/app/`:** Next.js App Router files, global CSS, and API routes (e.g., `/api/leaderboard`; server-only route handlers are named `route.web.ts` so the Capacitor static export skips them).
+* **`/components/`:** Functional React UI components (`GameCanvas.tsx`, `HUD.tsx`, `StartScreen.tsx`) and the UI kit in `components/ui/`.
+* **`/hooks/`:** React hooks that bridge the UI to the engine (`useGameEngine`, `useEngineInput`, `useMultiplayerRoom`).
+* **`/game/`:** Core game logic and engine (`Engine.ts`), with `environments/` (biome configs), `crashes/` (crash variants), `rendering/` (canvas drawing) and `multiplayer/` (shared client/server protocol).
+* **`/lib/`:** Server-side logic (leaderboard storage and API helpers) and small shared utilities. In local dev without Redis the leaderboard is a gitignored `data/leaderboard.json` file.
+* **`/party/`:** The multiplayer Cloudflare Worker (PartyServer on Durable Objects), type-checked separately from the app; see `MULTIPLAYER.md`.
 
 ## 3. Coding Style & Paradigms
 This project uses a strict Hybrid approach to separate UI from the 60fps game loop:

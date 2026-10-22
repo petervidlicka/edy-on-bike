@@ -14,17 +14,17 @@ import {
   drawHelmet,
 } from "./PlayerRenderer";
 import { PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
+import { CRASH_FADE_OUT_S } from "../crashes/types";
 
 /** Seconds at the end of a crash during which everything fades out. */
-const FADE_OUT_S = 0.3;
 
 /**
  * Opacity of the crash scene: 1 until the last 0.3 s, then fading to 0.
  * @param crash - Crash state whose clock decides the fade.
  */
 export function crashFadeAlpha(crash: CrashState): number {
-  const fadeStart = crash.duration - FADE_OUT_S;
-  const alpha = crash.elapsed > fadeStart ? 1 - (crash.elapsed - fadeStart) / FADE_OUT_S : 1;
+  const fadeStart = crash.duration - CRASH_FADE_OUT_S;
+  const alpha = crash.elapsed > fadeStart ? 1 - (crash.elapsed - fadeStart) / CRASH_FADE_OUT_S : 1;
   return Math.max(0, alpha);
 }
 
@@ -53,16 +53,10 @@ export function drawCrashBike(
   const localX = -PLAYER_WIDTH / 2;
   const localY = -PLAYER_HEIGHT / 2;
   const g = getBikeGeometry(skin.bikeStyle, localX, localY);
-  const { spokeCount, spokeWidth, spokeColor, knobby, tyreWidth } = getWheelParams(skin);
+  const wheelStyle = getWheelParams(skin);
 
-  drawWheel(
-    ctx, g.rearWheelX, g.wheelY, g.wheelR, crash.bikeWheelRotation,
-    c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby, tyreWidth
-  );
-  drawWheel(
-    ctx, g.frontWheelX, g.wheelY, g.wheelR, crash.bikeWheelRotation,
-    c.wheel, glowWheels, spokeCount, spokeWidth, spokeColor, knobby, tyreWidth
-  );
+  drawWheel(ctx, g.rearWheelX, g.wheelY, g.wheelR, crash.bikeWheelRotation, c.wheel, glowWheels, wheelStyle);
+  drawWheel(ctx, g.frontWheelX, g.wheelY, g.wheelR, crash.bikeWheelRotation, c.wheel, glowWheels, wheelStyle);
   drawBikeFrame(ctx, skin, g);
   drawHandlebars(ctx, skin, g);
 

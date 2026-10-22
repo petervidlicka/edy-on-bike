@@ -1,13 +1,16 @@
-import { ObstacleType, type BackgroundElement } from "../types";
+/**
+ * Desert City biome (Dubai/Miami inspired): second in the cycle. Defines the palette,
+ * the glass-tower skyline with its landmarks, and the time-staged obstacle pool of
+ * camels, sand traps and supercars.
+ */
+import { ObstacleType } from "../types";
 import { pickPedestrian } from "./pedestrians";
 import { DUBAI_OBSTACLE_COLORS } from "./obstacleColors";
-import { EASING_OUT, stagedPool } from "./stages";
+import { PLAYER_COLORS, SHARED_OBSTACLE_COLORS } from "./sharedPalette";
+import { EASING_OUT, stagedObstaclePool } from "./stages";
+import { generateStreet, type StreetConfig } from "./street";
 import { DUBAI_BACKGROUND_DRAWERS } from "../rendering";
-import type {
-  EnvironmentDefinition,
-  EnvironmentPalette,
-  WeightedType,
-} from "./types";
+import type { EnvironmentDefinition, EnvironmentPalette } from "./types";
 
 // ── Desert City palette — Dubai/Miami inspired ──
 
@@ -42,55 +45,18 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
   creatureLeg: "#a08858",
   creatureTail: "#b89868",
 
-  // Player
-  player: {
-    wheel: "#2e2e2e",
-    frame: "#8b1a1a",
-    helmet: "#9b3333",
-    skin: "#c8a882",
-    shirt: "#7a8a9a",
-    pants: "#5a5a6a",
-  },
+  player: PLAYER_COLORS,
 
-  // Obstacles
   obstacle: {
-    // Shared obstacle colors (for ramps, etc.)
+    ...SHARED_OBSTACLE_COLORS,
+    // Sandstone rocks and white cars
     rock: "#c8a060",
     rockHighlight: "#d8b878",
     rockShadow: "#8a7040",
-    tree: "#3a8a42",
-    treeHighlight: "#58aa50",
-    treeTrunk: "#6e4e38",
-    treeTrunkShadow: "#523828",
-    trolley: "#5a7a9a",
-    trolleyBasket: "#4a6888",
-    trolleyAccent: "#c47a42",
     car: "#e0e0e0",
     carRoof: "#c8c8c8",
     carWindow: "#70a8c8",
     carBumper: "#9a9090",
-    carWheel: "#2e2e2c",
-    carHeadlight: "#e8d06a",
-    carTaillight: "#c44040",
-    bikeRider: "#5a4878",
-    bikeFrame: "#7a6898",
-    busStopFrame: "#3a7a6a",
-    busStopRoof: "#2e5e52",
-    busStopGlass: "#a0c8d4",
-    busStopSign: "#d4a444",
-    container: "#c4683a",
-    containerDark: "#8a4828",
-    containerDoor: "#a85830",
-    giantTreeCanopy: "#2e7a36",
-    giantTreeCanopyHighlight: "#48994a",
-    giantTreeTrunk: "#5e4030",
-    giantTreeBark: "#4a3020",
-    giantTreeOutline: "#1e5a24",
-    rampWood: "#b89a6a",
-    rampWoodDark: "#8a6a40",
-    rampWoodHighlight: "#d4b888",
-    rampMetal: "#7a8a9a",
-    rampMetalDark: "#5a6a7a",
 
     // Dubai-specific obstacle colors
     ...DUBAI_OBSTACLE_COLORS,
@@ -99,185 +65,113 @@ export const DUBAI_PALETTE: EnvironmentPalette = {
 
 // ── Background element generation — Desert City skyline ──
 
-function generateDubaiElements(
-  canvasWidth: number,
-  groundY: number,
-  palette: EnvironmentPalette
-): BackgroundElement[] {
-  const elements: BackgroundElement[] = [];
+/** Element types of the Dubai backdrop (keys of DUBAI_BACKGROUND_DRAWERS). */
+export type DubaiElementType = "skyscraper" | "palm_tree" | "bg_camel" | "walking_person";
 
-  let x = 0;
-  let lastType = "";
-  let lastLandmarkVariant: number | null = null;
-  let genericsSinceLandmark = 99; // allow landmark on first pick
+/** Landmarks; the skyscraper drawer paints them from `variant` 5–8 (0–4 are generic towers). */
+const LANDMARKS = ["burj_khalifa", "museum_of_the_future", "burj_al_arab", "dubai_frame"] as const;
+type DubaiLandmark = (typeof LANDMARKS)[number];
+const LANDMARK_VARIANT: Record<DubaiLandmark, number> = {
+  burj_khalifa: 5,
+  museum_of_the_future: 6,
+  burj_al_arab: 7,
+  dubai_frame: 8,
+};
 
-  while (x < canvasWidth * 2.5) {
-    const roll = Math.random();
+/** Size of each landmark: Burj Khalifa narrow and extremely tall (double the tallest generic), the Museum a torus wider than tall, Burj Al Arab a tall sail, the Frame ~0.6 wide : 1 tall like the real one. */
+function landmarkSize(id: DubaiLandmark): { w: number; h: number } {
+  switch (id) {
+    case "burj_khalifa": return { w: 30 + Math.random() * 10, h: 390 + Math.random() * 130 };
+    case "museum_of_the_future": return { w: 66 + Math.random() * 16, h: 56 + Math.random() * 14 };
+    case "burj_al_arab": return { w: 50 + Math.random() * 15, h: 225 + Math.random() * 50 };
+    case "dubai_frame": {
+      const h = 200 + Math.random() * 50;
+      return { w: h * 0.6, h };
+    }
+  }
+}
 
-    if (roll > 0.30) {
-      // Skyscraper (70% chance)
-      // Variants 0-4 = generic, 5-8 = landmarks
-      let variant: number;
-      let w: number, h: number;
-
-      // Decide generic vs landmark: ~20% landmark chance, but only when
-      // at least 3 generics have appeared since the last landmark
-      const tryLandmark = Math.random() < 0.20 && genericsSinceLandmark >= 3;
-      if (tryLandmark) {
-        // Pick a landmark variant (5-8) that isn't the same as the last one
-        const landmarks = [5, 6, 7, 8].filter(v => v !== lastLandmarkVariant);
-        variant = landmarks[Math.floor(Math.random() * landmarks.length)];
-        // Add 20px breathing room BEFORE the landmark so it stands out
-        x += 20;
-      } else {
-        variant = Math.floor(Math.random() * 5); // generic 0-4
-      }
-
-      switch (variant) {
-        // Generic skyscrapers (0-4) — tall with variety
-        case 0: case 1: case 2: case 3: case 4:
-          w = 35 + Math.random() * 25;
-          h = 150 + Math.random() * 100;
-          break;
-        // Landmarks
-        case 5: // Burj Khalifa — narrow and extremely tall (double tallest generic)
-          w = 30 + Math.random() * 10;
-          h = 390 + Math.random() * 130;
-          break;
-        case 6: // Museum of the Future — steel torus on a mound, a bit wider than tall
-          w = 66 + Math.random() * 16;
-          h = 56 + Math.random() * 14;
-          break;
-        case 7: // Burj Al Arab — sail shape, very tall
-          w = 50 + Math.random() * 15;
-          h = 225 + Math.random() * 50;
-          break;
-        case 8: // Dubai Frame — two towers with a sky bridge, ~0.6 wide : 1 tall like the real one
-          h = 200 + Math.random() * 50;
-          w = h * 0.6;
-          break;
-        default:
-          w = 35 + Math.random() * 25;
-          h = 150 + Math.random() * 100;
-      }
-
-      // Track landmark vs generic for deduplication
-      if (variant >= 5) {
-        lastLandmarkVariant = variant;
-        genericsSinceLandmark = 0;
-      } else {
-        genericsSinceLandmark++;
-      }
-
-      const scheme =
-        palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
-      elements.push({
+const DUBAI_STREET: StreetConfig<DubaiElementType, DubaiLandmark> = {
+  landmarks: {
+    chance: 0.14, // a fifth of the 70% tower slots
+    ids: LANDMARKS,
+    // Breathing room on both sides so a landmark stands out of the packed skyline
+    padBefore: 20,
+    padAfter: 20,
+    make(id, palette) {
+      const { w, h } = landmarkSize(id);
+      const scheme = palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
+      return { type: "skyscraper", width: w, height: h, color: scheme.wall, roofColor: scheme.roof, variant: LANDMARK_VARIANT[id] };
+    },
+  },
+  fillers: {
+    chance: 0.7,
+    make(palette) {
+      const scheme = palette.buildings[Math.floor(Math.random() * palette.buildings.length)];
+      return {
         type: "skyscraper",
-        x,
-        y: groundY - h - 16,
-        width: w,
-        height: h,
+        width: 35 + Math.random() * 25,
+        height: 150 + Math.random() * 100,
         color: scheme.wall,
         roofColor: scheme.roof,
-        variant,
-      });
-
-      const isLandmark = variant >= 5;
-      // Generic skyscrapers pack tightly — they can even overlap slightly
-      // to create a dense city-skyline look. Landmarks always get 20px
-      // breathing room on each side so they stand out.
-      let gap: number;
-      if (isLandmark) {
-        gap = 20;                            // 20px after the landmark
-      } else {
-        gap = -8 + Math.random() * 10;       // –8 to +2 px (tight / overlapping)
-      }
-      // If the NEXT element will be a landmark, peek-add 20px before it.
-      // We can't truly peek, so instead ensure the gap after a landmark
-      // covers both sides: add the pre-gap of the next building here.
-      // (Non-landmark gap already tight, so no extra padding needed.)
-
-      x += w + gap;
-
-      // Maybe add a background camel or person — only in landmark gaps
-      // (generics are too tightly packed for figures)
-      if (
-        isLandmark &&
-        Math.random() > 0.5 &&
-        lastType !== "bg_camel" &&
-        lastType !== "walking_person"
-      ) {
-        const isAnimal = Math.random() > 0.4;
-        const vergeOffset = Math.random() * 18;
-        if (isAnimal) {
-          elements.push({
-            type: "bg_camel",
-            x: x - gap * 0.6,
-            y: groundY - 32 - vergeOffset,
-            width: 36,
-            height: 32,
-            color: palette.creature,
-          });
-          lastType = "bg_camel";
-        } else {
-          const person = pickPedestrian();
-          elements.push({
-            type: "walking_person",
-            x: x - gap * 0.5,
-            y: groundY - person.height - vergeOffset,
-            ...person,
-          });
-          lastType = "walking_person";
-        }
-      } else {
-        lastType = "skyscraper";
-      }
-    } else {
-      // Palm tree (30% chance) — stays same size
+        variant: Math.floor(Math.random() * 5), // generic 0-4
+        // Generic towers pack tightly, even overlapping a little, for a dense skyline
+        gap: -8 + Math.random() * 10,
+      };
+    },
+  },
+  trees: {
+    make(palette, vergeOffset) {
       const sizeTier = Math.random();
       const tw = sizeTier < 0.5 ? 16 + Math.random() * 6 : 22 + Math.random() * 8;
       const th = sizeTier < 0.5 ? 50 + Math.random() * 20 : 70 + Math.random() * 25;
-      const vergeOffset = Math.random() * 18;
-      elements.push({
+      return {
         type: "palm_tree",
-        x,
-        y: groundY - th - vergeOffset,
         width: tw,
         height: th,
         color: palette.treeSilhouette,
         // Picks this palm's frond-length pattern (stable while it scrolls)
         variant: Math.floor(Math.random() * 8),
-      });
-      x += tw + 12 + Math.random() * 20;
-      lastType = "palm_tree";
-    }
-  }
-  return elements;
-}
+        gap: 12 + Math.random() * 20,
+        lift: vergeOffset,
+      };
+    },
+  },
+  // Only landmark gaps have room for a figure; generics are packed too tightly
+  figures: {
+    chance: 0.5,
+    after: "landmark",
+    allowAfter: (last) => last?.kind !== "figure",
+    make(palette, gap, vergeOffset) {
+      if (Math.random() > 0.4) {
+        return { type: "bg_camel", width: 36, height: 32, color: palette.creature, back: gap * 0.6, lift: vergeOffset };
+      }
+      return { type: "walking_person", ...pickPedestrian(), back: gap * 0.5, lift: vergeOffset };
+    },
+  },
+};
 
 // ── Obstacle pool — Dubai biome, time-staged ──
 
-// biomeMs = biome-relative elapsed time (0 = when this biome started, not game start)
-function dubaiWeightedTypes(biomeMs: number): WeightedType[] {
-  return stagedPool(biomeMs, [
-    // Stage 1: core desert obstacles + vehicle previews
-    [ObstacleType.SAND_TRAP, EASING_OUT],
-    [ObstacleType.CACTUS, EASING_OUT],
-    [ObstacleType.CAMEL, [0.8, 0.8, 0.8]],
-    [ObstacleType.LAND_CRUISER, [0.3, 0.7, 1.0]],
-    [ObstacleType.PINK_G_CLASS, [0.2, 0.5, 0.7]],
-    // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + supercars + billboard
-    [ObstacleType.STRAIGHT_RAMP, [null, 0.4, 0.4]],
-    [ObstacleType.CURVED_RAMP, [null, 0.4, 0.4]],
-    [ObstacleType.DUBAI_CHOCOLATE, [null, 0.7, 1.0]],
-    [ObstacleType.LAMBORGHINI_HURACAN, [null, 0.5, 0.8]],
-    [ObstacleType.FERRARI_458, [null, 0.4, 0.6]],
-    [ObstacleType.CONVERTIBLE, [null, 0.4, 0.6]],
-    [ObstacleType.ROLLS_ROYCE_PHANTOM, [null, 0.3, 0.5]],
-    [ObstacleType.PORSCHE_911, [null, 0.4, 0.6]],
-    [ObstacleType.DUBAI_BILLBOARD, [null, 0.4, 0.4]],
-  ]);
-}
+// Standard stage starts (15 s / 30 s), measured from when this biome started, not game start
+const DUBAI_OBSTACLE_POOL = stagedObstaclePool([
+  // Stage 1: core desert obstacles + vehicle previews
+  [ObstacleType.SAND_TRAP, EASING_OUT],
+  [ObstacleType.CACTUS, EASING_OUT],
+  [ObstacleType.CAMEL, [0.8, 0.8, 0.8]],
+  [ObstacleType.LAND_CRUISER, [0.3, 0.7, 1.0]],
+  [ObstacleType.PINK_G_CLASS, [0.2, 0.5, 0.7]],
+  // Stage 2 (15s into Dubai): ramps, more vehicles, chocolate + supercars + billboard
+  [ObstacleType.STRAIGHT_RAMP, [null, 0.4, 0.4]],
+  [ObstacleType.CURVED_RAMP, [null, 0.4, 0.4]],
+  [ObstacleType.DUBAI_CHOCOLATE, [null, 0.7, 1.0]],
+  [ObstacleType.LAMBORGHINI_HURACAN, [null, 0.5, 0.8]],
+  [ObstacleType.FERRARI_458, [null, 0.4, 0.6]],
+  [ObstacleType.CONVERTIBLE, [null, 0.4, 0.6]],
+  [ObstacleType.ROLLS_ROYCE_PHANTOM, [null, 0.3, 0.5]],
+  [ObstacleType.PORSCHE_911, [null, 0.4, 0.6]],
+  [ObstacleType.DUBAI_BILLBOARD, [null, 0.4, 0.4]],
+]);
 
 // ── Full environment definition ──
 
@@ -289,12 +183,10 @@ export const DUBAI_ENVIRONMENT: EnvironmentDefinition = {
     cloudCount: 6,
     cloudSpeedRatio: 0.08,
     buildingSpeedRatio: 0.4,
-    generateElements: generateDubaiElements,
+    generateElements: (canvasWidth, groundY, palette) => generateStreet(canvasWidth, groundY, palette, DUBAI_STREET),
   },
   backgroundDrawers: DUBAI_BACKGROUND_DRAWERS,
-  obstaclePool: {
-    getWeightedTypes: dubaiWeightedTypes,
-  },
+  obstaclePool: DUBAI_OBSTACLE_POOL,
   musicTrack: "/music-dubai.mp3",
   particleOverlay: {
     type: "sand",

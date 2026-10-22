@@ -26,6 +26,12 @@ export class InterpolationBuffer {
   /** How far behind real-time we render (ms). */
   private readonly renderOffset: number;
 
+  /**
+   * The lerped pose, written in place every frame: get() runs per ghost per frame, so
+   * a fresh object each call would be steady garbage for the GC (see AI_INSTRUCTIONS.md).
+   */
+  private scratch: GhostSnapshot | null = null;
+
   constructor(renderOffsetMs = 100) {
     this.renderOffset = renderOffsetMs;
   }
@@ -53,8 +59,9 @@ export class InterpolationBuffer {
   }
 
   /**
-   * Get the interpolated snapshot at the current time.
-   * Returns null if we don't have any data yet.
+   * Get the interpolated snapshot at the current time, or null if there's no data yet.
+   * The returned object is owned by the buffer and overwritten by the next call (or the
+   * next push): read it this frame, never keep it.
    */
   get(nowMs: number): GhostSnapshot | null {
     const count = this.snapshots.length;
@@ -72,7 +79,9 @@ export class InterpolationBuffer {
       const a = this.snapshots[i - 1];
       if (a.t <= target) {
         const b = this.snapshots[i];
-        return lerpSnapshot(a, b, (target - a.t) / (b.t - a.t));
+        const out = (this.scratch ??= { ...a });
+        lerpSnapshotInto(out, a, b, (target - a.t) / (b.t - a.t));
+        return out;
       }
     }
     return latest;
@@ -83,22 +92,21 @@ function lerpNum(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-function lerpSnapshot(a: GhostSnapshot, b: GhostSnapshot, t: number): GhostSnapshot {
-  return {
-    t: lerpNum(a.t, b.t, t),
-    h: lerpNum(a.h, b.h, t),
-    og: t < 0.5 ? a.og : b.og,
-    wr: lerpNum(a.wr, b.wr, t),
-    bt: lerpNum(a.bt, b.bt, t),
-    rl: lerpNum(a.rl, b.rl, t),
-    rc: lerpNum(a.rc, b.rc, t),
-    lt: lerpNum(a.lt, b.lt, t),
-    // Flip angle resets to 0 on landing; lerping across the reset would spin the ghost backwards
-    ba: b.ba < a.ba ? b.ba : lerpNum(a.ba, b.ba, t),
-    fd: t < 0.5 ? a.fd : b.fd,
-    at: t < 0.5 ? a.at : b.at,
-    tp: lerpNum(a.tp, b.tp, t),
-    s: Math.round(lerpNum(a.s, b.s, t)),
-    x: a.x !== undefined && b.x !== undefined ? lerpNum(a.x, b.x, t) : b.x,
-  };
+/** Writes the pose `t` of the way from `a` to `b` into `out`, allocating nothing. */
+function lerpSnapshotInto(out: GhostSnapshot, a: GhostSnapshot, b: GhostSnapshot, t: number): void {
+  out.t = lerpNum(a.t, b.t, t);
+  out.h = lerpNum(a.h, b.h, t);
+  out.og = t < 0.5 ? a.og : b.og;
+  out.wr = lerpNum(a.wr, b.wr, t);
+  out.bt = lerpNum(a.bt, b.bt, t);
+  out.rl = lerpNum(a.rl, b.rl, t);
+  out.rc = lerpNum(a.rc, b.rc, t);
+  out.lt = lerpNum(a.lt, b.lt, t);
+  // Flip angle resets to 0 on landing; lerping across the reset would spin the ghost backwards
+  out.ba = b.ba < a.ba ? b.ba : lerpNum(a.ba, b.ba, t);
+  out.fd = t < 0.5 ? a.fd : b.fd;
+  out.at = t < 0.5 ? a.at : b.at;
+  out.tp = lerpNum(a.tp, b.tp, t);
+  out.s = Math.round(lerpNum(a.s, b.s, t));
+  out.x = a.x !== undefined && b.x !== undefined ? lerpNum(a.x, b.x, t) : b.x;
 }

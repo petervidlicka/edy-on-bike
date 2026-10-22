@@ -7,36 +7,75 @@
  */
 import type { EnvironmentPalette } from "../../environments/types";
 import { drawVehicle, type VehicleShape } from "../vehicle";
-import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow } from "../drawHelpers";
+import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow, drawSprite, drawCachedText, cachedGradient, fillTransformed, type TextLabel } from "../drawHelpers";
 import { TOKYO_OBSTACLE_COLORS } from "../../environments/obstacleColors";
+import { sceneTimeMs } from "../sceneClock";
+
+/** x fractions of the Kei truck's bed-gate hinges. */
+const KEI_TRUCK_HINGE_X = [0.14, 0.3, 0.46];
+/** y fractions of the samurai's armour lacing rows. */
+const SAMURAI_LACING_Y = [0.34, 0.42, 0.5, 0.58, 0.64];
+/** x fractions of the delivery scooter's wheels. */
+const SCOOTER_WHEEL_X = [0.2, 0.82];
+/** x fractions of the mamachari's wheels. */
+const MAMACHARI_WHEEL_X = [0.18, 0.8];
+/** x fractions of the front basket's wires. */
+const BASKET_WIRE_X = [0.09, 0.14, 0.19];
+/** x fractions where the umbrella ribs meet the rim. */
+const UMBRELLA_RIB_X = [0.32, 0.46, 0.74, 0.88];
+/** x fractions of the two frog posts. */
+const FROG_POST_X = [0.13, 0.87];
+/** x offsets (fractions) of a frog's eyes from its centre. */
+const FROG_EYE_X = [-0.065, 0.065];
+/** x fractions of the cat's ears. */
+const NEKO_EAR_X = [0.3, 0.78];
+/** x fractions of the cat's eyes. */
+const NEKO_EYE_X = [0.42, 0.66];
+/** Whisker roots as [x fraction, direction]. */
+const NEKO_WHISKERS = [[0.32, -1], [0.76, 1]] as const;
+/** y offsets (fractions) of the two whiskers on each side. */
+const NEKO_WHISKER_DY = [-0.02, 0.02];
+/** x fractions of the ramen's steam wisps. */
+const STEAM_X = [0.32, 0.5, 0.68];
+/** x fractions of the spring-onion slices. */
+const ONION_X = [0.4, 0.45, 0.5];
+/** x fractions of the shiba's near legs. */
+const SHIBA_LEG_X = [0.28, 0.72];
 
 /** Japanese-capable font stack for the little signs and labels. */
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
-/** Headlight beam spilling forward onto the wet road. */
-function headlightBeam(ctx: CanvasRenderingContext2D, fromX: number, fromY: number, length: number, dir: 1 | -1) {
-  const g = ctx.createLinearGradient(fromX, fromY, fromX + length * dir, fromY);
+/** Unit beam fade along +x: full at the lamp, gone at the end of the throw. */
+function buildBeamGradient(ctx: CanvasRenderingContext2D): CanvasGradient {
+  const g = ctx.createLinearGradient(0, 0, 1, 0);
   g.addColorStop(0, "rgba(255,242,176,0.35)");
   g.addColorStop(1, "rgba(255,242,176,0)");
-  ctx.fillStyle = g;
+  return g;
+}
+
+/** Headlight beam spilling forward onto the wet road. */
+function headlightBeam(ctx: CanvasRenderingContext2D, fromX: number, fromY: number, length: number, dir: 1 | -1) {
+  const g = cachedGradient(ctx, "headlight-beam", () => buildBeamGradient(ctx));
   ctx.beginPath();
   ctx.moveTo(fromX, fromY - 1.5);
   ctx.lineTo(fromX + length * dir, fromY - 5);
   ctx.lineTo(fromX + length * dir, fromY + 8);
   ctx.lineTo(fromX, fromY + 2);
   ctx.closePath();
-  ctx.fill();
+  // The unit fade stretched over the throw (a negative x scale points it backwards)
+  fillTransformed(ctx, g, fromX, fromY, length * dir, 1);
 }
 
 /**
- * Fills text centred on (cx, cy) flipped back left-to-right. Taxis are drawn mirrored as
- * oncoming traffic (see ONCOMING_VEHICLES), so their signs would otherwise read backwards.
+ * Draws a cached label centred on (cx, cy) flipped back left-to-right. Taxis are drawn
+ * mirrored as oncoming traffic (see ONCOMING_VEHICLES), so their signs would otherwise
+ * read backwards.
  */
-function fillTextUnmirrored(ctx: CanvasRenderingContext2D, text: string, cx: number, cy: number, maxWidth: number) {
+function drawLabelUnmirrored(ctx: CanvasRenderingContext2D, label: TextLabel, cx: number, cy: number) {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(-1, 1);
-  ctx.fillText(text, 0, 0, maxWidth);
+  drawCachedText(ctx, label, 0, 0);
   ctx.restore();
 }
 
@@ -113,7 +152,7 @@ export function drawKeiTruck(ctx: CanvasRenderingContext2D, x: number, y: number
   });
   // Bed side gate hinges, mirror, yellow plate.
   ctx.fillStyle = "#a8a8a4";
-  for (const fx of [0.14, 0.3, 0.46]) ctx.fillRect(x + w * fx, y + h * 0.54, 1, h * 0.2);
+  for (const fx of KEI_TRUCK_HINGE_X) ctx.fillRect(x + w * fx, y + h * 0.54, 1, h * 0.2);
   fillPoly(ctx, [P(0.97, 0.18), P(1.03, 0.16), P(1.03, 0.26), P(0.98, 0.26)], "#2a2a2e");
   ctx.fillStyle = "#f2d23a";
   ctx.fillRect(x + w * 0.005, y + h * 0.66, w * 0.05, h * 0.09);
@@ -143,11 +182,12 @@ export function drawJapanTaxi(ctx: CanvasRenderingContext2D, x: number, y: numbe
   // Roof lamp (andon), glowing.
   glow(ctx, x + w * 0.42, y + h * 0.1, h * 0.35, "#ffe08a", 0.3);
   fillRoundRect(ctx, x + w * 0.34, y + h * 0.02, w * 0.16, h * 0.18, 2, "#ffe48a");
-  ctx.fillStyle = "#8a5a10";
-  ctx.font = `bold ${Math.max(4, Math.round(h * 0.12))}px Arial, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  fillTextUnmirrored(ctx, "TAXI", x + w * 0.42, y + h * 0.115, w * 0.14);
+  drawLabelUnmirrored(ctx, {
+    text: "TAXI",
+    font: `bold ${Math.max(4, Math.round(h * 0.12))}px Arial, sans-serif`,
+    color: "#8a5a10",
+    maxWidth: w * 0.14,
+  }, x + w * 0.42, y + h * 0.115);
 
   drawVehicle(ctx, x, y, w, h, c, TAXI_SHAPE, {
     body: c.taxi ?? TOKYO_OBSTACLE_COLORS.taxi,
@@ -158,9 +198,12 @@ export function drawJapanTaxi(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.fillRect(x + w * 0.04, y + h * 0.56, w * 0.92, 1.2);
   ctx.fillStyle = "#ff4040";
   ctx.fillRect(x + w * 0.74, y + h * 0.36, w * 0.08, h * 0.1);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `bold ${Math.max(3, Math.round(h * 0.08))}px ${JP_FONT}`;
-  fillTextUnmirrored(ctx, "空車", x + w * 0.78, y + h * 0.415, w * 0.075);
+  drawLabelUnmirrored(ctx, {
+    text: "空車",
+    font: `bold ${Math.max(3, Math.round(h * 0.08))}px ${JP_FONT}`,
+    color: "#ffffff",
+    maxWidth: w * 0.075,
+  }, x + w * 0.78, y + h * 0.415);
 }
 
 // --- Samurai ---
@@ -201,7 +244,7 @@ export function drawSamurai(ctx: CanvasRenderingContext2D, x: number, y: number,
   fillPoly(ctx, [P(0.64, 0.26), P(0.84, 0.27), P(0.86, 0.42), P(0.66, 0.42)], armourDark);
   ctx.strokeStyle = lacing;
   ctx.lineWidth = 0.7;
-  for (const fy of [0.34, 0.42, 0.5, 0.58, 0.64]) {
+  for (const fy of SAMURAI_LACING_Y) {
     ctx.beginPath();
     ctx.moveTo(x + w * 0.22, y + h * fy);
     ctx.lineTo(x + w * 0.76, y + h * fy);
@@ -308,13 +351,23 @@ export function drawSushiRolls(ctx: CanvasRenderingContext2D, x: number, y: numb
 
 // --- Vending machine ---
 
+const VENDING_CANS = ["#d8344a", "#3a7ad8", "#f2c84a", "#2a2a2e", "#5ac27a", "#f2826a"];
+
 /** A glowing drinks vending machine: lit can display, buttons, coin slot and pickup bay. */
 export function drawVendingMachine(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const cans = ["#d8344a", "#3a7ad8", "#f2c84a", "#2a2a2e", "#5ac27a", "#f2826a"];
-
   ctx.save();
   glow(ctx, x + w * 0.5, y + h * 0.3, w * 1.4, "#cfe8ff", 0.28);
   contactShadow(ctx, x + w * 0.5, y + h, w * 0.6);
+  // The cabinet is ~70 small fills; its look never changes, so it is rasterised once
+  drawSprite(ctx, "vending", x, y, w, h, drawVendingCabinet);
+  ctx.restore();
+}
+
+/** The vending machine cabinet in local space (box at the origin). */
+function drawVendingCabinet(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const x = 0;
+  const y = 0;
+  const cans = VENDING_CANS;
 
   // Cabinet.
   fillRoundRect(ctx, x, y, w, h, 2, "#e8eef4");
@@ -351,8 +404,6 @@ export function drawVendingMachine(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.fillRect(x + w * 0.16, y + h * 0.78, w * 0.68, h * 0.12);
   ctx.fillStyle = "rgba(255,255,255,0.25)";
   ctx.fillRect(x + w * 0.16, y + h * 0.78, w * 0.68, 1);
-
-  ctx.restore();
 }
 
 // --- Sake barrels ---
@@ -362,12 +413,21 @@ const SAKE_INK = ["#c8102e", "#1e3a8a", "#1e1e24", "#c8102e"];
 
 /** Two rows of straw-wrapped sake barrels (komodaru) with painted brand marks; the top row is flat. */
 export function drawSakeBarrels(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  ctx.save();
+  contactShadow(ctx, x + w * 0.5, y + h, w * 0.52);
+  // Eight barrels with painted glyphs: the stack never changes, so it is rasterised once.
+  // The bellies bulge 0.5px past the box, hence the padding.
+  drawSprite(ctx, "sake", x, y, w, h, drawSakeStack, { pad: 1 });
+  ctx.restore();
+}
+
+/** The barrel stack in local space (box at the origin). */
+function drawSakeStack(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const x = 0;
+  const y = 0;
   const cols = 4;
   const bw = w / cols;
   const bh = h / 2;
-
-  ctx.save();
-  contactShadow(ctx, x + w * 0.5, y + h, w * 0.52);
   for (let r = 0; r < 2; r++) {
     for (let c = 0; c < cols; c++) {
       const bx = x + c * bw + 1;
@@ -398,7 +458,6 @@ export function drawSakeBarrels(ctx: CanvasRenderingContext2D, x: number, y: num
       ctx.fillText(SAKE_LABELS[i % SAKE_LABELS.length], bx + ww / 2, by + bh * 0.52);
     }
   }
-  ctx.restore();
 }
 
 // --- Delivery scooter ---
@@ -414,7 +473,7 @@ export function drawDeliveryScooter(ctx: CanvasRenderingContext2D, x: number, y:
   headlightBeam(ctx, x + w * 0.96, y + h * 0.5, 28, 1);
 
   // Wheels.
-  for (const fx of [0.2, 0.82]) {
+  for (const fx of SCOOTER_WHEEL_X) {
     ctx.fillStyle = "#1e1e22";
     ctx.beginPath();
     ctx.arc(x + w * fx, wy, wheelR, 0, Math.PI * 2);
@@ -427,11 +486,12 @@ export function drawDeliveryScooter(ctx: CanvasRenderingContext2D, x: number, y:
 
   // Delivery box on the rear rack.
   fillRoundRect(ctx, x + w * 0.02, y + h * 0.18, w * 0.32, h * 0.32, 2, "#d8282e");
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `bold ${Math.max(4, Math.round(h * 0.14))}px ${JP_FONT}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("出前", x + w * 0.18, y + h * 0.35, w * 0.28);
+  drawCachedText(ctx, {
+    text: "出前",
+    font: `bold ${Math.max(4, Math.round(h * 0.14))}px ${JP_FONT}`,
+    color: "#ffffff",
+    maxWidth: w * 0.28,
+  }, x + w * 0.18, y + h * 0.35);
   ctx.fillStyle = "#3a3a40";
   ctx.fillRect(x + w * 0.04, y + h * 0.5, w * 0.3, h * 0.04);
 
@@ -470,7 +530,7 @@ export function drawUmbrellaCyclist(ctx: CanvasRenderingContext2D, x: number, y:
   contactShadow(ctx, x + w * 0.5, y + h, w * 0.5);
 
   // Wheels (thin spokes).
-  for (const fx of [0.18, 0.8]) {
+  for (const fx of MAMACHARI_WHEEL_X) {
     ctx.strokeStyle = "#1e1e22";
     ctx.lineWidth = 1.6;
     ctx.beginPath();
@@ -494,7 +554,7 @@ export function drawUmbrellaCyclist(ctx: CanvasRenderingContext2D, x: number, y:
   fillPoly(ctx, [P(0.04, 0.5), P(0.24, 0.5), P(0.22, 0.64), P(0.06, 0.64)], "#9aa0a8");
   ctx.strokeStyle = "#6a7078";
   ctx.lineWidth = 0.5;
-  for (const fx of [0.09, 0.14, 0.19]) {
+  for (const fx of BASKET_WIRE_X) {
     ctx.beginPath();
     ctx.moveTo(x + w * fx, y + h * 0.51);
     ctx.lineTo(x + w * fx, y + h * 0.63);
@@ -526,7 +586,7 @@ export function drawUmbrellaCyclist(ctx: CanvasRenderingContext2D, x: number, y:
   ctx.strokeStyle = "rgba(255,255,255,0.8)";
   ctx.lineWidth = 0.8;
   ctx.stroke();
-  for (const fx of [0.32, 0.46, 0.74, 0.88]) {
+  for (const fx of UMBRELLA_RIB_X) {
     ctx.beginPath();
     ctx.moveTo(...P(0.6, 0.03));
     ctx.lineTo(...P(fx, 0.18));
@@ -567,7 +627,7 @@ export function drawKawaiiBarrier(ctx: CanvasRenderingContext2D, x: number, y: n
   ctx.restore();
 
   // Frog posts: base, body, round head with big eyes and a smile.
-  for (const fx of [0.13, 0.87]) {
+  for (const fx of FROG_POST_X) {
     const cx = x + w * fx;
     fillRoundRect(ctx, cx - w * 0.11, y + h * 0.9, w * 0.22, h * 0.1, 2, "#3a3a40");
     fillRoundRect(ctx, cx - w * 0.08, y + h * 0.4, w * 0.16, h * 0.52, 4, "#5ac24a");
@@ -579,7 +639,7 @@ export function drawKawaiiBarrier(ctx: CanvasRenderingContext2D, x: number, y: n
     ctx.beginPath();
     ctx.ellipse(cx, y + h * 0.28, w * 0.12, h * 0.17, 0, 0, Math.PI * 2);
     ctx.fill();
-    for (const ex of [-0.065, 0.065]) {
+    for (const ex of FROG_EYE_X) {
       ctx.fillStyle = "#5ac24a";
       ctx.beginPath();
       ctx.arc(cx + w * ex, y + h * 0.13, w * 0.05, 0, Math.PI * 2);
@@ -605,7 +665,7 @@ export function drawKawaiiBarrier(ctx: CanvasRenderingContext2D, x: number, y: n
     ctx.fill();
   }
   // Blinking warning lamp on one frog.
-  const on = Math.floor(performance.now() / 450) % 2 === 0;
+  const on = Math.floor(sceneTimeMs() / 450) % 2 === 0;
   ctx.fillStyle = on ? "#ff3a3a" : "#7a2020";
   ctx.beginPath();
   ctx.arc(...P(0.87, 0.02), 2, 0, Math.PI * 2);
@@ -643,24 +703,24 @@ export function drawManekiNeko(ctx: CanvasRenderingContext2D, x: number, y: numb
 
   // Koban coin in the other paw.
   fillRoundRect(ctx, x + w * 0.5, y + h * 0.62, w * 0.3, h * 0.26, 4, "#e8c040");
-  ctx.fillStyle = "#b08a20";
-  ctx.font = `bold ${Math.max(4, Math.round(h * 0.14))}px ${JP_FONT}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("福", x + w * 0.65, y + h * 0.75);
+  drawCachedText(ctx, {
+    text: "福",
+    font: `bold ${Math.max(4, Math.round(h * 0.14))}px ${JP_FONT}`,
+    color: "#b08a20",
+  }, x + w * 0.65, y + h * 0.75);
 
   // Head with ears, face and whiskers.
   ctx.fillStyle = white;
   ctx.beginPath();
   ctx.ellipse(...P(0.54, 0.3), w * 0.36, h * 0.22, 0, 0, Math.PI * 2);
   ctx.fill();
-  for (const ex of [0.3, 0.78]) {
+  for (const ex of NEKO_EAR_X) {
     fillPoly(ctx, [P(ex - 0.12, 0.2), P(ex, 0.02), P(ex + 0.12, 0.2)], white);
     fillPoly(ctx, [P(ex - 0.06, 0.18), P(ex, 0.08), P(ex + 0.06, 0.18)], "#f4a0a8");
   }
   ctx.strokeStyle = "#2a2a2e";
   ctx.lineWidth = 1;
-  for (const ex of [0.42, 0.66]) {
+  for (const ex of NEKO_EYE_X) {
     ctx.beginPath();
     ctx.arc(x + w * ex, y + h * 0.29, w * 0.05, Math.PI * 1.1, Math.PI * 1.9);
     ctx.stroke();
@@ -670,8 +730,8 @@ export function drawManekiNeko(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.arc(...P(0.54, 0.34), 1.1, 0, Math.PI * 2);
   ctx.fill();
   ctx.lineWidth = 0.5;
-  for (const [sx, dir] of [[0.32, -1], [0.76, 1]] as const) {
-    for (const dy of [-0.02, 0.02]) {
+  for (const [sx, dir] of NEKO_WHISKERS) {
+    for (const dy of NEKO_WHISKER_DY) {
       ctx.beginPath();
       ctx.moveTo(x + w * sx, y + h * (0.36 + dy));
       ctx.lineTo(x + w * (sx + 0.14 * dir), y + h * (0.35 + dy * 2));
@@ -703,8 +763,8 @@ export function drawRamenBowl(ctx: CanvasRenderingContext2D, x: number, y: numbe
   // Steam wisps.
   ctx.strokeStyle = "rgba(240,240,250,0.45)";
   ctx.lineWidth = 1.2;
-  const t = performance.now() / 600;
-  for (const fx of [0.32, 0.5, 0.68]) {
+  const t = sceneTimeMs() / 600;
+  for (const fx of STEAM_X) {
     ctx.beginPath();
     ctx.moveTo(x + w * fx, rimY - 2);
     ctx.bezierCurveTo(x + w * (fx + 0.06 * Math.sin(t + fx * 9)), rimY - h * 0.3, x + w * (fx - 0.06), rimY - h * 0.45, x + w * fx, rimY - h * 0.6);
@@ -742,7 +802,7 @@ export function drawRamenBowl(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.arc(...P(0.8, 0.33), w * 0.035, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#6ac24a";
-  for (const fx of [0.4, 0.45, 0.5]) ctx.fillRect(x + w * fx, rimY - 1, 2, 1.4);
+  for (const fx of ONION_X) ctx.fillRect(x + w * fx, rimY - 1, 2, 1.4);
 
   // Bowl: red with a white wave band, on a foot ring.
   ctx.fillStyle = "#c8282e";
@@ -822,7 +882,7 @@ export function drawShibaInu(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.fill();
 
   // Near legs with white socks.
-  for (const fx of [0.28, 0.72]) {
+  for (const fx of SHIBA_LEG_X) {
     strokeLine(ctx, [P(fx, 0.6), P(fx - 0.01, 0.97)], coat, 2.8);
     strokeLine(ctx, [P(fx - 0.01, 0.86), P(fx - 0.01, 0.97)], cream, 2.8);
   }

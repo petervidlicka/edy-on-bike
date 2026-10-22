@@ -1,0 +1,47 @@
+# Runs the same checks CLAUDE.md asks for before a commit (type check, lint, unit tests,
+# production build) plus the multiplayer Worker's type check, on every PR and on pushes
+# to the two long-lived branches. Vercel builds the app separately; this catches what
+# Vercel doesn't (lint, tests, the Worker).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web (tsc, lint, test, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm test
+      # No Upstash or multiplayer env: the build must not depend on them
+      - run: npm run build
+
+  worker:
+    name: Multiplayer Worker (tsc)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: party
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: party/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck

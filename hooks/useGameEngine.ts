@@ -9,6 +9,7 @@ import type { EngineOptions, PauseReason } from "@/game/Engine";
 import type { GameEvent } from "@/game/events";
 import { GameState } from "@/game/types";
 import { INITIAL_SPEED } from "@/game/constants";
+import { createEngineStats, type EngineStats } from "./engineStats";
 import { useStoredFlag } from "./useStoredFlag";
 
 /** A landed trick to flash in the HUD (single-player and multiplayer share the popup). */
@@ -37,8 +38,14 @@ export interface UseGameEngineOptions {
 export interface GameEngineHandle {
   /** The live Engine; null before mount and after unmount. */
   engineRef: React.RefObject<Engine | null>;
-  score: number;
-  speed: number;
+  /**
+   * Live score and speed. Not React state: read them with `useEngineScore` /
+   * `useEngineSpeed` in the component that shows them, so a score tick re-renders
+   * only that component.
+   */
+  stats: EngineStats;
+  /** The last finished run's score (React state: set once, at game over). */
+  finalScore: number;
   /** Last landed trick, cleared automatically after a short delay. */
   trickFeedback: TrickFeedbackData | null;
   musicMuted: boolean;
@@ -49,14 +56,15 @@ export interface GameEngineHandle {
 
 /**
  * Creates an Engine on the canvas at mount and destroys it on unmount, keeping
- * score, speed, trick feedback and the (persisted) mute state in React. The Engine is created
+ * trick feedback, the final score and the (persisted) mute state in React and the
+ * per-tick score/speed in an external store. The Engine is created
  * exactly once; options are read at mount and callbacks always see the latest
  * options, so callers don't need to memoise them.
  * @param canvasRef - Canvas the Engine draws into.
  * @param options - Screen-specific callbacks and Engine options.
  * @returns The engine ref plus HUD state and mute toggles.
  * @example
- * const { engineRef, score, speed } = useGameEngine(canvasRef, {
+ * const { engineRef, stats, finalScore } = useGameEngine(canvasRef, {
  *   onGameOver: () => setGameState(GameState.GAME_OVER),
  * });
  */
@@ -65,8 +73,9 @@ export function useGameEngine(
   options: UseGameEngineOptions = {},
 ): GameEngineHandle {
   const engineRef = useRef<Engine | null>(null);
-  const [score, setScore] = useState(0);
-  const [speed, setSpeed] = useState(INITIAL_SPEED);
+  // One store per hook instance, so two mounted engines (backdrop + race) never share numbers
+  const [stats] = useState(createEngineStats);
+  const [finalScore, setFinalScore] = useState(0);
   // Persisted; the saved value arrives right after hydration and the effects below push it to the engine
   const [musicMuted, toggleMusic] = useStoredFlag("edy-music-muted", false);
   const [sfxMuted, toggleSfx] = useStoredFlag("edy-sfx-muted", false);
@@ -87,16 +96,17 @@ export function useGameEngine(
     const engine = new Engine(
       canvas,
       {
-        onScoreUpdate: setScore,
-        onSpeedUpdate: setSpeed,
-        onGameOver: (finalScore) => {
-          setScore(finalScore);
-          optionsRef.current.onGameOver?.(finalScore, engine);
+        onScoreUpdate: stats.setScore,
+        onSpeedUpdate: stats.setSpeed,
+        onGameOver: (score) => {
+          stats.setScore(score);
+          setFinalScore(score);
+          optionsRef.current.onGameOver?.(score, engine);
         },
         onStateChange: (state) => {
           // A fresh run starts at the base speed; a revive (back to RUNNING) keeps its own,
           // which the engine has already reported through onSpeedUpdate
-          if (state === GameState.IDLE) setSpeed(INITIAL_SPEED);
+          if (state === GameState.IDLE) stats.setSpeed(INITIAL_SPEED);
           optionsRef.current.onStateChange?.(state);
         },
         onPauseChange: (paused, reasons) => optionsRef.current.onPauseChange?.(paused, reasons),
@@ -121,7 +131,7 @@ export function useGameEngine(
       window.removeEventListener("resize", handleResize);
       if (trickTimeout) clearTimeout(trickTimeout);
     };
-  }, [canvasRef]);
+  }, [canvasRef, stats]);
 
   useEffect(() => {
     engineRef.current?.setMusicMuted(musicMuted);
@@ -131,5 +141,5 @@ export function useGameEngine(
     engineRef.current?.setSfxMuted(sfxMuted);
   }, [sfxMuted]);
 
-  return { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx };
+  return { engineRef, stats, finalScore, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx };
 }

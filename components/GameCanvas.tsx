@@ -56,14 +56,13 @@ export function GameCanvas() {
 
   // Leaderboard ticket for the current run (see startRun); null when the run can't be ranked
   const [runTicket, setRunTicket] = useState<Promise<string | null> | null>(null);
-  /** IDDQD was typed since the last restart: the guaranteed revive makes the run unranked. */
-  const [cheated, setCheated] = useState(false);
 
   const onGameEvent = useCallback((event: GameEvent) => {
     hapticsOnGameEvent(event);
-    // Debug courses and cheat runs still play, they just never reach the public board
-    if (event.type === "runStart") setRunTicket(cheated || debugObstacles ? null : startRun());
-  }, [hapticsOnGameEvent, cheated, debugObstacles]);
+    // Debug courses and cheat runs still play, they just never reach the public board.
+    // The engine decides: it also owns the restart paths (pause menu included) that clear a cheat.
+    if (event.type === "runStart") setRunTicket(event.ranked ? startRun() : null);
+  }, [hapticsOnGameEvent]);
 
   const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
     useGameEngine(canvasRef, {
@@ -101,13 +100,11 @@ export function GameCanvas() {
   const handleRestart = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
-    setCheated(false);
     engine.restart();
     engine.start();
   }, [engineRef]);
 
   const handleHome = useCallback(() => {
-    setCheated(false);
     engineRef.current?.restart();
   }, [engineRef]);
 
@@ -116,10 +113,10 @@ export function GameCanvas() {
   // IDKFA cheat code — unlock all skins
   useCheatCode("IDKFA", unlockAllSkins);
 
-  // IDDQD cheat code — guaranteed ambulance resurrection
+  // IDDQD cheat code — guaranteed ambulance resurrection. Typed mid-run it unranks the current
+  // run here; typed before a run, the engine reports the next run as unranked itself.
   const handleIddqd = useCallback(() => {
     engineRef.current?.activateIddqd();
-    setCheated(true);
     setRunTicket(null);
   }, [engineRef]);
   useCheatCode("IDDQD", handleIddqd);

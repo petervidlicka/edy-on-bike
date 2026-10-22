@@ -431,8 +431,8 @@ export class Engine {
       }
     }
 
-    // Multiplayer: send local state snapshot
-    if (this.multiplayer) {
+    // Multiplayer: snapshots go out at ~15 Hz, so don't build one on the frames that won't send
+    if (this.multiplayer?.shouldSend(performance.now())) {
       this.multiplayer.sendLocalState(this.buildSnapshot());
     }
   }

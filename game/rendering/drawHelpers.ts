@@ -15,8 +15,8 @@ export function boxMapper(x: number, y: number, w: number, h: number): (fx: numb
 export function fillPoly(ctx: CanvasRenderingContext2D, pts: Pt[], color: string) {
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(...pts[0]);
-  for (const p of pts.slice(1)) ctx.lineTo(...p);
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
   ctx.closePath();
   ctx.fill();
 }
@@ -139,8 +139,8 @@ export function strokeLine(ctx: CanvasRenderingContext2D, pts: Pt[], color: stri
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.beginPath();
-  ctx.moveTo(...pts[0]);
-  for (const p of pts.slice(1)) ctx.lineTo(...p);
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
   ctx.stroke();
 }
 

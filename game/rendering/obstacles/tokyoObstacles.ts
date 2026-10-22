@@ -11,6 +11,37 @@ import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, glow, dr
 import { TOKYO_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 import { sceneTimeMs } from "../sceneClock";
 
+/** x fractions of the Kei truck's bed-gate hinges. */
+const KEI_TRUCK_HINGE_X = [0.14, 0.3, 0.46];
+/** y fractions of the samurai's armour lacing rows. */
+const SAMURAI_LACING_Y = [0.34, 0.42, 0.5, 0.58, 0.64];
+/** x fractions of the delivery scooter's wheels. */
+const SCOOTER_WHEEL_X = [0.2, 0.82];
+/** x fractions of the mamachari's wheels. */
+const MAMACHARI_WHEEL_X = [0.18, 0.8];
+/** x fractions of the front basket's wires. */
+const BASKET_WIRE_X = [0.09, 0.14, 0.19];
+/** x fractions where the umbrella ribs meet the rim. */
+const UMBRELLA_RIB_X = [0.32, 0.46, 0.74, 0.88];
+/** x fractions of the two frog posts. */
+const FROG_POST_X = [0.13, 0.87];
+/** x offsets (fractions) of a frog's eyes from its centre. */
+const FROG_EYE_X = [-0.065, 0.065];
+/** x fractions of the cat's ears. */
+const NEKO_EAR_X = [0.3, 0.78];
+/** x fractions of the cat's eyes. */
+const NEKO_EYE_X = [0.42, 0.66];
+/** Whisker roots as [x fraction, direction]. */
+const NEKO_WHISKERS = [[0.32, -1], [0.76, 1]] as const;
+/** y offsets (fractions) of the two whiskers on each side. */
+const NEKO_WHISKER_DY = [-0.02, 0.02];
+/** x fractions of the ramen's steam wisps. */
+const STEAM_X = [0.32, 0.5, 0.68];
+/** x fractions of the spring-onion slices. */
+const ONION_X = [0.4, 0.45, 0.5];
+/** x fractions of the shiba's near legs. */
+const SHIBA_LEG_X = [0.28, 0.72];
+
 /** Japanese-capable font stack for the little signs and labels. */
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
@@ -121,7 +152,7 @@ export function drawKeiTruck(ctx: CanvasRenderingContext2D, x: number, y: number
   });
   // Bed side gate hinges, mirror, yellow plate.
   ctx.fillStyle = "#a8a8a4";
-  for (const fx of [0.14, 0.3, 0.46]) ctx.fillRect(x + w * fx, y + h * 0.54, 1, h * 0.2);
+  for (const fx of KEI_TRUCK_HINGE_X) ctx.fillRect(x + w * fx, y + h * 0.54, 1, h * 0.2);
   fillPoly(ctx, [P(0.97, 0.18), P(1.03, 0.16), P(1.03, 0.26), P(0.98, 0.26)], "#2a2a2e");
   ctx.fillStyle = "#f2d23a";
   ctx.fillRect(x + w * 0.005, y + h * 0.66, w * 0.05, h * 0.09);
@@ -213,7 +244,7 @@ export function drawSamurai(ctx: CanvasRenderingContext2D, x: number, y: number,
   fillPoly(ctx, [P(0.64, 0.26), P(0.84, 0.27), P(0.86, 0.42), P(0.66, 0.42)], armourDark);
   ctx.strokeStyle = lacing;
   ctx.lineWidth = 0.7;
-  for (const fy of [0.34, 0.42, 0.5, 0.58, 0.64]) {
+  for (const fy of SAMURAI_LACING_Y) {
     ctx.beginPath();
     ctx.moveTo(x + w * 0.22, y + h * fy);
     ctx.lineTo(x + w * 0.76, y + h * fy);
@@ -442,7 +473,7 @@ export function drawDeliveryScooter(ctx: CanvasRenderingContext2D, x: number, y:
   headlightBeam(ctx, x + w * 0.96, y + h * 0.5, 28, 1);
 
   // Wheels.
-  for (const fx of [0.2, 0.82]) {
+  for (const fx of SCOOTER_WHEEL_X) {
     ctx.fillStyle = "#1e1e22";
     ctx.beginPath();
     ctx.arc(x + w * fx, wy, wheelR, 0, Math.PI * 2);
@@ -499,7 +530,7 @@ export function drawUmbrellaCyclist(ctx: CanvasRenderingContext2D, x: number, y:
   contactShadow(ctx, x + w * 0.5, y + h, w * 0.5);
 
   // Wheels (thin spokes).
-  for (const fx of [0.18, 0.8]) {
+  for (const fx of MAMACHARI_WHEEL_X) {
     ctx.strokeStyle = "#1e1e22";
     ctx.lineWidth = 1.6;
     ctx.beginPath();
@@ -523,7 +554,7 @@ export function drawUmbrellaCyclist(ctx: CanvasRenderingContext2D, x: number, y:
   fillPoly(ctx, [P(0.04, 0.5), P(0.24, 0.5), P(0.22, 0.64), P(0.06, 0.64)], "#9aa0a8");
   ctx.strokeStyle = "#6a7078";
   ctx.lineWidth = 0.5;
-  for (const fx of [0.09, 0.14, 0.19]) {
+  for (const fx of BASKET_WIRE_X) {
     ctx.beginPath();
     ctx.moveTo(x + w * fx, y + h * 0.51);
     ctx.lineTo(x + w * fx, y + h * 0.63);
@@ -555,7 +586,7 @@ export function drawUmbrellaCyclist(ctx: CanvasRenderingContext2D, x: number, y:
   ctx.strokeStyle = "rgba(255,255,255,0.8)";
   ctx.lineWidth = 0.8;
   ctx.stroke();
-  for (const fx of [0.32, 0.46, 0.74, 0.88]) {
+  for (const fx of UMBRELLA_RIB_X) {
     ctx.beginPath();
     ctx.moveTo(...P(0.6, 0.03));
     ctx.lineTo(...P(fx, 0.18));
@@ -596,7 +627,7 @@ export function drawKawaiiBarrier(ctx: CanvasRenderingContext2D, x: number, y: n
   ctx.restore();
 
   // Frog posts: base, body, round head with big eyes and a smile.
-  for (const fx of [0.13, 0.87]) {
+  for (const fx of FROG_POST_X) {
     const cx = x + w * fx;
     fillRoundRect(ctx, cx - w * 0.11, y + h * 0.9, w * 0.22, h * 0.1, 2, "#3a3a40");
     fillRoundRect(ctx, cx - w * 0.08, y + h * 0.4, w * 0.16, h * 0.52, 4, "#5ac24a");
@@ -608,7 +639,7 @@ export function drawKawaiiBarrier(ctx: CanvasRenderingContext2D, x: number, y: n
     ctx.beginPath();
     ctx.ellipse(cx, y + h * 0.28, w * 0.12, h * 0.17, 0, 0, Math.PI * 2);
     ctx.fill();
-    for (const ex of [-0.065, 0.065]) {
+    for (const ex of FROG_EYE_X) {
       ctx.fillStyle = "#5ac24a";
       ctx.beginPath();
       ctx.arc(cx + w * ex, y + h * 0.13, w * 0.05, 0, Math.PI * 2);
@@ -683,13 +714,13 @@ export function drawManekiNeko(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.beginPath();
   ctx.ellipse(...P(0.54, 0.3), w * 0.36, h * 0.22, 0, 0, Math.PI * 2);
   ctx.fill();
-  for (const ex of [0.3, 0.78]) {
+  for (const ex of NEKO_EAR_X) {
     fillPoly(ctx, [P(ex - 0.12, 0.2), P(ex, 0.02), P(ex + 0.12, 0.2)], white);
     fillPoly(ctx, [P(ex - 0.06, 0.18), P(ex, 0.08), P(ex + 0.06, 0.18)], "#f4a0a8");
   }
   ctx.strokeStyle = "#2a2a2e";
   ctx.lineWidth = 1;
-  for (const ex of [0.42, 0.66]) {
+  for (const ex of NEKO_EYE_X) {
     ctx.beginPath();
     ctx.arc(x + w * ex, y + h * 0.29, w * 0.05, Math.PI * 1.1, Math.PI * 1.9);
     ctx.stroke();
@@ -699,8 +730,8 @@ export function drawManekiNeko(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.arc(...P(0.54, 0.34), 1.1, 0, Math.PI * 2);
   ctx.fill();
   ctx.lineWidth = 0.5;
-  for (const [sx, dir] of [[0.32, -1], [0.76, 1]] as const) {
-    for (const dy of [-0.02, 0.02]) {
+  for (const [sx, dir] of NEKO_WHISKERS) {
+    for (const dy of NEKO_WHISKER_DY) {
       ctx.beginPath();
       ctx.moveTo(x + w * sx, y + h * (0.36 + dy));
       ctx.lineTo(x + w * (sx + 0.14 * dir), y + h * (0.35 + dy * 2));
@@ -733,7 +764,7 @@ export function drawRamenBowl(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.strokeStyle = "rgba(240,240,250,0.45)";
   ctx.lineWidth = 1.2;
   const t = sceneTimeMs() / 600;
-  for (const fx of [0.32, 0.5, 0.68]) {
+  for (const fx of STEAM_X) {
     ctx.beginPath();
     ctx.moveTo(x + w * fx, rimY - 2);
     ctx.bezierCurveTo(x + w * (fx + 0.06 * Math.sin(t + fx * 9)), rimY - h * 0.3, x + w * (fx - 0.06), rimY - h * 0.45, x + w * fx, rimY - h * 0.6);
@@ -771,7 +802,7 @@ export function drawRamenBowl(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.arc(...P(0.8, 0.33), w * 0.035, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#6ac24a";
-  for (const fx of [0.4, 0.45, 0.5]) ctx.fillRect(x + w * fx, rimY - 1, 2, 1.4);
+  for (const fx of ONION_X) ctx.fillRect(x + w * fx, rimY - 1, 2, 1.4);
 
   // Bowl: red with a white wave band, on a foot ring.
   ctx.fillStyle = "#c8282e";
@@ -851,7 +882,7 @@ export function drawShibaInu(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.fill();
 
   // Near legs with white socks.
-  for (const fx of [0.28, 0.72]) {
+  for (const fx of SHIBA_LEG_X) {
     strokeLine(ctx, [P(fx, 0.6), P(fx - 0.01, 0.97)], coat, 2.8);
     strokeLine(ctx, [P(fx - 0.01, 0.86), P(fx - 0.01, 0.97)], cream, 2.8);
   }

@@ -6,6 +6,9 @@ import { decodePedestrianVariant, SKIN_TONES, HAIR_COLORS } from "../../environm
 import { cachedGradient, fillTransformed } from "../drawHelpers";
 import { setSceneTimeMs } from "../sceneClock";
 
+/** x fractions of a walking figure's two shoes. */
+const SHOE_X = [-0.26, 0.22];
+
 // --- Sky ---
 
 function drawSky(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, palette: EnvironmentPalette) {
@@ -77,6 +80,9 @@ export interface FadingCloudLayer {
 /** Shared empty pass list, so a scene without skylines allocates nothing per frame. */
 const NO_PASSES: readonly SkylinePass[] = [];
 
+/** A wrapping layer is checked at its natural position and one layer-width either side. */
+const WRAP_SIGNS = [0, 1, -1];
+
 /** Everything drawBackground needs for one frame of scenery. */
 export interface BackgroundScene {
   /** [clouds, buildings, road] — see createBackgroundLayers. */
@@ -133,10 +139,9 @@ export function drawBackground(ctx: CanvasRenderingContext2D, scene: BackgroundS
   const buildingWidth = getTotalLayerWidth(buildingLayer, canvasW);
   const buildingNorm = buildingLayer.offset % buildingWidth;
   // Each element is checked at its natural scroll position and both wrapped copies
-  const buildingShifts = [0, buildingWidth, -buildingWidth];
   for (const el of buildingLayer.elements) {
-    for (const shift of buildingShifts) {
-      const drawX = el.x - buildingNorm + shift;
+    for (const sign of WRAP_SIGNS) {
+      const drawX = el.x - buildingNorm + sign * buildingWidth;
       if (drawX + el.width < view.left || drawX > view.right) continue;
       const drawFn = drawers[el.type];
       if (drawFn) {
@@ -173,12 +178,11 @@ function drawCloudLayer(
   if (alpha <= 0) return;
   const width = getTotalLayerWidth(layer, canvasW);
   const norm = layer.offset % width;
-  const shifts = [0, width, -width];
   ctx.save();
   ctx.globalAlpha = alpha;
   for (const el of layer.elements) {
-    for (const shift of shifts) {
-      const drawX = el.x - norm + shift;
+    for (const sign of WRAP_SIGNS) {
+      const drawX = el.x - norm + sign * width;
       if (drawX + el.width < view.left || drawX > view.right) continue;
       drawCloud(ctx, drawX, el.y, el.width, el.height, color);
     }
@@ -245,7 +249,7 @@ export function drawWalkingPerson(
 
   // Shoes.
   ctx.fillStyle = "#2a2a2a";
-  for (const fx of [-0.26, 0.22]) {
+  for (const fx of SHOE_X) {
     ctx.beginPath();
     ctx.ellipse(cx + w * fx + 1, footY - 0.6, limb * 0.75, limb * 0.4, 0, 0, Math.PI * 2);
     ctx.fill();

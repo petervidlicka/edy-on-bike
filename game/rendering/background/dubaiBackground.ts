@@ -326,36 +326,39 @@ function drawSteppedSkyscraper(
   wallColor: string, roofColor: string, palette: EnvironmentPalette
 ) {
   // 3 tiers — each narrower
-  const tiers = [
-    { top: y + h * 0.6, bottom: y + h, widthRatio: 1.0 },
-    { top: y + h * 0.25, bottom: y + h * 0.6, widthRatio: 0.72 },
-    { top: y, bottom: y + h * 0.25, widthRatio: 0.45 },
-  ];
-  for (const tier of tiers) {
+  for (const tier of STEPPED_TIERS) {
     const tw = w * tier.widthRatio;
     const tx = x + (w - tw) / 2;
-    const th = tier.bottom - tier.top;
+    const top = y + h * tier.top;
+    const th = h * (tier.bottom - tier.top);
     ctx.fillStyle = wallColor;
-    ctx.fillRect(tx, tier.top, tw, th);
+    ctx.fillRect(tx, top, tw, th);
     // Window grid per tier
     const cols = Math.max(2, Math.floor(tw / 9));
     const rows = Math.max(2, Math.floor(th / 12));
     const winW = (tw - 4) / cols - 2;
     const winH = (th - 4) / rows - 2;
-    fillWindowGrid(ctx, tx + 2, tier.top + 3, cols, rows, winW + 2, winH + 2, winW, winH, palette.windowGlass);
+    fillWindowGrid(ctx, tx + 2, top + 3, cols, rows, winW + 2, winH + 2, winW, winH, palette.windowGlass);
     // Ledge at tier boundary
     ctx.fillStyle = roofColor;
-    ctx.fillRect(tx, tier.top, tw, 2);
+    ctx.fillRect(tx, top, tw, 2);
   }
   // Outline
   ctx.strokeStyle = roofColor;
   ctx.lineWidth = 0.6;
-  for (const tier of tiers) {
+  for (const tier of STEPPED_TIERS) {
     const tw = w * tier.widthRatio;
     const tx = x + (w - tw) / 2;
-    ctx.strokeRect(tx, tier.top, tw, tier.bottom - tier.top);
+    ctx.strokeRect(tx, y + h * tier.top, tw, h * (tier.bottom - tier.top));
   }
 }
+
+/** The stepped tower's tiers, bottom up, as fractions of the element box. */
+const STEPPED_TIERS = [
+  { top: 0.6, bottom: 1, widthRatio: 1.0 },
+  { top: 0.25, bottom: 0.6, widthRatio: 0.72 },
+  { top: 0, bottom: 0.25, widthRatio: 0.45 },
+];
 
 // Variant 2: Dome-topped tower — rectangular body with rounded dome cap
 function drawDomeTopTower(

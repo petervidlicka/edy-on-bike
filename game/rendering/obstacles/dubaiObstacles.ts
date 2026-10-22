@@ -3,6 +3,17 @@ import { drawVehicle, type VehicleShape } from "../vehicle";
 import { DUBAI_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 import { boxMapper, contactShadow, drawSprite, drawCachedText } from "../drawHelpers";
 
+/** x fractions of the Land Cruiser's roof-rack bars. */
+const CRUISER_RACK_X = [0.13, 0.33, 0.51];
+/** x fractions of the G-Class door hinges. */
+const G_CLASS_HINGE_X = [0.13, 0.32, 0.5];
+/** y fractions of the Ferrari's twin tail lamps. */
+const FERRARI_LAMP_Y = [0.33, 0.43];
+/** x fractions of the convertible's seat backs. */
+const CONVERTIBLE_SEAT_X = [0.33, 0.45];
+/** x fractions of the Porsche's front-wing louvres. */
+const PORSCHE_LOUVRE_X = [0.75, 0.765, 0.78];
+
 // --- Dubai biome obstacle draw functions ---
 
 /** Dromedary in profile, facing right: long legs, one hump, neck dipping then rising to the head. */
@@ -195,7 +206,7 @@ export function drawLandCruiser(ctx: CanvasRenderingContext2D, x: number, y: num
   for (let i = 0; i < 3; i++) ctx.fillRect(x + w * 0.97, y + h * (0.53 + i * 0.05), w * 0.03, 0.9);
   ctx.fillStyle = "#555555";
   ctx.fillRect(x + w * 0.1, y + h * 0.01, w * 0.44, 1.4);
-  for (const fx of [0.13, 0.33, 0.51]) ctx.fillRect(x + w * fx, y + h * 0.01, 1.2, h * 0.04);
+  for (const fx of CRUISER_RACK_X) ctx.fillRect(x + w * fx, y + h * 0.01, 1.2, h * 0.04);
   // Side step.
   ctx.fillStyle = "#3f3f3f";
   ctx.fillRect(x + w * 0.3, y + h * 0.8, w * 0.38, 1.6);
@@ -244,7 +255,7 @@ export function drawPinkGClass(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.fillStyle = "#f0a040";
   ctx.fillRect(x + w * 0.9, y + h * 0.37, w * 0.04, h * 0.035);
   ctx.fillStyle = pinkDark;
-  for (const fx of [0.13, 0.32, 0.5]) {
+  for (const fx of G_CLASS_HINGE_X) {
     ctx.fillRect(x + w * fx, y + h * 0.44, 1.3, 2);
     ctx.fillRect(x + w * fx, y + h * 0.62, 1.3, 2);
   }
@@ -752,7 +763,7 @@ export function drawFerrari458(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.save();
   // Round twin tail lamps on the rear face.
   ctx.fillStyle = c.carTaillight;
-  for (const fy of [0.33, 0.43]) {
+  for (const fy of FERRARI_LAMP_Y) {
     ctx.beginPath();
     ctx.arc(...P(0.012, fy), h * 0.045, 0, Math.PI * 2);
     ctx.fill();
@@ -816,7 +827,7 @@ export function drawConvertible(ctx: CanvasRenderingContext2D, x: number, y: num
   // Seat backs sit in the cockpit, behind the body side.
   ctx.save();
   ctx.fillStyle = "#b07a4a";
-  for (const fx of [0.33, 0.45]) {
+  for (const fx of CONVERTIBLE_SEAT_X) {
     ctx.beginPath();
     ctx.ellipse(...P(fx, 0.34), w * 0.035, h * 0.13, -0.15, 0, Math.PI * 2);
     ctx.fill();
@@ -979,7 +990,7 @@ export function drawPorsche911(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.strokeStyle = "#151a1d";
   ctx.lineWidth = 0.7;
   ctx.beginPath();
-  for (const fx of [0.75, 0.765, 0.78]) {
+  for (const fx of PORSCHE_LOUVRE_X) {
     ctx.moveTo(...P(fx, 0.36));
     ctx.lineTo(...P(fx + 0.008, 0.4));
   }

@@ -9,6 +9,17 @@ import type { EnvironmentPalette } from "../../environments/types";
 import { boxMapper, fillPoly, fillRoundRect, contactShadow, strokeLine, drawSprite, drawCachedText, cachedGradient, fillTransformed, type Pt } from "../drawHelpers";
 import { AUSTRIA_OBSTACLE_COLORS } from "../../environments/obstacleColors";
 
+/** y fractions of the snowman's coal buttons. */
+const SNOWMAN_BUTTON_Y = [0.45, 0.53, 0.68];
+/** x fractions of the snowman's eyes. */
+const SNOWMAN_EYE_X = [0.46, 0.6];
+/** x fractions of the snow cat's roof-rack posts. */
+const SNOWCAT_POST_X = [0.14, 0.56, 0.76, 0.95];
+/** Snow spray behind the racer as [x fraction, y fraction, radius]. */
+const RACER_SPRAY = [[0.96, 0.86, 2.4], [1.04, 0.8, 1.8], [1.1, 0.74, 1.2], [1.0, 0.72, 1.4]] as const;
+/** Snow plume behind the snowmobile as [x fraction, y fraction, radius]. */
+const SCOOTER_PLUME = [[1.0, 0.86, 3], [1.08, 0.78, 2.4], [1.14, 0.7, 1.6]] as const;
+
 // --- Snowman ---
 
 /** Three-ball snowman with a black hat, carrot nose, red scarf and twig arms. */
@@ -52,12 +63,12 @@ export function drawSnowman(ctx: CanvasRenderingContext2D, x: number, y: number,
 
   // Coal buttons and eyes.
   ctx.fillStyle = "#2a2a2e";
-  for (const fy of [0.45, 0.53, 0.68]) {
+  for (const fy of SNOWMAN_BUTTON_Y) {
     ctx.beginPath();
     ctx.arc(x + w * 0.52, y + h * fy, 1.1, 0, Math.PI * 2);
     ctx.fill();
   }
-  for (const fx of [0.46, 0.6]) {
+  for (const fx of SNOWMAN_EYE_X) {
     ctx.beginPath();
     ctx.arc(x + w * fx, y + h * 0.21, 0.9, 0, Math.PI * 2);
     ctx.fill();
@@ -349,7 +360,7 @@ export function drawSnowCat(ctx: CanvasRenderingContext2D, x: number, y: number,
   // Roof rack the full length, on posts down to the cab and deck, with amber beacons.
   ctx.fillStyle = "#3a3e44";
   ctx.fillRect(x + w * 0.06, y, w * 0.92, h * 0.05);
-  for (const fx of [0.14, 0.56, 0.76, 0.95]) {
+  for (const fx of SNOWCAT_POST_X) {
     const postTop = y + h * 0.05;
     const postBottom = fx <= 0.56 ? y + h * 0.06 : y + h * (0.32 + (fx - 0.58) * 0.12);
     ctx.fillRect(x + w * fx - 1, postTop, 2, Math.max(1, postBottom - postTop));
@@ -558,7 +569,7 @@ export function drawRaceSkier(ctx: CanvasRenderingContext2D, x: number, y: numbe
 
   // Snow spray kicked up behind the skis, and speed streaks.
   ctx.fillStyle = "rgba(255,255,255,0.8)";
-  for (const [fx, fy, r] of [[0.96, 0.86, 2.4], [1.04, 0.8, 1.8], [1.1, 0.74, 1.2], [1.0, 0.72, 1.4]] as const) {
+  for (const [fx, fy, r] of RACER_SPRAY) {
     ctx.beginPath();
     ctx.arc(...P(fx, fy), r, 0, Math.PI * 2);
     ctx.fill();
@@ -692,7 +703,7 @@ export function drawSnowScooter(ctx: CanvasRenderingContext2D, x: number, y: num
 
   // Snow plume thrown out behind the track.
   ctx.fillStyle = "rgba(255,255,255,0.85)";
-  for (const [fx, fy, r] of [[1.0, 0.86, 3], [1.08, 0.78, 2.4], [1.14, 0.7, 1.6]] as const) {
+  for (const [fx, fy, r] of SCOOTER_PLUME) {
     ctx.beginPath();
     ctx.arc(...P(fx, fy), r, 0, Math.PI * 2);
     ctx.fill();

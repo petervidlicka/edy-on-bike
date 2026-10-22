@@ -383,8 +383,8 @@ export function drawDeer(
     ctx.strokeStyle = c;
     ctx.lineWidth = lw;
     ctx.beginPath();
-    ctx.moveTo(...pts[0]);
-    for (const p of pts.slice(1)) ctx.lineTo(...p);
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.stroke();
     const foot = pts[pts.length - 1];
     ctx.fillStyle = "#3a2e24";

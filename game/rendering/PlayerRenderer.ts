@@ -1,6 +1,9 @@
 import { PlayerState, TrickType, SkinDefinition, HelmetStyle, BikeStyle } from "../types";
 import type { RiderGear } from "../environments/types";
 
+/** Hachimaki knot tails as [flap phase, length, y offset]. */
+const HACHIMAKI_TAILS = [[0, 9, -0.6], [1.7, 7, 1.2]] as const;
+
 // --- Player (BMX bike + stick-figure rider with helmet) ---
 // The bike rotates around the bottom bracket during a bunnyhop (bikeTilt).
 // The rider moves independently: leans back → stands up → tucks legs.
@@ -512,7 +515,7 @@ function drawHachimaki(ctx: CanvasRenderingContext2D, headX: number, headY: numb
   const bandY = headY - 2.6;
   // Tails from the knot at the back of the head.
   ctx.fillStyle = "#f4f4f6";
-  for (const [phase, len, dy] of [[0, 9, -0.6], [1.7, 7, 1.2]] as const) {
+  for (const [phase, len, dy] of HACHIMAKI_TAILS) {
     const w1 = Math.sin(flap * 2.6 + phase) * 1.8;
     ctx.beginPath();
     ctx.moveTo(headX - 6, bandY + dy);

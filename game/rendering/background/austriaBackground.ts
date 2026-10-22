@@ -10,6 +10,15 @@ import { drawRedDeer } from "../redDeer";
 import { hash01, drawCachedText, drawFlagPole, fillFlagBand } from "../drawHelpers";
 import { sceneTimeMs } from "../sceneClock";
 
+/** x fractions of the church nave's windows. */
+const NAVE_WINDOW_X = [0.5, 0.66, 0.82];
+/** How far down the landing hill each distance line sits (0–1). */
+const LANDING_LINE_F = [0.35, 0.55, 0.75];
+/** How far along the inrun each strut stands (0–1). */
+const INRUN_STRUT_F = [0.15, 0.35, 0.55, 0.75];
+/** x fractions of the beer glasses on the bar counter. */
+const GLASS_X = [0.2, 0.3, 0.7];
+
 const SNOW = "#f6f9fc";
 const SNOW_SHADE = "#d4e0ec";
 /** Lettering on the chalet name boards and the bar sign. */
@@ -50,64 +59,78 @@ function drawRidge(ctx: CanvasRenderingContext2D, view: ViewBounds, baseY: numbe
   const capLine = groundY * spec.capLine;
   const first = Math.floor((offset + view.left) / spacing) - 1;
   const last = Math.ceil((offset + view.right) / spacing) + 1;
-  const peaks: Array<[number, number]> = [];
+  // Peaks go into the module-level scratch arrays (reused every frame, no allocation)
+  const n = last - first + 1;
+  peakX.length = n;
+  peakY.length = n;
   for (let i = first; i <= last; i++) {
     // Alternate summits and saddles; nudge x so peaks don't sit on a grid
     const isSummit = i % 2 === 0;
     const r = hash01(i + seed, 1);
     const ph = isSummit ? minH + r * (maxH - minH) : minH * 0.45 + r * minH * 0.4;
-    const px = i * spacing - offset + (hash01(i * 3.7 + seed, 1) - 0.5) * spacing * 0.5;
-    peaks.push([px, baseY - ph]);
+    peakX[i - first] = i * spacing - offset + (hash01(i * 3.7 + seed, 1) - 0.5) * spacing * 0.5;
+    peakY[i - first] = baseY - ph;
   }
 
   // Rock body.
   ctx.fillStyle = rock;
   ctx.beginPath();
-  ctx.moveTo(peaks[0][0], baseY);
-  for (const p of peaks) ctx.lineTo(...p);
-  ctx.lineTo(peaks[peaks.length - 1][0], baseY);
+  ctx.moveTo(peakX[0], baseY);
+  for (let i = 0; i < n; i++) ctx.lineTo(peakX[i], peakY[i]);
+  ctx.lineTo(peakX[n - 1], baseY);
   ctx.closePath();
   ctx.fill();
 
   // Shaded left faces give the ridge some volume.
   ctx.fillStyle = "rgba(30,50,80,0.14)";
-  for (let i = 1; i < peaks.length - 1; i++) {
-    const [px, py] = peaks[i];
-    if (py > peaks[i - 1][1]) continue; // only summits
+  for (let i = 1; i < n - 1; i++) {
+    const px = peakX[i];
+    const py = peakY[i];
+    if (py > peakY[i - 1]) continue; // only summits
     ctx.beginPath();
     ctx.moveTo(px, py);
-    ctx.lineTo(peaks[i - 1][0], peaks[i - 1][1]);
-    ctx.lineTo(px - (px - peaks[i - 1][0]) * 0.2, baseY);
+    ctx.lineTo(peakX[i - 1], peakY[i - 1]);
+    ctx.lineTo(px - (px - peakX[i - 1]) * 0.2, baseY);
     ctx.closePath();
     ctx.fill();
   }
 
   // Snowcaps: summits above the cap line get a jagged white cap.
-  for (let i = 1; i < peaks.length - 1; i++) {
-    const [px, py] = peaks[i];
+  for (let i = 1; i < n - 1; i++) {
+    const px = peakX[i];
+    const py = peakY[i];
     if (baseY - py < capLine) continue;
-    const [lx, ly] = peaks[i - 1];
-    const [rx, ry] = peaks[i + 1];
+    const lx = peakX[i - 1];
+    const ly = peakY[i - 1];
+    const rx = peakX[i + 1];
+    const ry = peakY[i + 1];
     const depth = Math.min(0.42, (baseY - py - capLine) / (baseY - py) + 0.22);
-    const a: [number, number] = [px + (lx - px) * depth, py + (ly - py) * depth];
-    const b: [number, number] = [px + (rx - px) * depth, py + (ry - py) * depth];
+    // a: down the left face, b: down the right face
+    const ax = px + (lx - px) * depth;
+    const ay = py + (ly - py) * depth;
+    const bx = px + (rx - px) * depth;
+    const by = py + (ry - py) * depth;
     ctx.fillStyle = SNOW;
     ctx.beginPath();
     ctx.moveTo(px, py);
-    ctx.lineTo(...b);
+    ctx.lineTo(bx, by);
     // Jagged lower edge back to the left side
     const teeth = 4;
     for (let t = 1; t < teeth; t++) {
       const f = t / teeth;
-      const ex = b[0] + (a[0] - b[0]) * f;
-      const ey = b[1] + (a[1] - b[1]) * f + (t % 2 === 0 ? -3 : 4);
+      const ex = bx + (ax - bx) * f;
+      const ey = by + (ay - by) * f + (t % 2 === 0 ? -3 : 4);
       ctx.lineTo(ex, ey);
     }
-    ctx.lineTo(...a);
+    ctx.lineTo(ax, ay);
     ctx.closePath();
     ctx.fill();
   }
 }
+
+/** Scratch peak coordinates for drawRidge, reused across frames. */
+const peakX: number[] = [];
+const peakY: number[] = [];
 
 /**
  * Far Alpine range behind the village: a pale distant ridge and a nearer, bluer one,
@@ -285,7 +308,7 @@ function drawOnionChurch(ctx: CanvasRenderingContext2D, x: number, y: number, w:
   ctx.closePath();
   ctx.fill();
   ctx.fillStyle = "#6a8aa8";
-  for (const fx of [0.5, 0.66, 0.82]) ctx.fillRect(x + w * fx, naveTop + h * 0.1, 3, h * 0.14);
+  for (const fx of NAVE_WINDOW_X) ctx.fillRect(x + w * fx, naveTop + h * 0.1, 3, h * 0.14);
 
   // Tower.
   ctx.fillStyle = "#f8f4ec";
@@ -374,7 +397,7 @@ function drawSkiJump(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   // Distance lines across the landing slope.
   ctx.strokeStyle = "rgba(200,16,46,0.5)";
   ctx.lineWidth = 0.8;
-  for (const f of [0.35, 0.55, 0.75]) {
+  for (const f of LANDING_LINE_F) {
     const lx = x + w * (0.3 - f * 0.3);
     const ly = y + h * (0.62 + f * 0.36);
     ctx.beginPath();
@@ -386,7 +409,7 @@ function drawSkiJump(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   // Inrun struts.
   ctx.strokeStyle = "#8a96a4";
   ctx.lineWidth = 1.6;
-  for (const f of [0.15, 0.35, 0.55, 0.75]) {
+  for (const f of INRUN_STRUT_F) {
     const ix = x + w * (0.36 + f * 0.48);
     const iy = y + h * (0.62 - f * 0.52);
     ctx.beginPath();
@@ -551,9 +574,9 @@ function drawApresBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
 
   // Beer glasses on the counter and the sign.
   ctx.fillStyle = "#f0c040";
-  for (const fx of [0.2, 0.3, 0.7]) ctx.fillRect(x + w * fx, counterTop - 6, 3, 4);
+  for (const fx of GLASS_X) ctx.fillRect(x + w * fx, counterTop - 6, 3, 4);
   ctx.fillStyle = "#ffffff";
-  for (const fx of [0.2, 0.3, 0.7]) ctx.fillRect(x + w * fx, counterTop - 7, 3, 1.4);
+  for (const fx of GLASS_X) ctx.fillRect(x + w * fx, counterTop - 7, 3, 1.4);
   ctx.fillStyle = "#c8102e";
   ctx.fillRect(x + w * 0.26, counterTop + 4, w * 0.48, 7);
   drawCachedText(ctx, { text: "APRÈS SKI", font: SIGN_FONT, color: "#ffffff", maxWidth: w * 0.46 }, cx, counterTop + 7.8);

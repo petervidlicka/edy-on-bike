@@ -14,6 +14,17 @@ import { drawWalkingPerson } from "./shared";
 import { cachedGradient, fillTransformed, glow, hash01, drawSprite, drawCachedText, fillWindowGrid, drawFlagPole, fillFlagBand, flagWave, type TextLabel } from "../drawHelpers";
 import { sceneTimeMs } from "../sceneClock";
 
+/** y fractions of the konbini's shelves. */
+const KONBINI_SHELF_Y = [0.56, 0.72, 0.88];
+/** x fractions of the izakaya's lanterns. */
+const LANTERN_X = [0.12, 0.32, 0.96];
+/** Height fractions of Tokyo Tower's white paint bands. */
+const TOWER_BAND_F = [0.2, 0.3];
+/** Tokyo Tower's observation decks as [height fraction, deck height fraction]. */
+const TOWER_DECKS = [[0.56, 0.05], [0.28, 0.03]] as const;
+/** Skytree's ring decks as [height fraction, ring height fraction]. */
+const SKYTREE_DECKS = [[0.42, 0.035], [0.27, 0.02]] as const;
+
 const JP_FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 
 const NEON = ["#ff3d8b", "#3de8ff", "#ffd23d", "#5dff7a", "#b45dff", "#ff5a3d", "#ff9a3d"];
@@ -422,7 +433,7 @@ function drawKonbiniFront(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#f6fcff";
   ctx.fillRect(x + 3, y + h * 0.42, w - 6, h * 0.58);
   ctx.fillStyle = "#c8d8e4";
-  for (const fy of [0.56, 0.72, 0.88]) ctx.fillRect(x + 6, y + h * fy, w * 0.55, 1.4);
+  for (const fy of KONBINI_SHELF_Y) ctx.fillRect(x + 6, y + h * fy, w * 0.55, 1.4);
   ctx.fillStyle = "#f2a83a";
   for (let i = 0; i < 8; i++) ctx.fillRect(x + 8 + i * (w * 0.065), y + h * 0.5, 2.4, 3);
   ctx.strokeStyle = "#9aa8b4";
@@ -443,7 +454,7 @@ function drawIzakaya(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 
   // Red lanterns, gently swaying.
   const sway = Math.sin(sceneTimeMs() / 800 + seed) * 0.8;
-  for (const fx of [0.12, 0.32, 0.96]) {
+  for (const fx of LANTERN_X) {
     const lx = x + w * fx + sway;
     const ly = y + h * 0.3;
     glow(ctx, lx, ly, 10, "#ff5a3a", 0.5);
@@ -536,7 +547,7 @@ function drawTokyoTower(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   ctx.stroke();
   // White bands near the top, like the real paint scheme.
   ctx.fillStyle = "#f4f0ea";
-  for (const f of [0.2, 0.3]) ctx.fillRect(cx - halfAt(f), y + h * f, halfAt(f) * 2, h * 0.03);
+  for (const f of TOWER_BAND_F) ctx.fillRect(cx - halfAt(f), y + h * f, halfAt(f) * 2, h * 0.03);
   // Arch between the legs at the base.
   ctx.fillStyle = "#1e1a2a";
   ctx.beginPath();
@@ -546,7 +557,7 @@ function drawTokyoTower(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   ctx.fill();
 
   // Observation decks, glazed and lit.
-  for (const [f, dh] of [[0.56, 0.05], [0.28, 0.03]] as const) {
+  for (const [f, dh] of TOWER_DECKS) {
     const hw = halfAt(f) + 3;
     ctx.fillStyle = "#3a2a3a";
     ctx.fillRect(cx - hw, y + h * f, hw * 2, h * dh);
@@ -600,7 +611,7 @@ function drawSkytree(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.stroke();
 
   // Two ring decks.
-  for (const [f, ringH] of [[0.42, 0.035], [0.27, 0.02]] as const) {
+  for (const [f, ringH] of SKYTREE_DECKS) {
     const hw = halfAt(f) + 4;
     ctx.fillStyle = "#3a3a5a";
     ctx.fillRect(cx - hw, y + h * f, hw * 2, h * ringH);

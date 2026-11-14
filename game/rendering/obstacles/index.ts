@@ -1,7 +1,7 @@
 /**
  * Obstacle draw dispatch: one entry per ObstacleType, so the Record type guarantees every
- * obstacle has a renderer. Oncoming vehicles are mirrored here, once, rather than in
- * each vehicle's art.
+ * obstacle has a renderer. Oncoming obstacles are mirrored here, once, rather than in
+ * each one's art.
  */
 import { ObstacleInstance, ObstacleType } from "../../types";
 import type { EnvironmentPalette } from "../../environments/types";
@@ -102,18 +102,20 @@ const OBSTACLE_DRAWERS: Record<ObstacleType, ObstacleDrawFn> = {
 };
 
 /**
- * Motor vehicles are oncoming traffic. Their art is authored facing right, but the world
- * scrolls left, so drawn as-is they read as reversing towards the rider — mirror them.
+ * Static obstacles whose art is authored facing right (vehicles, the suburban cyclist,
+ * the camel). The world scrolls left, so drawn as-is they read as reversing towards the
+ * rider — mirror them so they face it. Movers are not listed: their art already faces
+ * the way they travel (see `motionOffset` in Obstacle.ts).
  */
-const ONCOMING_VEHICLES: ReadonlySet<ObstacleType> = new Set([
-  ObstacleType.CAR, ObstacleType.SUV, ObstacleType.DELIVERY_VAN,
+const ONCOMING: ReadonlySet<ObstacleType> = new Set([
+  ObstacleType.CAR, ObstacleType.SUV, ObstacleType.DELIVERY_VAN, ObstacleType.PERSON_ON_BIKE, ObstacleType.CAMEL,
   ObstacleType.LAND_CRUISER, ObstacleType.PINK_G_CLASS, ObstacleType.LAMBORGHINI_HURACAN,
   ObstacleType.FERRARI_458, ObstacleType.CONVERTIBLE, ObstacleType.ROLLS_ROYCE_PHANTOM,
   ObstacleType.PORSCHE_911, ObstacleType.KEI_CAR, ObstacleType.KEI_TRUCK, ObstacleType.JAPAN_TAXI,
 ]);
 
 /**
- * Draws one obstacle at its world position, mirrored if it is oncoming traffic.
+ * Draws one obstacle at its world position, mirrored if it is oncoming.
  * @param nowMs - Scene clock (engine time that stops while paused) for animated details
  *   such as blinking lamps and steam.
  */
@@ -121,7 +123,7 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obstacle: ObstacleIn
   setSceneTimeMs(nowMs);
   const draw = OBSTACLE_DRAWERS[obstacle.type];
   const { x, y, width: w, height: h } = obstacle;
-  if (!ONCOMING_VEHICLES.has(obstacle.type)) {
+  if (!ONCOMING.has(obstacle.type)) {
     draw(ctx, x, y, w, h, palette);
     return;
   }

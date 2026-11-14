@@ -493,7 +493,7 @@ export function drawDeliveryVan(ctx: CanvasRenderingContext2D, x: number, y: num
   ctx.stroke();
 }
 
-/** Another cyclist riding the same way — a diamond-frame road bike with a rider. */
+/** Another cyclist on a diamond-frame road bike, authored facing right; drawn mirrored so it rides towards the rider. */
 export function drawPersonOnBike(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const c = palette.obstacle;
   const wheelR = h * 0.155;

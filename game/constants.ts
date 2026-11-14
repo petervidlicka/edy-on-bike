@@ -7,7 +7,8 @@ export const JUMP_FORCE = -12;
 export const INITIAL_SPEED = 5;
 export const SPEED_INCREASE = 0.07;
 export const SPEED_INTERVAL = 12000;
-export const MAX_SPEED_MULTIPLIER = 2.0;
+// Cap reached ~72s in (just into Dubai). 2.0 left the rider too fast to land jumps with control.
+export const MAX_SPEED_MULTIPLIER = 1.5;
 export const SCORE_PER_PX = 20;
 export const MIN_OBSTACLE_GAP = 350;
 export const MIN_OBSTACLE_GAP_LATE = 450;

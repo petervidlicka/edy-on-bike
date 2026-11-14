@@ -1,6 +1,8 @@
 {
   // The multiplayer Worker is built by wrangler, separately from the Next.js app
   // (the root tsconfig excludes party/). Type-check with `npx tsc -p party`.
+  // *.test.ts are excluded: they import vitest, which lives in the root package only
+  // (CI installs party/ on its own), and the root `npm test` runs them.
   "compilerOptions": {
     "target": "es2022",
     "module": "es2022",
@@ -12,5 +14,6 @@
     "isolatedModules": true,
     "skipLibCheck": true
   },
-  "include": ["*.ts"]
+  "include": ["*.ts"],
+  "exclude": ["*.test.ts"]
 }

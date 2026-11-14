@@ -68,7 +68,7 @@ function headlightBeam(ctx: CanvasRenderingContext2D, fromX: number, fromY: numb
 
 /**
  * Draws a cached label centred on (cx, cy) flipped back left-to-right. Taxis are drawn
- * mirrored as oncoming traffic (see ONCOMING_VEHICLES), so their signs would otherwise
+ * mirrored as oncoming traffic (see ONCOMING), so their signs would otherwise
  * read backwards.
  */
 function drawLabelUnmirrored(ctx: CanvasRenderingContext2D, label: TextLabel, cx: number, cy: number) {

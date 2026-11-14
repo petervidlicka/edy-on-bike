@@ -16,7 +16,7 @@ const PORSCHE_LOUVRE_X = [0.75, 0.765, 0.78];
 
 // --- Dubai biome obstacle draw functions ---
 
-/** Dromedary in profile, facing right: long legs, one hump, neck dipping then rising to the head. */
+/** Dromedary in profile, authored facing right (drawn mirrored, facing the rider): long legs, one hump, neck dipping then rising to the head. */
 export function drawCamel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, palette: EnvironmentPalette) {
   const bodyColor = palette.obstacle.camel ?? DUBAI_OBSTACLE_COLORS.camel;
   const legColor = palette.obstacle.camelLeg ?? DUBAI_OBSTACLE_COLORS.camelLeg;

@@ -2,11 +2,12 @@
  * Draws remote players ("ghosts") on the local canvas by feeding their
  * interpolated snapshots through the normal player renderer at low opacity.
  */
-import { PlayerState } from "../types";
+import { PlayerState, TrickType } from "../types";
 import { PLAYER_X_RATIO, PLAYER_WIDTH, PLAYER_HEIGHT } from "../constants";
 import { drawPlayer } from "../rendering/PlayerRenderer";
 import { getSkinById } from "../skins";
 import type { GhostPlayer } from "./MultiplayerAdapter";
+import type { RiderGear } from "../environments/types";
 import type { MAX_PLAYERS } from "./protocol";
 
 /**
@@ -21,6 +22,17 @@ const GHOST_TINTS = ["#4488ff", "#44cc66", "#aa66ff", "#ff8844"] as const satisf
  */
 const GHOST_FADE_START_MS = 300;
 const GHOST_FADE_DURATION_MS = 700;
+
+/**
+ * Resting lane per remote slot, as an offset from the ghost's own x (fraction of canvas
+ * width), so riders never sit on top of each other. The first opponent rides just behind
+ * the local rider — the 1v1 case keeps your own bike clear — and further ones fan out ahead.
+ * Sized to the remote players a room can hold.
+ */
+const GHOST_LANE_OFFSETS = [-0.08, 0.08, 0.16] as const;
+
+/** Keeps a ghost's lane + boost from pushing it off the left edge. */
+const MIN_GHOST_X_RATIO = 0.02;
 
 /**
  * Canvas `ctx.font` can't resolve CSS variables, and next/font hashes the
@@ -38,51 +50,76 @@ function getLabelFonts(): { name: string; score: string } {
 }
 
 /**
- * Draws a ghost (remote) player semi-transparently.
- * Constructs a mock PlayerState from the interpolated snapshot
- * and reuses the existing drawPlayer() renderer.
+ * The PlayerState handed to drawPlayer, refilled for every ghost every frame: drawPlayer
+ * only reads it, so one shared object avoids a 24-field allocation per ghost per frame
+ * (see AI_INSTRUCTIONS.md). The fields a snapshot doesn't carry stay at these constants.
+ */
+const scratchPlayer: PlayerState = {
+  x: 0,
+  y: 0,
+  width: PLAYER_WIDTH,
+  height: PLAYER_HEIGHT,
+  velocityY: 0,
+  jumpCount: 0,
+  isOnGround: true,
+  wheelRotation: 0,
+  bikeTilt: 0,
+  riderLean: 0,
+  riderCrouch: 0,
+  legTuck: 0,
+  ridingObstacle: null,
+  backflipAngle: 0,
+  isBackflipping: false,
+  flipDirection: 1,
+  targetFlipCount: 0,
+  activeTrick: TrickType.NONE,
+  trickProgress: 0,
+  trickPhase: "extend",
+  trickCompletions: 0,
+  targetTrickCount: 0,
+  rampBoost: null,
+  rampSurfaceAngle: 0,
+};
+
+/**
+ * Draws a ghost (remote) player semi-transparently by posing the shared scratch
+ * PlayerState from the interpolated snapshot and reusing the existing drawPlayer() renderer.
+ * @param gear - The current biome's rider kit, so ghosts dress like the local rider.
  */
 export function drawGhostPlayer(
   ctx: CanvasRenderingContext2D,
   ghost: GhostPlayer,
   groundY: number,
-  canvasW: number
+  canvasW: number,
+  gear?: RiderGear
 ): void {
   const snap = ghost.snapshot;
   const fade = 1 - Math.min(1, Math.max(0, (ghost.staleMs - GHOST_FADE_START_MS) / GHOST_FADE_DURATION_MS));
   if (fade <= 0) return;
 
-  const playerX = Math.floor(canvasW * PLAYER_X_RATIO);
+  // Ghost's own x (moves with their trick boost) plus its resting lane on this screen
+  const lane = GHOST_LANE_OFFSETS[ghost.slot % GHOST_LANE_OFFSETS.length];
+  const playerX = Math.min(
+    canvasW - PLAYER_WIDTH,
+    Math.max(canvasW * MIN_GHOST_X_RATIO, canvasW * ((snap.x ?? PLAYER_X_RATIO) + lane)),
+  );
   // Snapshots carry height above ground; rebuild y against *this* viewport's ground line
   const y = groundY - snap.h;
 
-  // Build a mock PlayerState from the snapshot
-  const mockPlayer: PlayerState = {
-    x: playerX,
-    y,
-    width: PLAYER_WIDTH,
-    height: PLAYER_HEIGHT,
-    velocityY: 0,
-    jumpCount: 0,
-    isOnGround: snap.og,
-    wheelRotation: snap.wr,
-    bikeTilt: snap.bt,
-    riderLean: snap.rl,
-    riderCrouch: snap.rc,
-    legTuck: snap.lt,
-    ridingObstacle: null,
-    backflipAngle: snap.ba,
-    isBackflipping: snap.ba > 0,
-    flipDirection: snap.fd,
-    targetFlipCount: 0,
-    activeTrick: snap.at,
-    trickProgress: snap.tp,
-    trickPhase: "extend",
-    trickCompletions: 0,
-    targetTrickCount: 0,
-    rampBoost: null,
-    rampSurfaceAngle: 0,
-  };
+  const player = scratchPlayer;
+  player.x = playerX;
+  player.y = y;
+  player.isOnGround = snap.og;
+  player.wheelRotation = snap.wr;
+  player.bikeTilt = snap.bt;
+  player.riderLean = snap.rl;
+  player.riderCrouch = snap.rc;
+  player.legTuck = snap.lt;
+  player.backflipAngle = snap.ba;
+  player.isBackflipping = snap.ba > 0;
+  player.flipDirection = snap.fd;
+  player.activeTrick = snap.at;
+  player.trickProgress = snap.tp;
 
   const skin = getSkinById(ghost.skinId);
   const tintColor = GHOST_TINTS[ghost.slot % GHOST_TINTS.length];
@@ -90,7 +127,7 @@ export function drawGhostPlayer(
   ctx.save();
   ctx.globalAlpha = 0.35 * fade;
 
-  drawPlayer(ctx, mockPlayer, skin);
+  drawPlayer(ctx, player, skin, gear);
 
   // Name label above ghost
   ctx.globalAlpha = 0.7 * fade;

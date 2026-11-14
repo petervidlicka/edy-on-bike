@@ -5,14 +5,9 @@
 import { Redis } from "@upstash/redis";
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 import { LEADERBOARD_SIZE } from "./leaderboardConfig";
-
-/** One row of the public leaderboard, as returned by the API. */
-export interface LeaderboardEntry {
-  name: string;
-  score: number;
-  skin?: string;
-}
+import type { LeaderboardEntry } from "./leaderboardConfig";
 
 /** Upstash REST credentials. */
 export interface RedisConfig {
@@ -22,6 +17,10 @@ export interface RedisConfig {
 
 const LEADERBOARD_KEY = "edy-on-bike:leaderboard";
 const SKIN_HASH_KEY = "edy-on-bike:leaderboard:skins";
+const RUN_KEY_PREFIX = "edy-on-bike:run:";
+
+/** How long a run ticket stays redeemable; longer than any real run, pauses included. */
+const RUN_TTL_SECONDS = 3 * 60 * 60;
 
 // --- Upstash Redis store ---
 
@@ -30,8 +29,9 @@ const SKIN_HASH_KEY = "edy-on-bike:leaderboard:skins";
  * `storage_KV_*` comes first: the current Vercel Marketplace connection uses
  * that prefix, while the unprefixed `KV_*` vars are left over from a deleted
  * database. Then the plain Upstash names (`UPSTASH_REDIS_REST_*`).
+ * Exported so the "Redis is not configured" message can list every accepted pair.
  */
-const REDIS_ENV_CANDIDATES = [
+export const REDIS_ENV_CANDIDATES = [
   ["storage_KV_REST_API_URL", "storage_KV_REST_API_TOKEN"],
   ["KV_REST_API_URL", "KV_REST_API_TOKEN"],
   ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
@@ -58,12 +58,19 @@ export function getRedisConfig(): RedisConfig | null {
 // undefined = not created yet; null = Redis not configured
 let redisClient: Redis | null | undefined;
 
-function getRedis(): Redis | null {
+/**
+ * The one Redis client for the leaderboard store and the API rate limiter, created on
+ * first use (so importing a route never opens a connection) and only when credentials
+ * exist. Names are arbitrary player input: with automatic deserialization the client
+ * JSON-parses every reply, so a stored name like "true" or "123" would come back as a
+ * boolean or number instead of the string the player typed. The rate limiter's Lua
+ * scripts return integer arrays, which the REST reply carries as JSON numbers either
+ * way, so it can share this client.
+ * @returns The client, or null when Redis is not configured (callers fall back to memory/file).
+ */
+export function getRedis(): Redis | null {
   if (redisClient === undefined) {
     const config = getRedisConfig();
-    // Names are arbitrary player input. With automatic deserialization the client
-    // JSON-parses every reply, so a stored name like "true" or "123" would come
-    // back as a boolean or number instead of the string the player typed.
     redisClient = config ? new Redis({ ...config, automaticDeserialization: false }) : null;
   }
   return redisClient;
@@ -123,24 +130,20 @@ async function addScoreRedis(
 const DATA_FILE = path.join(process.cwd(), "data", "leaderboard.json");
 
 function readFileStore(): LeaderboardEntry[] {
+  if (!fs.existsSync(DATA_FILE)) return [];
   try {
-    const dir = path.dirname(DATA_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (!fs.existsSync(DATA_FILE)) return [];
     return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")) as LeaderboardEntry[];
-  } catch {
+  } catch (error) {
+    // A corrupt dev file shouldn't take the game-over screen down; start from an empty board
+    console.error(`[leaderboard] Ignoring unreadable ${DATA_FILE}`, error);
     return [];
   }
 }
 
+/** Throws on failure, so the API reports an error instead of claiming the score was saved. */
 function writeFileStore(entries: LeaderboardEntry[]): void {
-  try {
-    const dir = path.dirname(DATA_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(entries, null, 2), "utf-8");
-  } catch {
-    // non-fatal — fall through silently
-  }
+  fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+  fs.writeFileSync(DATA_FILE, JSON.stringify(entries, null, 2), "utf-8");
 }
 
 function getTopScoresFile(limit: number): LeaderboardEntry[] {
@@ -192,6 +195,63 @@ export async function getTotalPlayers(): Promise<number> {
     return Number(await redis.zcard(LEADERBOARD_KEY));
   }
   return readFileStore().length;
+}
+
+// --- Run tickets ---
+
+/** In-memory tickets for local dev without Redis (single process, so a Map is enough). */
+const memoryRuns = new Map<string, number>();
+
+/**
+ * Registers a run that just started. The ticket must accompany its score, so a score can
+ * only be submitted once and is checked against how long the run actually lasted.
+ * @returns The ticket id to send back with the score.
+ */
+export async function createRun(): Promise<string> {
+  const id = randomUUID();
+  const redis = getRedis();
+  if (redis) {
+    await redis.set(`${RUN_KEY_PREFIX}${id}`, String(Date.now()), { ex: RUN_TTL_SECONDS });
+  } else {
+    const cutoff = Date.now() - RUN_TTL_SECONDS * 1000;
+    for (const [runId, startedAt] of memoryRuns) if (startedAt < cutoff) memoryRuns.delete(runId);
+    memoryRuns.set(id, Date.now());
+  }
+  return id;
+}
+
+/**
+ * Redeems a run ticket (single use).
+ * @returns When the run started (ms since epoch), or null for an unknown, expired or used ticket.
+ */
+export async function consumeRun(id: string): Promise<number | null> {
+  const redis = getRedis();
+  if (redis) {
+    const startedAt = await redis.getdel<string>(`${RUN_KEY_PREFIX}${id}`);
+    const ms = Number(startedAt);
+    return startedAt !== null && Number.isFinite(ms) ? ms : null;
+  }
+  const startedAt = memoryRuns.get(id);
+  memoryRuns.delete(id);
+  return startedAt !== undefined && Date.now() - startedAt < RUN_TTL_SECONDS * 1000 ? startedAt : null;
+}
+
+/**
+ * Puts a redeemed ticket back, with the lifetime it had left. For when storing the score
+ * fails after `consumeRun`: the player is told to retry, so the retry has to find the ticket.
+ * Redemption stays atomic (GETDEL), so a ticket is still never accepted twice.
+ * @param id - The ticket id that `consumeRun` just redeemed.
+ * @param startedAt - What `consumeRun` returned for it.
+ */
+export async function restoreRun(id: string, startedAt: number): Promise<void> {
+  const remainingSeconds = Math.floor(RUN_TTL_SECONDS - (Date.now() - startedAt) / 1000);
+  if (remainingSeconds <= 0) return;
+  const redis = getRedis();
+  if (redis) {
+    await redis.set(`${RUN_KEY_PREFIX}${id}`, String(startedAt), { ex: remainingSeconds });
+  } else {
+    memoryRuns.set(id, startedAt);
+  }
 }
 
 /**

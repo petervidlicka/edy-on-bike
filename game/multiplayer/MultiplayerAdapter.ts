@@ -36,6 +36,12 @@ export class MultiplayerAdapter {
   private localPlayerId: string;
   private lastSendTime = 0;
   private callbacks: MultiplayerCallbacks;
+  /**
+   * The ghost list handed to the renderer, rebuilt in place every frame: one entry per slot,
+   * reused so drawing ghosts allocates nothing per frame (see AI_INSTRUCTIONS.md).
+   */
+  private readonly ghostPool: GhostPlayer[] = [];
+  private readonly ghosts: GhostPlayer[] = [];
 
   constructor(
     ws: WebSocket,
@@ -96,10 +102,19 @@ export class MultiplayerAdapter {
     }
   }
 
+  /**
+   * Whether sendLocalState() would send now (snapshots go out at ~15 Hz). Lets the Engine
+   * skip building a snapshot on the frames in between, which it would otherwise do at 60 Hz.
+   * @param nowMs - performance.now().
+   */
+  shouldSend(nowMs: number): boolean {
+    return nowMs - this.lastSendTime >= NETWORK_SYNC_INTERVAL_MS;
+  }
+
   /** Send local player state — throttled to ~15 Hz internally. */
   sendLocalState(snapshot: GhostSnapshot): void {
     const now = performance.now();
-    if (now - this.lastSendTime < NETWORK_SYNC_INTERVAL_MS) return;
+    if (!this.shouldSend(now)) return;
     this.lastSendTime = now;
 
     this.send({ type: "player_update", snapshot });
@@ -119,10 +134,15 @@ export class MultiplayerAdapter {
     this.send({ type: "player_crashed", score });
   }
 
-  /** Get interpolated ghost player states for rendering (called every frame). */
-  getGhostPlayers(): GhostPlayer[] {
+  /**
+   * Interpolated ghost player states for rendering (called every frame).
+   * The array and its entries (snapshots included) are reused across calls: read them
+   * this frame, never keep them.
+   */
+  getGhostPlayers(): readonly GhostPlayer[] {
     const now = performance.now();
-    const ghosts: GhostPlayer[] = [];
+    const ghosts = this.ghosts;
+    ghosts.length = 0;
     let slot = 0;
 
     // Walk players (join order), not buffers, so a ghost keeps its slot/colour even
@@ -134,14 +154,14 @@ export class MultiplayerAdapter {
       const snapshot = buf?.get(now);
       if (!buf || !snapshot) continue;
 
-      ghosts.push({
-        id: player.id,
-        name: player.name,
-        skinId: player.skinId,
-        snapshot,
-        staleMs: buf.msSinceLatest(now),
-        slot: playerSlot,
-      });
+      const ghost = (this.ghostPool[playerSlot] ??= { id: "", name: "", skinId: "default", snapshot, staleMs: 0, slot: 0 });
+      ghost.id = player.id;
+      ghost.name = player.name;
+      ghost.skinId = player.skinId;
+      ghost.snapshot = snapshot;
+      ghost.staleMs = buf.msSinceLatest(now);
+      ghost.slot = playerSlot;
+      ghosts.push(ghost);
     }
     return ghosts;
   }

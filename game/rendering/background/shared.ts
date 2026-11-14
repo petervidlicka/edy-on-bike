@@ -1,16 +1,28 @@
 import { BackgroundLayer } from "../../types";
-import type { EnvironmentPalette, BackgroundDrawFn } from "../../environments/types";
+import type { EnvironmentPalette, BackgroundDrawFn, SkylinePass } from "../../environments/types";
 import { getTotalLayerWidth } from "../../Background";
+import type { ViewBounds } from "../../Camera";
 import { decodePedestrianVariant, SKIN_TONES, HAIR_COLORS } from "../../environments/pedestrians";
+import { cachedGradient, fillTransformed } from "../drawHelpers";
+import { setSceneTimeMs } from "../sceneClock";
+
+/** x fractions of a walking figure's two shoes. */
+const SHOE_X = [-0.26, 0.22];
 
 // --- Sky ---
 
-function drawSky(ctx: CanvasRenderingContext2D, w: number, groundY: number, palette: EnvironmentPalette) {
-  const gradient = ctx.createLinearGradient(0, 0, 0, groundY);
-  gradient.addColorStop(0, palette.sky);
-  gradient.addColorStop(1, palette.skyBottom);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, w, groundY);
+function drawSky(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, palette: EnvironmentPalette) {
+  // One unit gradient per colour pair (the pair steps through a biome blend), stretched to the ground
+  const gradient = cachedGradient(ctx, `sky|${palette.sky}|${palette.skyBottom}`, () => {
+    const unit = ctx.createLinearGradient(0, 0, 0, 1);
+    unit.addColorStop(0, palette.sky);
+    unit.addColorStop(1, palette.skyBottom);
+    return unit;
+  });
+  // Gradient stays pinned to the unzoomed sky; above it (zoomed out) the top colour just continues
+  ctx.beginPath();
+  ctx.rect(view.left, view.top, view.right - view.left, groundY - view.top);
+  fillTransformed(ctx, gradient, 0, 0, 1, groundY);
 }
 
 // --- Clouds ---
@@ -30,73 +42,152 @@ function drawCloud(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 // --- Ground ---
 
-function drawGround(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, groundY: number, offset: number, palette: EnvironmentPalette) {
+function drawGround(ctx: CanvasRenderingContext2D, view: ViewBounds, groundY: number, offset: number, palette: EnvironmentPalette) {
+  const w = view.right - view.left;
+
   // Grass verge — sits above the road, grounds the buildings
   ctx.fillStyle = palette.ground;
-  ctx.fillRect(0, groundY - 22, canvasW, 22);
+  ctx.fillRect(view.left, groundY - 22, w, 22);
 
-  // Ground fill — stretches to bottom of canvas
-  ctx.fillRect(0, groundY, canvasW, canvasH - groundY);
+  // Ground fill — stretches to the bottom of the view
+  ctx.fillRect(view.left, groundY, w, view.bottom - groundY);
 
   // Road surface
   ctx.fillStyle = palette.road;
-  ctx.fillRect(0, groundY, canvasW, 20);
+  ctx.fillRect(view.left, groundY, w, 20);
 
-  // Dashed road markings
+  // Dashed road markings. Dashes are measured from the path start, so shift the
+  // offset by it to keep them fixed to the road while the view widens.
   ctx.strokeStyle = palette.roadLine;
   ctx.lineWidth = 2;
   ctx.setLineDash([20, 15]);
-  ctx.lineDashOffset = offset;
+  ctx.lineDashOffset = offset + view.left;
   ctx.beginPath();
-  ctx.moveTo(0, groundY + 10);
-  ctx.lineTo(canvasW, groundY + 10);
+  ctx.moveTo(view.left, groundY + 10);
+  ctx.lineTo(view.right, groundY + 10);
   ctx.stroke();
   ctx.setLineDash([]);
 }
 
 // --- Background layers ---
 
-export function drawBackground(
-  ctx: CanvasRenderingContext2D,
-  layers: BackgroundLayer[],
-  canvasW: number,
-  canvasH: number,
-  groundY: number,
-  palette: EnvironmentPalette,
-  drawers: Record<string, BackgroundDrawFn>
-) {
-  drawSky(ctx, canvasW, groundY, palette);
+/** A cloud layer leaving with the previous biome, drawn at `alpha` while it fades out. */
+export interface FadingCloudLayer {
+  layer: BackgroundLayer;
+  alpha: number;
+}
 
-  // Layer 0: clouds
-  const cloudLayer = layers[0];
-  const cloudWidth = getTotalLayerWidth(cloudLayer, canvasW);
-  const cloudNorm = cloudLayer.offset % cloudWidth;
-  for (const el of cloudLayer.elements) {
-    // Check both the natural scroll position and the wrapped copy
-    for (const shift of [0, cloudWidth, -cloudWidth]) {
-      const drawX = el.x - cloudNorm + shift;
-      if (drawX + el.width < 0 || drawX > canvasW) continue;
-      drawCloud(ctx, drawX, el.y, el.width, el.height, el.color);
-    }
+/** Shared empty pass list, so a scene without skylines allocates nothing per frame. */
+const NO_PASSES: readonly SkylinePass[] = [];
+
+/** A wrapping layer is checked at its natural position and one layer-width either side. */
+const WRAP_SIGNS = [0, 1, -1];
+
+/** Everything drawBackground needs for one frame of scenery. */
+export interface BackgroundScene {
+  /** [clouds, buildings, road] — see createBackgroundLayers. */
+  layers: BackgroundLayer[];
+  canvasW: number;
+  /** The world rectangle on screen; wider than the canvas while the big-air camera is zoomed out. */
+  view: ViewBounds;
+  groundY: number;
+  palette: EnvironmentPalette;
+  /** Building-layer element type → renderer. */
+  drawers: Record<string, BackgroundDrawFn>;
+  /** Far scenery bands behind the clouds, each with its fade. */
+  skylines?: readonly SkylinePass[];
+  /** Passes over the road (wet-road reflections), each with its fade. */
+  roadOverlays?: readonly SkylinePass[];
+  /** Opacity of the current cloud layer (below 1 while it fades in on a biome change). */
+  cloudAlpha?: number;
+  /** The previous biome's clouds while they fade out. */
+  outgoingClouds?: FadingCloudLayer | null;
+  /** Scene clock (engine time that stops while paused) for animated scenery. */
+  nowMs?: number;
+}
+
+/**
+ * Draws sky, parallax layers and road covering `scene.view`.
+ * @example
+ * drawBackground(ctx, { layers, canvasW, view, groundY, palette, drawers, nowMs });
+ */
+export function drawBackground(ctx: CanvasRenderingContext2D, scene: BackgroundScene) {
+  const { layers, canvasW, view, groundY, palette, drawers } = scene;
+  const skylines = scene.skylines ?? NO_PASSES;
+  const roadOverlays = scene.roadOverlays ?? NO_PASSES;
+  const cloudAlpha = scene.cloudAlpha ?? 1;
+  const outgoingClouds = scene.outgoingClouds ?? null;
+  setSceneTimeMs(scene.nowMs ?? 0);
+  drawSky(ctx, view, groundY, palette);
+
+  // Far scenery (mountain ranges) sits behind the clouds and scrolls with them
+  for (const pass of skylines) {
+    if (pass.alpha <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = pass.alpha;
+    pass.draw(ctx, view, groundY, layers[0].offset, palette);
+    ctx.restore();
   }
+
+  // Layer 0: clouds (plus the previous biome's, fading out). Coloured from the palette,
+  // so they follow its colour blend across a biome change.
+  if (outgoingClouds) drawCloudLayer(ctx, outgoingClouds.layer, canvasW, view, palette.cloud, outgoingClouds.alpha);
+  drawCloudLayer(ctx, layers[0], canvasW, view, palette.cloud, cloudAlpha);
 
   // Layer 1: buildings & nature — dispatched via drawers map
   const buildingLayer = layers[1];
   const buildingWidth = getTotalLayerWidth(buildingLayer, canvasW);
   const buildingNorm = buildingLayer.offset % buildingWidth;
+  // Each element is checked at its natural scroll position and both wrapped copies
   for (const el of buildingLayer.elements) {
-    for (const shift of [0, buildingWidth, -buildingWidth]) {
-      const drawX = el.x - buildingNorm + shift;
-      if (drawX + el.width < 0 || drawX > canvasW) continue;
+    for (const sign of WRAP_SIGNS) {
+      const drawX = el.x - buildingNorm + sign * buildingWidth;
+      if (drawX + el.width < view.left || drawX > view.right) continue;
       const drawFn = drawers[el.type];
       if (drawFn) {
+        // BackgroundDrawFn's last two parameters are overloaded by element type: `roofColor`
+        // is a pedestrian's trouser colour or a chalet's timber, and `variant` is a drawing
+        // variant for houses but a seed for Tokyo buildings (see environments/types.ts).
         drawFn(ctx, drawX, el.y, el.width, el.height, el.color, palette, el.roofColor, el.variant);
       }
     }
   }
 
   // Layer 2: ground + road
-  drawGround(ctx, canvasW, canvasH, groundY, layers[2].offset, palette);
+  drawGround(ctx, view, groundY, layers[2].offset, palette);
+
+  // Road overlays (wet-road reflections) scroll with the road
+  for (const pass of roadOverlays) {
+    if (pass.alpha <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = pass.alpha;
+    pass.draw(ctx, view, groundY, layers[2].offset, palette);
+    ctx.restore();
+  }
+}
+
+/** Draws one wrapping cloud layer at the given opacity. */
+function drawCloudLayer(
+  ctx: CanvasRenderingContext2D,
+  layer: BackgroundLayer,
+  canvasW: number,
+  view: ViewBounds,
+  color: string,
+  alpha: number,
+) {
+  if (alpha <= 0) return;
+  const width = getTotalLayerWidth(layer, canvasW);
+  const norm = layer.offset % width;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  for (const el of layer.elements) {
+    for (const sign of WRAP_SIGNS) {
+      const drawX = el.x - norm + sign * width;
+      if (drawX + el.width < view.left || drawX > view.right) continue;
+      drawCloud(ctx, drawX, el.y, el.width, el.height, color);
+    }
+  }
+  ctx.restore();
 }
 
 // --- Pedestrians (shared across biomes) ---
@@ -158,7 +249,7 @@ export function drawWalkingPerson(
 
   // Shoes.
   ctx.fillStyle = "#2a2a2a";
-  for (const fx of [-0.26, 0.22]) {
+  for (const fx of SHOE_X) {
     ctx.beginPath();
     ctx.ellipse(cx + w * fx + 1, footY - 0.6, limb * 0.75, limb * 0.4, 0, 0, Math.PI * 2);
     ctx.fill();

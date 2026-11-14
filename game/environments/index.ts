@@ -9,4 +9,7 @@ export type {
   ObstaclePoolConfig,
   WeightedType,
   ParticleOverlayConfig,
+  RiderGear,
+  SkylineDrawFn,
+  SkylinePass,
 } from "./types";

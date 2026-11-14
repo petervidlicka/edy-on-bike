@@ -1,20 +1,33 @@
-import { INITIAL_SPEED } from "@/game/constants";
+/**
+ * The single-player in-run overlay: live score chip and trick popup (top right), audio
+ * and pause controls (top left), jump button (bottom left) and trick D-pad (bottom right).
+ */
+import { memo } from "react";
+import type { EngineStats } from "@/hooks/engineStats";
 import type { TrickFeedbackData } from "@/hooks/useGameEngine";
-
-/** Guards against browsers firing both onTouchStart and onClick. */
-let lastTouchTime = 0;
-
-const TRICK_COLOR_CLEAN = "#1a7a2e";
-const TRICK_COLOR_SKETCHY = "#d97706";
+import { useGamepadConnected } from "@/hooks/useGamepad";
+import { isGhostClick, markTouchHandled } from "@/lib/dom";
+import { AudioControls } from "./AudioControls";
+import { LiveHudChip } from "./LiveHudChip";
+import { TrickDpad } from "./TrickDpad";
+import { TrickFeedbackPopup, trickFeedbackColor } from "./TrickFeedbackPopup";
+import { GlassButton } from "./ui/GlassButton";
+import { PauseIcon } from "./ui/icons";
+import { color, font, glassSurfaceSmall, safeInset } from "./ui/tokens";
 
 interface HUDProps {
-  score: number;
-  speed: number;
-  trickFeedback: { name: string; points: number; sketchy?: boolean } | null;
+  /** Live score and speed; only the score chip subscribes to them. */
+  stats: EngineStats;
+  trickFeedback: TrickFeedbackData | null;
   musicMuted: boolean;
   sfxMuted: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  /** Vibration setting; the toggle only shows on devices that can vibrate. */
+  vibrationOn: boolean;
+  onToggleVibration: () => void;
+  /** Pauses the run; shows a pause button next to the audio toggles. */
+  onPause?: () => void;
   onJump: () => void;
   onBackflip: () => void;
   onFrontflip: () => void;
@@ -22,289 +35,85 @@ interface HUDProps {
   onNoHander: () => void;
 }
 
-function MusicIcon({ muted }: { muted: boolean }) {
+/**
+ * Jump button, bottom left. Reacts on touchstart (no tap delay) and on mouse click, ignoring the
+ * click a browser synthesises after a handled touch. Hidden while a gamepad's A button does the job.
+ */
+const JumpButton = memo(function JumpButton({ onJump }: { onJump: () => void }) {
+  const hasGamepad = useGamepadConnected();
+  if (hasGamepad) return null;
   return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+    <button
+      onTouchStart={(e) => { e.preventDefault(); markTouchHandled(); onJump(); }}
+      onClick={() => { if (isGhostClick()) return; onJump(); }}
+      title="Jump (tap or space)"
+      aria-label="Jump"
+      style={{
+        ...glassSurfaceSmall,
+        position: "fixed",
+        bottom: safeInset.bottom,
+        left: safeInset.left,
+        width: "80px",
+        height: "80px",
+        borderRadius: "50%",
+        color: color.ink,
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "2px",
+        padding: 0,
+        fontFamily: font.ui,
+      }}
     >
-      {/* Musical note */}
-      <path d="M9 18V5l12-2v13" />
-      <circle cx="6" cy="18" r="3" />
-      <circle cx="18" cy="16" r="3" />
-      {muted && (
-        <>
-          <line x1="3" y1="3" x2="21" y2="21" strokeWidth="2.5" />
-        </>
-      )}
-    </svg>
+      <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="6 15 12 9 18 15" />
+      </svg>
+      <span style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.08em", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
+    </button>
   );
-}
-
-function SpeakerIcon({ muted }: { muted: boolean }) {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-      {muted ? (
-        <>
-          <line x1="23" y1="9" x2="17" y2="15" />
-          <line x1="17" y1="9" x2="23" y2="15" />
-        </>
-      ) : (
-        <>
-          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-/** Shared glass style for small HUD buttons, so screens composing HUD pieces match. */
-export const btnStyle: React.CSSProperties = {
-  background: "rgba(255,255,255,0.22)",
-  backdropFilter: "blur(24px) saturate(200%)",
-  WebkitBackdropFilter: "blur(24px) saturate(200%)",
-  border: "1.5px solid rgba(255,255,255,0.55)",
-  borderRadius: "14px",
-  color: "#1e293b",
-  cursor: "pointer",
-  padding: "0.45rem 0.65rem",
-  lineHeight: 0,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  boxShadow:
-    "0 2px 16px rgba(0,0,0,0.1), inset 0 1.5px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04)",
-};
-
-const dpadBtnStyle: React.CSSProperties = {
-  width: "48px",
-  height: "48px",
-  borderRadius: "50%",
-  background: "rgba(255,255,255,0.35)",
-  border: "2px solid rgba(30,41,59,0.3)",
-  color: "#1e293b",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 0,
-};
-
-function ArrowSVG({ points }: { points: string }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points={points} />
-    </svg>
-  );
-}
+});
 
 /**
- * Music/SFX toggles, top left. Extracted so the multiplayer race screen can reuse
- * them and append its own buttons (e.g. LEAVE) via children.
+ * Memoised, and every handler prop should be stable (created once from the engine ref),
+ * so a score tick re-renders the chip alone and a landed trick only the top-right column.
+ * @param props - The engine stats store, trick feedback, the audio settings and the input handlers.
+ * @example
+ * <HUD stats={stats} trickFeedback={trickFeedback} onJump={handleJump} ... />
  */
-export function AudioControls({
-  musicMuted,
-  sfxMuted,
-  onToggleMusic,
-  onToggleSfx,
-  children,
-}: {
-  musicMuted: boolean;
-  sfxMuted: boolean;
-  onToggleMusic: () => void;
-  onToggleSfx: () => void;
-  /** Extra buttons appended to the same top-left row (e.g. multiplayer's Leave). */
-  children?: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: "1rem",
-        left: "1.5rem",
-        display: "flex",
-        gap: "0.4rem",
-      }}
-    >
-      <button
-        onClick={onToggleMusic}
-        title={musicMuted ? "Music on" : "Music off"}
-        style={btnStyle}
-      >
-        <MusicIcon muted={musicMuted} />
-      </button>
-      <button
-        onClick={onToggleSfx}
-        title={sfxMuted ? "Sound on" : "Sound off"}
-        style={btnStyle}
-      >
-        <SpeakerIcon muted={sfxMuted} />
-      </button>
-      {children}
-    </div>
-  );
-}
-
-/** "Backflip +50"-style feedback; renders nothing when there's no recent trick. */
-export function TrickFeedbackPopup({
-  trickFeedback,
-}: {
-  trickFeedback: TrickFeedbackData | null;
-}) {
-  if (!trickFeedback) return null;
-  return (
-    <span
-      style={{
-        color: trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN,
-        fontFamily: "var(--font-space-mono), monospace",
-        fontSize: "0.7rem",
-        fontWeight: "bold",
-        textShadow: "0 1px 2px rgba(0,0,0,0.3)",
-      }}
-    >
-      {trickFeedback.name} +{trickFeedback.points}
-    </span>
-  );
-}
-
-/** Touch D-pad for tricks (bottom right), shared by single-player and multiplayer. */
-export function TrickDpad({
-  onBackflip,
-  onFrontflip,
-  onSuperman,
-  onNoHander,
-}: {
-  onBackflip: () => void;
-  onFrontflip: () => void;
-  onSuperman: () => void;
-  onNoHander: () => void;
-}) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: "1.5rem",
-        right: "1.5rem",
-        display: "grid",
-        gridTemplateColumns: "48px 48px 48px",
-        gridTemplateRows: "48px 48px 48px",
-        gap: "4px",
-      }}
-    >
-      {/* Row 1: _, Up (Frontflip), _ */}
-      <div />
-      <button
-        onTouchStart={(e) => { e.preventDefault(); onFrontflip(); }}
-        title="Frontflip (↑)"
-        style={dpadBtnStyle}
-      >
-        <ArrowSVG points="6 15 12 9 18 15" />
-      </button>
-      <div />
-
-      {/* Row 2: Left (Superman), Tricks label, Right (No Hander) */}
-      <button
-        onTouchStart={(e) => { e.preventDefault(); onSuperman(); }}
-        title="Superman (←)"
-        style={dpadBtnStyle}
-      >
-        <ArrowSVG points="15 6 9 12 15 18" />
-      </button>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", color: "rgba(30,41,59,0.65)", textAlign: "center", lineHeight: 1.1, pointerEvents: "none" }}>
-        Tricks
-      </div>
-      <button
-        onTouchStart={(e) => { e.preventDefault(); onNoHander(); }}
-        title="No Hander (→)"
-        style={dpadBtnStyle}
-      >
-        <ArrowSVG points="9 6 15 12 9 18" />
-      </button>
-
-      {/* Row 3: _, Down (Backflip), _ */}
-      <div />
-      <button
-        onTouchStart={(e) => { e.preventDefault(); onBackflip(); }}
-        title="Backflip (↓)"
-        style={dpadBtnStyle}
-      >
-        <ArrowSVG points="6 9 12 15 18 9" />
-      </button>
-      <div />
-    </div>
-  );
-}
-
-export default function HUD({
-  score,
-  speed,
+export const HUD = memo(function HUD({
+  stats,
   trickFeedback,
   musicMuted,
   sfxMuted,
   onToggleMusic,
   onToggleSfx,
+  vibrationOn,
+  onToggleVibration,
+  onPause,
   onJump,
   onBackflip,
   onFrontflip,
   onSuperman,
   onNoHander,
 }: HUDProps) {
-  const multiplier = (speed / INITIAL_SPEED).toFixed(1);
-
   return (
     <>
       {/* Score + speed — top right */}
       <div
         style={{
           position: "fixed",
-          top: "1rem",
-          right: "1.5rem",
+          top: safeInset.top,
+          right: safeInset.right,
           display: "flex",
           flexDirection: "column",
           alignItems: "flex-end",
-          gap: "0.2rem",
+          gap: "0.5rem",
           pointerEvents: "none",
         }}
       >
-        <span
-          style={{
-            color: trickFeedback
-              ? trickFeedback.sketchy ? TRICK_COLOR_SKETCHY : TRICK_COLOR_CLEAN
-              : "#1e293b",
-            fontFamily: "var(--font-space-mono), monospace",
-            fontSize: "1.25rem",
-            fontWeight: "bold",
-            transition: "color 0.3s ease",
-          }}
-        >
-          {String(score).padStart(5, "0")}
-        </span>
-        <span
-          style={{
-            color: "#475569",
-            fontFamily: "var(--font-space-mono), monospace",
-            fontSize: "0.75rem",
-          }}
-        >
-          &times;{multiplier}
-        </span>
+        <LiveHudChip stats={stats} accent={trickFeedback ? trickFeedbackColor(trickFeedback) : undefined} />
         <TrickFeedbackPopup trickFeedback={trickFeedback} />
       </div>
 
@@ -313,35 +122,17 @@ export default function HUD({
         sfxMuted={sfxMuted}
         onToggleMusic={onToggleMusic}
         onToggleSfx={onToggleSfx}
-      />
-
-      {/* Jump button — bottom left */}
-      <button
-        onTouchStart={(e) => { e.preventDefault(); lastTouchTime = Date.now(); onJump(); }}
-        onClick={() => { if (Date.now() - lastTouchTime < 500) return; onJump(); }}
-        title="Jump (tap or space)"
-        style={{
-          position: "fixed",
-          bottom: "1.5rem",
-          left: "1.5rem",
-          width: "72px",
-          height: "72px",
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.35)",
-          border: "2px solid rgba(30,41,59,0.3)",
-          color: "#1e293b",
-          cursor: "pointer",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "2px",
-          padding: 0,
-        }}
+        vibrationOn={vibrationOn}
+        onToggleVibration={onToggleVibration}
       >
-        <ArrowSVG points="6 15 12 9 18 15" />
-        <span style={{ fontSize: "9px", fontFamily: "var(--font-space-mono), monospace", lineHeight: 1, pointerEvents: "none" }}>JUMP</span>
-      </button>
+        {onPause && (
+          <GlassButton variant="icon" onClick={onPause} title="Pause (Esc or P)" aria-label="Pause">
+            <PauseIcon />
+          </GlassButton>
+        )}
+      </AudioControls>
+
+      <JumpButton onJump={onJump} />
 
       <TrickDpad
         onBackflip={onBackflip}
@@ -351,4 +142,4 @@ export default function HUD({
       />
     </>
   );
-}
+});

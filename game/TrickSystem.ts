@@ -1,4 +1,6 @@
 import { PlayerState, TrickType } from "./types";
+import { formatMultiplier } from "./ComboChain";
+import type { ComboSummary } from "./ComboChain";
 import {
   BACKFLIP_BONUS,
   SUPERMAN_BONUS,
@@ -19,20 +21,46 @@ export interface FloatingText {
   opacity: number;
   velocityY: number;
   color: string;
+  /** Font size in px; the renderer's default when omitted. */
+  size?: number;
+  /** Tilt in radians (clockwise); set for comic pops. */
+  rotation?: number;
+  /** Outline colour; the renderer's dark default when omitted. */
+  outline?: string;
+  /** Comic pop: bounces in, stays solid, then fades. */
+  pop?: boolean;
 }
 
-export interface TrickResult {
-  crashed: boolean;
-  label?: string;
-  bonus?: number;
-  sketchy?: boolean;
+/** A botched landing. */
+export interface TrickCrash {
+  crashed: true;
+  /** The trick was not finished (true) rather than overdone (false); picks the crash animation. */
+  underRotated: boolean;
 }
+
+/** A landed trick: what to call it and what it pays before the chain multiplier. */
+export interface TrickLanded {
+  crashed: false;
+  label: string;
+  bonus: number;
+  /** Landed just outside the clean zone: paid with the penalty, and it breaks the chain. */
+  sketchy: boolean;
+}
+
+/** The verdict on a landing; narrow on `crashed` to reach the rest. */
+export type TrickResult = TrickCrash | TrickLanded;
 
 function computeTrickScore(baseName: string, basePoints: number, count: number): { label: string; totalBonus: number } {
   if (count === 1) return { label: baseName, totalBonus: basePoints };
   if (count === 2) return { label: `Double ${baseName}`, totalBonus: 2 * basePoints + DOUBLE_CHAIN_BONUS };
   const prefix = count === 3 ? "Triple" : `${count}x`;
   return { label: `${prefix} ${baseName}`, totalBonus: count * basePoints + TRIPLE_CHAIN_BONUS };
+}
+
+/** True when a flip of `angle` radians stopped short of its nearest whole turn (or never got a full one). */
+function isUnderRotated(angle: number, fullFlip: number): boolean {
+  const targetFlips = Math.round(angle / fullFlip);
+  return targetFlips < 1 || angle < targetFlips * fullFlip;
 }
 
 function countPrefix(count: number): string {
@@ -59,7 +87,7 @@ export function evaluateFlipLanding(angle: number, direction: number, fullFlip: 
       return { crashed: false, label: `Sketchy ${label}`, bonus: Math.round(totalBonus * SKETCHY_PENALTY), sketchy: true };
     }
   }
-  return { crashed: true };
+  return { crashed: true, underRotated: isUnderRotated(angle, fullFlip) };
 }
 
 /** Evaluate a pose-trick-only landing. */
@@ -74,7 +102,7 @@ export function evaluatePoseTrickLanding(player: PlayerState): TrickResult {
     return { crashed: false, label, bonus: totalBonus, sketchy: false };
   }
   // Trick started but never completed — crash
-  return { crashed: true };
+  return { crashed: true, underRotated: true };
 }
 
 /** Evaluate a combo landing (flip + pose simultaneously).
@@ -119,7 +147,9 @@ export function evaluateComboLanding(
     return { crashed: false, label: finalLabel, bonus: finalScore, sketchy };
   }
 
-  return { crashed: true };
+  // A flip that was off decides under/over; a flip that was fine means the pose was unfinished
+  const flipOff = !flipClean && !flipSketchy;
+  return { crashed: true, underRotated: flipOff ? isUnderRotated(angle, fullFlip) : true };
 }
 
 /** Reset flip-specific state on a player after landing. */
@@ -143,17 +173,23 @@ export function resetAllTrickState(player: PlayerState): void {
   resetPoseState(player);
 }
 
-/** Create a floating text instance for an awarded trick. */
+/**
+ * Create a floating text instance for an awarded trick.
+ * @param bonus - Points actually paid (already includes the chain multiplier).
+ * @param multiplier - Chain multiplier; shown as " x1.5" when above 1.
+ */
 export function createTrickFloatingText(
   label: string,
   bonus: number,
   playerX: number,
   playerY: number,
   playerWidth: number,
-  sketchy: boolean = false
+  sketchy: boolean = false,
+  multiplier: number = 1
 ): FloatingText {
+  const multiplierSuffix = multiplier > 1 ? ` \u00d7${formatMultiplier(multiplier)}` : "";
   return {
-    text: `${label}! +${bonus}`,
+    text: `${label}! +${bonus}${multiplierSuffix}`,
     x: playerX + playerWidth / 2,
     y: playerY - 10,
     opacity: 1,
@@ -162,68 +198,81 @@ export function createTrickFloatingText(
   };
 }
 
-/** Advance floating texts upward and fade out. Returns only still-visible texts. */
+/** Colour of the chain summary text. */
+export const COMBO_SUMMARY_COLOR = "#facc15";
+const COMBO_SUMMARY_SIZE = 26;
+/** Rough glyph width / font size, to keep the centred summary on screen. */
+const SUMMARY_CHAR_WIDTH_EM = 0.55;
+
+/**
+ * Create the big "COMBO x3 · 5 tricks · +640" text shown when a chain cashes in.
+ * It sits above the rider and is nudged right so it never runs off the left edge
+ * on narrow screens (the rider is only 20% in from the left).
+ * @param summary - What the finished chain earned.
+ * @param playerX - Rider's left edge.
+ * @param playerY - Rider's top edge.
+ * @param playerWidth - Rider's width.
+ * @param canvasW - Canvas width, for keeping the text on screen.
+ */
+export function createComboSummaryText(
+  summary: ComboSummary,
+  playerX: number,
+  playerY: number,
+  playerWidth: number,
+  canvasW: number
+): FloatingText {
+  const text = `COMBO \u00d7${formatMultiplier(summary.multiplier)} \u00b7 ${summary.links} tricks \u00b7 +${summary.total}`;
+  const halfWidth = (text.length * COMBO_SUMMARY_SIZE * SUMMARY_CHAR_WIDTH_EM) / 2 + 8;
+  const x = Math.min(Math.max(playerX + playerWidth / 2, halfWidth), canvasW - halfWidth);
+  return { text, x, y: playerY - 70, opacity: 1, velocityY: -0.7, color: COMBO_SUMMARY_COLOR, size: COMBO_SUMMARY_SIZE };
+}
+
+/**
+ * Advance floating texts upward and fade out, dropping the ones that have faded.
+ * Compacts `texts` in place (no per-frame array allocation) and returns the same array.
+ */
 export function updateFloatingTexts(texts: FloatingText[], dt: number): FloatingText[] {
-  for (const ft of texts) {
+  let kept = 0;
+  for (let i = 0; i < texts.length; i++) {
+    const ft = texts[i];
     ft.y += ft.velocityY * dt;
     ft.opacity -= 0.01333 * dt;
+    if (ft.opacity > 0) texts[kept++] = ft;
   }
-  return texts.filter((ft) => ft.opacity > 0);
+  texts.length = kept;
+  return texts;
 }
 
 export interface TrickContext {
   player: PlayerState;
-  onCrash: () => void;
+  /** Called on a bad landing; `underRotated` says whether the trick was unfinished rather than overdone. */
+  onCrash: (underRotated: boolean) => void;
   onAwardBonus: (label: string, bonus: number, sketchy: boolean) => void;
 }
 
-export function handleFlipLanding(
-  ctx: TrickContext,
-  angle: number,
-  direction: number,
-  fullFlip: number,
-  tolerance: number,
-  sketchyTolerance: number
-): boolean {
-  const result = evaluateFlipLanding(angle, direction, fullFlip, tolerance, sketchyTolerance);
-  resetFlipState(ctx.player);
+/**
+ * Applies a landing verdict: clears the trick state that was judged (`reset`), then either
+ * crashes the rider or pays the trick. The verdict is taken before the reset so the
+ * evaluators see the state as it was in the air.
+ * @param reset - Which trick state the landing consumed (flip, pose or both).
+ * @returns True when the landing crashed, so the caller stops updating this frame.
+ */
+export function settleLanding(ctx: TrickContext, result: TrickResult, reset: (player: PlayerState) => void): boolean {
+  reset(ctx.player);
   if (result.crashed) {
-    ctx.onCrash();
+    ctx.onCrash(result.underRotated);
     return true;
   }
-  ctx.onAwardBonus(result.label!, result.bonus!, result.sketchy ?? false);
+  ctx.onAwardBonus(result.label, result.bonus, result.sketchy);
   return false;
 }
 
-export function handlePoseTrickLanding(ctx: TrickContext): boolean {
-  const result = evaluatePoseTrickLanding(ctx.player);
-  resetPoseState(ctx.player);
-  if (result.crashed) {
-    ctx.onCrash();
-    return true;
-  }
-  ctx.onAwardBonus(result.label!, result.bonus!, result.sketchy ?? false);
-  return false;
-}
-
-export function handleComboLanding(
-  ctx: TrickContext,
-  angle: number,
-  direction: number,
-  fullFlip: number,
-  tolerance: number,
-  sketchyTolerance: number
-): boolean {
-  const result = evaluateComboLanding(ctx.player, angle, direction, fullFlip, tolerance, sketchyTolerance);
-  resetAllTrickState(ctx.player);
-  if (result.crashed) {
-    ctx.onCrash();
-    return true;
-  }
-  ctx.onAwardBonus(result.label!, result.bonus!, result.sketchy ?? false);
-  return false;
-}
-
+/**
+ * Judges a landing by what was in the air: a flip, a pose, or both at once (a combo),
+ * and settles it. Nothing in the air means nothing to judge.
+ * @param prevBackflipAngle - Flip angle at the moment of touchdown (the player may already be reset).
+ * @returns True when the landing crashed.
+ */
 export function processTrickLanding(
   ctx: TrickContext,
   hadFlip: boolean,
@@ -235,11 +284,15 @@ export function processTrickLanding(
   sketchyTolerance: number
 ): boolean {
   if (hadFlip && hadPose) {
-    return handleComboLanding(ctx, prevBackflipAngle, prevFlipDirection, fullFlip, tolerance, sketchyTolerance);
-  } else if (hadFlip) {
-    return handleFlipLanding(ctx, prevBackflipAngle, prevFlipDirection, fullFlip, tolerance, sketchyTolerance);
-  } else if (hadPose) {
-    return handlePoseTrickLanding(ctx);
+    const result = evaluateComboLanding(ctx.player, prevBackflipAngle, prevFlipDirection, fullFlip, tolerance, sketchyTolerance);
+    return settleLanding(ctx, result, resetAllTrickState);
+  }
+  if (hadFlip) {
+    const result = evaluateFlipLanding(prevBackflipAngle, prevFlipDirection, fullFlip, tolerance, sketchyTolerance);
+    return settleLanding(ctx, result, resetFlipState);
+  }
+  if (hadPose) {
+    return settleLanding(ctx, evaluatePoseTrickLanding(ctx.player), resetPoseState);
   }
   return false;
 }

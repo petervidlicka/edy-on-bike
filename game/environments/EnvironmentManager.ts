@@ -2,66 +2,75 @@ import type {
   BiomeId,
   EnvironmentDefinition,
   EnvironmentPalette,
-  BackgroundDrawFn,
+  RiderGear,
+  SkylineDrawFn,
+  SkylinePass,
 } from "./types";
 import { SUBURBAN_ENVIRONMENT } from "./suburban";
 import { DUBAI_ENVIRONMENT } from "./dubai";
+import { AUSTRIA_ENVIRONMENT } from "./austria";
+import { TOKYO_ENVIRONMENT } from "./tokyo";
 import { lerpPalette, easeInOutCubic } from "./colorLerp";
 
-// ── Time thresholds for biome transitions ──
-// When new biomes are added, register them in BIOME_REGISTRY and add entries here.
+// ── Biome cycle ──
+// Each biome lasts BIOME_DURATION_MS; after the last one the run loops back to the
+// first. New biomes are added to the cycle in play order.
 
-interface BiomeThreshold {
-  timeMs: number;
-  biomeId: BiomeId;
-}
-
-const BIOME_THRESHOLDS: BiomeThreshold[] = [
-  { timeMs: 0, biomeId: "suburban" },
-  { timeMs: 60_000, biomeId: "dubai" },
-  // Future:
-  // { timeMs: 240_000, biomeId: "desert" },
-  // { timeMs: 360_000, biomeId: "snow" },
+const BIOME_CYCLE: EnvironmentDefinition[] = [
+  SUBURBAN_ENVIRONMENT,
+  DUBAI_ENVIRONMENT,
+  AUSTRIA_ENVIRONMENT,
+  TOKYO_ENVIRONMENT,
 ];
 
-// Registry of all available environments.
-// New biomes register themselves here when implemented.
-const BIOME_REGISTRY: Record<string, EnvironmentDefinition> = {
-  suburban: SUBURBAN_ENVIRONMENT,
-  dubai: DUBAI_ENVIRONMENT,
-};
+/** How long each biome lasts before the next transition starts. */
+const BIOME_DURATION_MS = 60_000;
 
-/** Duration of a biome transition in 60fps dt units (~4 seconds). */
-const TRANSITION_DURATION = 240; // 4s at 60fps
+const NO_PASSES: readonly SkylinePass[] = [];
+
+/**
+ * Shortest biome transition in 60fps dt units (~4 seconds). Engine stretches each one to
+ * however long the incoming buildings take to scroll across (see setTransitionDuration).
+ */
+const MIN_TRANSITION_DURATION = 240; // 4s at 60fps
 /** Duration of the music crossfade in milliseconds. */
 const MUSIC_CROSSFADE_MS = 3000;
 
 // ── Events emitted by update() for Engine to act on ──
 
 export interface EnvUpdateResult {
+  /** If set, a transition into this biome just started (Engine announces it as an event). */
+  biomeStarted?: BiomeId;
   /** If set, Engine should crossfade music to the new track. */
   musicCrossfade?: { track: string; durationMs: number };
-  /** If set, Engine should append new biome buildings to the existing layer (transition start). */
-  appendBackground?: { toEnv: EnvironmentDefinition };
-  /** If set, Engine should fully replace background layers with this environment (transition end). */
-  regenerateBackground?: EnvironmentDefinition;
+  /** If set, a transition just started, from the biome being left to the one coming in. */
+  transitionStarted?: { from: EnvironmentDefinition; to: EnvironmentDefinition };
+  /** Set when a transition just finished: the incoming biome is now the only one on screen. */
+  transitionEnded?: true;
 }
 
 /**
  * Manages the active environment/biome and handles smooth transitions
- * between biomes based on elapsed time thresholds.
+ * between biomes: a new one every BIOME_DURATION_MS, looping through BIOME_CYCLE.
  *
  * During a transition getCurrentPalette() returns an interpolated palette.
  */
 export class EnvironmentManager {
   private currentEnv: EnvironmentDefinition;
+  /** Biomes entered so far this run, counting every lap (index into the cycle modulo its length). */
   private currentBiomeIndex = 0;
+  /** Run time at which the next biome is due; pushed back when a biome is forced early. */
+  private nextBiomeAtMs = BIOME_DURATION_MS;
+  /** Steady-state skyline passes per drawer, so a frame outside a transition allocates nothing. */
+  private steadyPasses = new Map<SkylineDrawFn, readonly SkylinePass[]>();
 
   // Transition state
   private fromEnv: EnvironmentDefinition | null = null;
   private toEnv: EnvironmentDefinition | null = null;
   private transitionProgress = 0;
   private transitioning = false;
+  /** Length of the running transition, in 60fps dt units. */
+  private transitionDuration = MIN_TRANSITION_DURATION;
 
   // Biome-relative timing — tracks when the current biome started
   private biomeStartMs = 0;
@@ -82,40 +91,30 @@ export class EnvironmentManager {
 
     // Check if we should start a new transition
     if (!this.transitioning) {
-      const nextIndex = this.currentBiomeIndex + 1;
-      if (nextIndex < BIOME_THRESHOLDS.length) {
-        const threshold = BIOME_THRESHOLDS[nextIndex];
-        if (elapsedMs >= threshold.timeMs) {
-          const nextEnv = BIOME_REGISTRY[threshold.biomeId];
-          if (nextEnv) {
-            this.startTransition(nextEnv);
-            this.currentBiomeIndex = nextIndex;
+      if (elapsedMs >= this.nextBiomeAtMs) {
+        this.nextBiomeAtMs += BIOME_DURATION_MS;
+        const fromEnv = this.currentEnv;
+        const nextEnv = this.advanceBiome();
+        result.biomeStarted = nextEnv.id;
 
-            // Signal Engine to append new biome buildings to the existing layer
-            result.appendBackground = { toEnv: nextEnv };
+        result.transitionStarted = { from: fromEnv, to: nextEnv };
 
-            // Signal Engine to crossfade music if track changed
-            if (nextEnv.musicTrack !== this.currentEnv.musicTrack) {
-              result.musicCrossfade = {
-                track: nextEnv.musicTrack,
-                durationMs: MUSIC_CROSSFADE_MS,
-              };
-            }
-          }
+        // Signal Engine to crossfade music if track changed
+        if (nextEnv.musicTrack !== this.fromEnv?.musicTrack) {
+          result.musicCrossfade = {
+            track: nextEnv.musicTrack,
+            durationMs: MUSIC_CROSSFADE_MS,
+          };
         }
       }
     }
 
     // Advance transition
     if (this.transitioning) {
-      this.transitionProgress += dt / TRANSITION_DURATION;
+      this.transitionProgress += dt / this.transitionDuration;
       if (this.transitionProgress >= 1) {
-        const completedEnv = this.toEnv;
         this.completeTransition();
-        // Signal Engine to do a clean rebuild with just the new biome
-        if (completedEnv) {
-          result.regenerateBackground = completedEnv;
-        }
+        result.transitionEnded = true;
       }
     }
 
@@ -126,6 +125,7 @@ export class EnvironmentManager {
   reset(): void {
     this.currentEnv = SUBURBAN_ENVIRONMENT;
     this.currentBiomeIndex = 0;
+    this.nextBiomeAtMs = BIOME_DURATION_MS;
     this.fromEnv = null;
     this.toEnv = null;
     this.transitionProgress = 0;
@@ -134,9 +134,17 @@ export class EnvironmentManager {
     this.lastElapsedMs = 0;
   }
 
-  /** Returns elapsed time relative to when the current biome started. */
+  /**
+   * Returns elapsed time relative to when the current biome started. On second and later
+   * laps the biome's own full-roster time is added, so a revisited biome skips its gentle
+   * opening stages (the speed is high by then). Measured against the environment whose
+   * pool is being sampled (`getCurrentEnvironment`), so the bonus matches its stage table.
+   */
   getBiomeElapsedMs(elapsedMs: number): number {
-    return Math.max(0, elapsedMs - this.biomeStartMs);
+    const lapBonus = this.currentBiomeIndex >= BIOME_CYCLE.length
+      ? this.getCurrentEnvironment().obstaclePool.fullRosterMs
+      : 0;
+    return Math.max(0, elapsedMs - this.biomeStartMs) + lapBonus;
   }
 
   /**
@@ -164,27 +172,54 @@ export class EnvironmentManager {
   }
 
   /**
-   * Returns background drawers for the current state.
-   * During transition, merges both biomes' drawers so elements from both can be rendered.
+   * Sets how long the transition that just started lasts, so colours, clouds and weather
+   * change while the incoming biome's buildings scroll in rather than ahead of them.
+   * @param frames - Duration in 60fps dt units; never shorter than ~4 seconds.
    */
-  getBackgroundDrawers(): Record<string, BackgroundDrawFn> {
-    if (this.transitioning && this.fromEnv && this.toEnv) {
-      return { ...this.fromEnv.backgroundDrawers, ...this.toEnv.backgroundDrawers };
-    }
-    return this.currentEnv.backgroundDrawers;
+  setTransitionDuration(frames: number): void {
+    this.transitionDuration = Math.max(MIN_TRANSITION_DURATION, frames);
   }
 
-  /** Force an immediate transition to the next biome (debug only). */
+  /** The biome being moved to during a transition, otherwise the current one. */
+  getTargetEnvironment(): EnvironmentDefinition {
+    return this.toEnv ?? this.currentEnv;
+  }
+
+  /** Eased transition progress (0–1) for cross-fades, or null when no transition is running. */
+  getTransitionFade(): number | null {
+    return this.transitioning ? easeInOutCubic(Math.min(1, this.transitionProgress)) : null;
+  }
+
+  /**
+   * Far scenery bands to draw this frame. Across a transition the outgoing biome's
+   * band fades out while the incoming one fades in.
+   */
+  getSkylines(): readonly SkylinePass[] {
+    return this.fadedPasses((env) => env.skyline);
+  }
+
+  /** Road overlays (e.g. wet-road neon reflections), faded across a transition like skylines. */
+  getRoadOverlays(): readonly SkylinePass[] {
+    return this.fadedPasses((env) => env.roadOverlay);
+  }
+
+  /** Biome kit for the rider; switches halfway through a transition, with the buildings. */
+  getRiderGear(): RiderGear | undefined {
+    return this.getCurrentEnvironment().riderGear;
+  }
+
+  /**
+   * Force an immediate transition to the next biome (debug only). A transition already
+   * under way is finished first so no biome is skipped, and the forced biome gets a full
+   * BIOME_DURATION_MS before the next one is due.
+   */
   forceNextBiome(): EnvUpdateResult {
     const result: EnvUpdateResult = {};
-    const nextIndex = this.currentBiomeIndex + 1;
-    if (nextIndex >= BIOME_THRESHOLDS.length) return result;
-    const threshold = BIOME_THRESHOLDS[nextIndex];
-    const nextEnv = BIOME_REGISTRY[threshold.biomeId];
-    if (!nextEnv) return result;
-    this.startTransition(nextEnv);
-    this.currentBiomeIndex = nextIndex;
-    if (nextEnv.musicTrack !== this.currentEnv.musicTrack) {
+    if (this.transitioning) this.completeTransition();
+    this.nextBiomeAtMs = this.lastElapsedMs + BIOME_DURATION_MS;
+    const nextEnv = this.advanceBiome();
+    result.biomeStarted = nextEnv.id;
+    if (nextEnv.musicTrack !== this.fromEnv?.musicTrack) {
       result.musicCrossfade = {
         track: nextEnv.musicTrack,
         durationMs: MUSIC_CROSSFADE_MS,
@@ -195,10 +230,43 @@ export class EnvironmentManager {
 
   // ── Internal ──
 
+  /** Moves on to the next biome in the cycle and starts the transition into it. */
+  private advanceBiome(): EnvironmentDefinition {
+    this.currentBiomeIndex++;
+    const nextEnv = BIOME_CYCLE[this.currentBiomeIndex % BIOME_CYCLE.length];
+    this.startTransition(nextEnv);
+    return nextEnv;
+  }
+
+  /**
+   * One pass per biome that has the picked drawer: outgoing fades out, incoming fades in.
+   * Outside a transition the same cached array is returned every frame.
+   */
+  private fadedPasses(pick: (env: EnvironmentDefinition) => SkylineDrawFn | undefined): readonly SkylinePass[] {
+    if (this.transitioning && this.fromEnv && this.toEnv) {
+      const t = easeInOutCubic(Math.min(1, this.transitionProgress));
+      const passes: SkylinePass[] = [];
+      const from = pick(this.fromEnv);
+      const to = pick(this.toEnv);
+      if (from) passes.push({ draw: from, alpha: 1 - t });
+      if (to) passes.push({ draw: to, alpha: t });
+      return passes;
+    }
+    const current = pick(this.currentEnv);
+    if (!current) return NO_PASSES;
+    let passes = this.steadyPasses.get(current);
+    if (!passes) {
+      passes = [{ draw: current, alpha: 1 }];
+      this.steadyPasses.set(current, passes);
+    }
+    return passes;
+  }
+
   private startTransition(toEnv: EnvironmentDefinition): void {
     this.fromEnv = this.currentEnv;
     this.toEnv = toEnv;
     this.transitionProgress = 0;
+    this.transitionDuration = MIN_TRANSITION_DURATION;
     this.transitioning = true;
     this.biomeStartMs = this.lastElapsedMs;
   }

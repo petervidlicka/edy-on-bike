@@ -1,64 +1,84 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import LeaderboardForm from "./LeaderboardForm";
-import { LEADERBOARD_SIZE } from "@/lib/leaderboardConfig";
-import { fetchLeaderboard, LeaderboardError } from "@/lib/leaderboardClient";
-import type { LeaderboardEntry } from "@/lib/leaderboardClient";
+/**
+ * Game-over overlay. Aims for one press from crash to next run: the leaderboard is
+ * fetched immediately, and only a run that would make the board is asked for a name.
+ * Views: summary (default) · form (qualifying / manual save) · leaderboard (on request).
+ */
+import { useState, useCallback } from "react";
+import { LeaderboardForm } from "./LeaderboardForm";
+import { GameOverHeader } from "./GameOverHeader";
+import { GameOverSummary } from "./GameOverSummary";
+import { GameOverLeaderboard } from "./GameOverLeaderboard";
+import { GameOverLinkButton } from "./GameOverLinkButton";
+import { LEADERBOARD_SIZE, scoreQualifies } from "@/lib/leaderboardConfig";
+import { useGameOverLeaderboard } from "@/hooks/useGameOverLeaderboard";
+import { useInputLockout, GAME_OVER_LOCKOUT_MS } from "@/hooks/useInputLockout";
+import { GlassPanel } from "./ui/GlassPanel";
+import { badgeNeutral, badgeWarn, font } from "./ui/tokens";
 
 interface GameOverScreenProps {
   score: number;
   bestScore: number;
   skinName: string;
-  newlyUnlockedSkins?: string[];
+  /** Saved best before this run (for the unlock progress animation). */
+  previousBest: number;
+  cheatUnlocked: boolean;
+  /**
+   * The run's leaderboard ticket (resolves to null if registering it failed), or null for a
+   * run that can't be ranked (debug course, cheat code): those get no save option.
+   */
+  runTicket: Promise<string | null> | null;
+  /** Starts a new run immediately. */
   onRestart: () => void;
+  /** Returns to the start screen (bike picker, multiplayer link). */
+  onHome: () => void;
 }
 
-export default function GameOverScreen({ score, bestScore, skinName, newlyUnlockedSkins, onRestart }: GameOverScreenProps) {
-  const isNewBest = score > 0 && score >= bestScore;
+type View = "summary" | "form" | "leaderboard";
 
-  const [step, setStep] = useState<1 | 2>(1);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [totalPlayers, setTotalPlayers] = useState(0);
-  /** Shown in place of the table, so an outage doesn't read as "no scores yet". */
-  const [loadError, setLoadError] = useState<string | null>(null);
+/** Longest the screen waits for the leaderboard before settling on the one-tap replay layout. */
+const LEADERBOARD_FETCH_GRACE_MS = 1500;
 
-  const loadLeaderboard = useCallback(async () => {
-    try {
-      const data = await fetchLeaderboard();
-      setLeaderboard(data.scores);
-      setTotalPlayers(data.totalPlayers);
-      setLoadError(null);
-    } catch (err) {
-      console.error("[leaderboard] Loading scores failed", err);
-      setLoadError(
-        err instanceof LeaderboardError ? err.message : "Couldn't load the leaderboard. Please try again later.",
-      );
-    }
-  }, []);
+/**
+ * @param props - Run result, saved best, skin info and the restart / home actions.
+ * @example
+ * <GameOverScreen score={420} bestScore={900} skinName="Racer" runTicket={ticket} onRestart={restart} onHome={home} />
+ */
+export function GameOverScreen({
+  score, bestScore, skinName, previousBest, cheatUnlocked, runTicket, onRestart, onHome,
+}: GameOverScreenProps) {
+  const board = useGameOverLeaderboard();
+  const lockoutActive = useInputLockout(GAME_OVER_LOCKOUT_MS);
+  // Give a slow leaderboard fetch a little longer, so the layout doesn't flip under the player's finger
+  const fetchGraceActive = useInputLockout(LEADERBOARD_FETCH_GRACE_MS);
+  const locked = lockoutActive || (board.status === "loading" && fetchGraceActive);
+  /** An explicit choice by the player; until then the view follows whether the score qualifies. */
+  const [chosenView, setChosenView] = useState<View | null>(null);
+  const [saved, setSaved] = useState<{ name: string; score: number } | null>(null);
 
-  const handleSaved = useCallback(async () => {
-    await loadLeaderboard();
-    setStep(2);
-  }, [loadLeaderboard]);
+  const ranked = runTicket !== null;
+  const qualifies = ranked && board.status === "ready" && scoreQualifies(score, board.entries);
+  const view: View = chosenView ?? (qualifies ? "form" : "summary");
 
-  // Space key: step 2 → restart
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || step !== 2) return;
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      onRestart();
-    };
-    window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
-  }, [step, onRestart]);
+  // Freeze the layout once input unlocks; a fetch landing later must not swap the screen
+  // (adjusting state during render, React's pattern for state derived from a transition)
+  if (!locked && chosenView === null) setChosenView(qualifies ? "form" : "summary");
+
+  // Depends on the stable reload function, not the board object, which is new every render
+  const reloadBoard = board.reload;
+  const handleSaved = useCallback(
+    async (name: string) => {
+      setSaved({ name, score });
+      await reloadBoard();
+      setChosenView("leaderboard");
+    },
+    [reloadBoard, score],
+  );
 
   return (
     <div
-      onClick={step === 2 ? onRestart : undefined}
+      onClick={view === "summary" || view === "leaderboard" ? () => !locked && onRestart() : undefined}
       style={{
         position: "fixed",
         inset: 0,
@@ -66,146 +86,61 @@ export default function GameOverScreen({ score, bestScore, skinName, newlyUnlock
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        pointerEvents: step === 2 ? "auto" : "none",
-        cursor: step === 2 ? "pointer" : undefined,
-        gap: "0.4rem",
-        fontFamily: "var(--font-nunito), Arial, sans-serif",
+        pointerEvents: view === "form" ? "none" : "auto",
+        cursor: view === "form" || locked ? undefined : "pointer",
+        fontFamily: font.ui,
       }}
     >
-      <h2
-        style={{
-          color: "#27435E",
-          fontSize: "2.5rem",
-          fontFamily: "var(--font-fredoka), sans-serif",
-          fontWeight: 600,
-          margin: "0 0 0.5rem",
-          letterSpacing: "0.08em",
-          textShadow: "0 2px 6px rgba(255,255,255,0.3)",
-        }}
-      >
-        GAME OVER
-      </h2>
+      <GlassPanel style={{ pointerEvents: "auto" }}>
+        {view !== "leaderboard" && (
+          <GameOverHeader
+            score={score}
+            bestScore={bestScore}
+            previousBest={previousBest}
+            cheatUnlocked={cheatUnlocked}
+            extraBadge={
+              view === "form" && qualifies ? (
+                <span style={badgeWarn}>
+                  You made the top {LEADERBOARD_SIZE}
+                </span>
+              ) : !ranked ? (
+                <span style={badgeNeutral}>
+                  Practice run · not ranked
+                </span>
+              ) : null
+            }
+          />
+        )}
 
-      {/* ── Step 1: score summary + name entry ── */}
-      {step === 1 && (
-        <>
-          <p style={{ color: "#1e293b", margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>
-            Score: <strong>{score}</strong>
-          </p>
+        {view === "summary" && (
+          <GameOverSummary
+            locked={locked}
+            // A board that arrives after the layout froze can still turn out to qualify
+            offerSave={ranked && (board.status === "error" || qualifies)}
+            onRestart={onRestart}
+            onShowLeaderboard={() => setChosenView("leaderboard")}
+            onSaveScore={() => setChosenView("form")}
+          />
+        )}
 
-          {isNewBest ? (
-            <p style={{ color: "#92400e", margin: 0, fontSize: "0.9rem", fontWeight: 700 }}>
-              🎉 New personal best!
-            </p>
-          ) : bestScore > 0 ? (
-            <p style={{ color: "#475569", margin: 0, fontSize: "0.9rem", fontWeight: 600 }}>
-              Your best: {bestScore}
-            </p>
-          ) : null}
+        {view === "form" && runTicket && (
+          <LeaderboardForm
+            runTicket={runTicket}
+            score={score}
+            skinName={skinName}
+            locked={locked}
+            onSaved={handleSaved}
+            onSavedAndRestart={onRestart}
+            onSkip={onRestart}
+          />
+        )}
 
-          {newlyUnlockedSkins && newlyUnlockedSkins.length > 0 && (
-            <div style={{
-              background: "rgba(234,179,8,0.15)",
-              border: "1.5px solid rgba(234,179,8,0.4)",
-              borderRadius: "12px",
-              padding: "0.4rem 1rem",
-              marginTop: "0.3rem",
-              textAlign: "center",
-            }}>
-              <p style={{ color: "#92400e", fontSize: "0.85rem", fontWeight: 700, margin: 0 }}>
-                New bike unlocked: {newlyUnlockedSkins.join(", ")}!
-              </p>
-            </div>
-          )}
+        {view === "leaderboard" && (
+          <GameOverLeaderboard board={board} saved={saved} locked={locked} onRestart={onRestart} />
+        )}
 
-          <LeaderboardForm score={score} skinName={skinName} onSaved={handleSaved} />
-        </>
-      )}
-
-      {/* ── Step 2: global leaderboard + restart ── */}
-      {step === 2 && (
-        <>
-          {loadError ? (
-            <p style={{ color: "#b91c1c", fontSize: "0.85rem", fontWeight: 600, margin: "0.5rem 0" }}>
-              {loadError}
-            </p>
-          ) : leaderboard.length > 0 ? (
-            <div
-              style={{
-                background: "rgba(255,255,255,0.72)",
-                borderRadius: "10px",
-                padding: "0.65rem 1.1rem",
-                minWidth: "260px",
-                maxWidth: "360px",
-                marginTop: "0.25rem",
-                pointerEvents: "auto",
-              }}
-            >
-              <h3
-                style={{
-                  margin: "0 0 0.4rem",
-                  fontSize: "0.82rem",
-                  fontWeight: 700,
-                  color: "#1e293b",
-                  textAlign: "center",
-                  letterSpacing: "0.07em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Top Scores
-              </h3>
-              <ol
-                style={{
-                  margin: 0,
-                  padding: "0 0 0 1.3rem",
-                  fontSize: "0.8rem",
-                  color: "#334155",
-                  lineHeight: 1.65,
-                  fontFamily: "var(--font-space-mono), monospace",
-                }}
-              >
-                {leaderboard.slice(0, LEADERBOARD_SIZE).map((entry, i) => (
-                  <li key={i} style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
-                    <span style={{ fontWeight: 600, flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
-                    {entry.skin && (
-                      <span style={{ fontSize: "0.65rem", color: "#64748b", whiteSpace: "nowrap" }}>{entry.skin}</span>
-                    )}
-                    <span style={{ fontWeight: 400, whiteSpace: "nowrap" }}>
-                      {String(entry.score).padStart(5, "0")}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              {totalPlayers > 0 && (
-                <p style={{
-                  margin: "0.45rem 0 0",
-                  fontSize: "0.72rem",
-                  color: "#64748b",
-                  textAlign: "center",
-                  fontWeight: 600,
-                  fontFamily: "var(--font-nunito), Arial, sans-serif",
-                }}>
-                  {totalPlayers} total player{totalPlayers !== 1 ? "s" : ""}
-                </p>
-              )}
-            </div>
-          ) : (
-            <p style={{ color: "#475569", fontSize: "0.85rem", margin: "0.5rem 0" }}>
-              No scores yet — be the first!
-            </p>
-          )}
-
-          <p style={{
-            marginTop: "1rem",
-            fontSize: "0.8rem",
-            fontWeight: 600,
-            color: "#64748b",
-            letterSpacing: "0.04em",
-          }}>
-            click or press Space to continue
-          </p>
-        </>
-      )}
+        <GameOverLinkButton onClick={onHome}>Home / change bike</GameOverLinkButton>
+      </GlassPanel>
     </div>
   );
 }

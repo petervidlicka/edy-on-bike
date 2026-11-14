@@ -20,7 +20,9 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
+/** Development only: in production a shared ?obstacles=debug link plays the normal course. */
 function getSnapshot(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
   return new URLSearchParams(window.location.search).get(PARAM) === VALUE;
 }
 

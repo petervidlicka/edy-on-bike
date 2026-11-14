@@ -14,8 +14,8 @@ Wrap the existing Next.js web game in Capacitor to publish on iOS App Store and 
 
 - [x] Conditional `output: "export"` in `next.config.ts` (triggered by `CAPACITOR_BUILD=1`)
 - [x] `NEXT_PUBLIC_API_URL` env variable — empty for web (relative URLs), set to `https://edyonbike.com` for native builds
-- [x] Updated `GameOverScreen.tsx` to use `NEXT_PUBLIC_API_URL` for leaderboard API calls
-- [x] `.env.capacitor` created with build-time env vars
+- [x] Leaderboard API calls use `NEXT_PUBLIC_API_URL` (resolved in `lib/leaderboardClient.ts`)
+- [x] `.env.capacitor` holds the native build-time env vars; `npm run build:mobile` loads it
 
 **To verify on your machine:** run `npm run build:mobile` and test with `npx serve out`
 

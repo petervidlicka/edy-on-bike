@@ -104,3 +104,45 @@ export function isSkinUnlocked(
 ): boolean {
   return cheatUnlocked || bestScore >= skin.unlockScore;
 }
+
+/** The next bike to work towards and how far the player is from it. */
+export interface NextUnlock {
+  skin: SkinDefinition;
+  /** Points still missing (always > 0). */
+  remaining: number;
+  /** 0..1, measured from the previous tier's threshold so the bar visibly moves. */
+  progress: number;
+  /** Score the previous tier needed; the bar's zero point. */
+  previousThreshold: number;
+  /** Player-facing requirement, e.g. "180 more points"; a text field so non-score unlocks can reuse it. */
+  requirement: string;
+}
+
+/**
+ * Finds the cheapest still-locked bike, for the "next unlock" progress UI.
+ * @param bestScore - The player's saved best score.
+ * @param cheatUnlocked - IDKFA state; everything counts as unlocked.
+ * @returns The next unlock, or null when every bike is unlocked.
+ * @example
+ * getNextUnlock(570, false)?.requirement; // "180 more points"
+ */
+export function getNextUnlock(bestScore: number, cheatUnlocked: boolean): NextUnlock | null {
+  if (cheatUnlocked) return null;
+  const skin = SKINS.filter((s) => s.unlockScore > bestScore).sort(
+    (a, b) => a.unlockScore - b.unlockScore
+  )[0];
+  if (!skin) return null;
+  const previousThreshold = Math.max(
+    0,
+    ...SKINS.filter((s) => s.unlockScore <= bestScore).map((s) => s.unlockScore)
+  );
+  const span = skin.unlockScore - previousThreshold;
+  const remaining = skin.unlockScore - bestScore;
+  return {
+    skin,
+    remaining,
+    progress: Math.min(1, Math.max(0, (bestScore - previousThreshold) / span)),
+    previousThreshold,
+    requirement: `${remaining} more point${remaining === 1 ? "" : "s"}`,
+  };
+}

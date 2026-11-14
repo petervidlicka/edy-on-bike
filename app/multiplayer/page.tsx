@@ -6,11 +6,11 @@
  */
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import OrientationGuard from "@/components/OrientationGuard";
-import MultiplayerLobby from "@/components/MultiplayerLobby";
-import MultiplayerGameCanvas from "@/components/MultiplayerGameCanvas";
-import MultiplayerResults from "@/components/MultiplayerResults";
-import MultiplayerBackdrop from "@/components/MultiplayerBackdrop";
+import { OrientationGuard } from "@/components/OrientationGuard";
+import { MultiplayerLobby } from "@/components/MultiplayerLobby";
+import { MultiplayerGameCanvas } from "@/components/MultiplayerGameCanvas";
+import { MultiplayerResults } from "@/components/MultiplayerResults";
+import { MultiplayerBackdrop } from "@/components/MultiplayerBackdrop";
 import { useSavedSkinState } from "@/hooks/useSavedSkinState";
 import { useMultiplayerRoom } from "@/hooks/useMultiplayerRoom";
 
@@ -27,8 +27,12 @@ export default function MultiplayerPage() {
     rankings,
     adapter,
     error,
+    quickPlay,
+    queue,
     createRoom,
     joinRoom,
+    startQuickPlay,
+    cancelQuickPlay,
     setReady,
     playAgain,
     disconnect,
@@ -55,6 +59,10 @@ export default function MultiplayerPage() {
           players={players}
           error={error}
           connecting={connectionState !== "disconnected" && !roomCode}
+          quickPlay={quickPlay}
+          queue={queue}
+          onQuickPlay={startQuickPlay}
+          onCancelQuickPlay={cancelQuickPlay}
           onCreateRoom={createRoom}
           onJoinRoom={joinRoom}
           onReady={setReady}

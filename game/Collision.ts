@@ -1,18 +1,20 @@
-import { PlayerState, ObstacleInstance, ObstacleType } from "./types";
-
-// Ramp dimensions for CONTAINER_WITH_RAMP (must match Obstacle.ts / Renderer.ts)
-const CONTAINER_RAMP_W = 75;
-const CONTAINER_RAMP_H = 36;
-
 /**
- * Inner padding that makes hitboxes slightly smaller than the visual bounds, so
- * near-misses feel fair rather than frustrating. Obstacle placement reads it to keep
- * low obstacles hittable.
+ * Hit testing between the rider and obstacles: plain overlap, landing on or crashing
+ * into a rideable, and following a ramp's surface. Pure functions over the data objects.
  */
-export const HITBOX_PADDING = 8;
+import { PlayerState, ObstacleInstance, RampType } from "./types";
+import { HITBOX_PADDING } from "./constants";
+import { OBSTACLE_SPECS } from "./Obstacle";
+import { CONTAINER_RAMP, curvedRampSurface, type RampSurface } from "./rampGeometry";
 
-// How many pixels from the obstacle top counts as "landing on top".
-// Must be larger than the max fall distance per frame (~18px at peak velocity).
+export { HITBOX_PADDING };
+
+/** Scratch result for curved surfaces, reused so collision checks allocate nothing extra. */
+const SURFACE: RampSurface = { y: 0, angle: 0 };
+
+// How many pixels below the obstacle top still count as "landing on top" when the
+// previous position isn't known. Covers ~18px of fall per frame at 60fps; slower frames
+// fall further, which the swept check in checkRideableCollision handles.
 const TOP_LANDING_TOLERANCE = 35;
 
 export function checkCollision(player: PlayerState, obstacle: ObstacleInstance): boolean {
@@ -26,9 +28,15 @@ export function checkCollision(player: PlayerState, obstacle: ObstacleInstance):
 
 export type RideableCollisionResult = "none" | "crash" | "land_on_top";
 
+/**
+ * Classifies an overlap with a rideable obstacle as a landing on top or a crash.
+ * @param prevY - The rider's y before this frame's movement. A rider whose bottom was
+ *   above the top last frame landed on it, however far they fell in one (slow) frame.
+ */
 export function checkRideableCollision(
   player: PlayerState,
-  obstacle: ObstacleInstance
+  obstacle: ObstacleInstance,
+  prevY: number = player.y
 ): RideableCollisionResult {
   const px1 = player.x + HITBOX_PADDING;
   const px2 = player.x + player.width - HITBOX_PADDING;
@@ -44,13 +52,12 @@ export function checkRideableCollision(
   // For CONTAINER_WITH_RAMP, follow the actual curved ramp surface so
   // landings at any point on the ramp are detected correctly (not just the peak).
   let effectiveOy1 = oy1;
-  if (obstacle.type === ObstacleType.CONTAINER_WITH_RAMP) {
-    const rampX = obstacle.x + obstacle.width - CONTAINER_RAMP_W;
+  if (OBSTACLE_SPECS[obstacle.type].ramp === "onContainer") {
+    const rampX = obstacle.x + obstacle.width - CONTAINER_RAMP.width;
     const playerCenterX = (px1 + px2) / 2;
     if (playerCenterX >= rampX) {
-      const t = Math.min(1, (playerCenterX - rampX) / CONTAINER_RAMP_W);
-      const curvedT = t * t; // quadratic ease-in matching the renderer
-      effectiveOy1 = obstacle.y - curvedT * CONTAINER_RAMP_H;
+      const t = Math.min(1, (playerCenterX - rampX) / CONTAINER_RAMP.width);
+      effectiveOy1 = curvedRampSurface(t, CONTAINER_RAMP.width, CONTAINER_RAMP.height, obstacle.y, SURFACE).y;
     }
   }
 
@@ -74,10 +81,12 @@ export function checkRideableCollision(
   const isLeaving = px2 > ox2;
   const requiredOverlapRatio = isLeaving ? 0 : 0.25;
 
+  const prevBottom = prevY + player.height - HITBOX_PADDING;
+  const crossedTop = prevBottom <= obstacleTop + TOP_LANDING_TOLERANCE;
   if (
     player.velocityY > 0 &&
     playerBottom >= obstacleTop &&
-    playerBottom <= obstacleTop + TOP_LANDING_TOLERANCE &&
+    (playerBottom <= obstacleTop + TOP_LANDING_TOLERANCE || crossedTop) &&
     overlapWidth / playerWidth >= requiredOverlapRatio
   ) {
     return "land_on_top";
@@ -91,7 +100,7 @@ export interface RampCollisionResult {
   onRamp: boolean;
   surfaceY: number;
   surfaceAngle: number;
-  rampType: "straight" | "curved" | null;
+  rampType: RampType | null;
 }
 
 const NO_RAMP: RampCollisionResult = { onRamp: false, surfaceY: 0, surfaceAngle: 0, rampType: null };
@@ -112,18 +121,17 @@ export function checkRampCollision(
   const t = (playerCenterX - rampLeft) / obstacle.width; // 0..1 across ramp
   const rampBaseY = obstacle.y + obstacle.height; // bottom = ground level
 
-  if (obstacle.type === ObstacleType.STRAIGHT_RAMP) {
+  // The profile comes from the spec, so the snow kicker shares the curved ramp's surface
+  // (only its art differs) and a container's kicker is handled by the riding code instead
+  const shape = OBSTACLE_SPECS[obstacle.type].ramp;
+  if (shape === "straight") {
     const surfaceY = rampBaseY - t * obstacle.height;
     const surfaceAngle = Math.atan2(-obstacle.height, obstacle.width);
     return { onRamp: true, surfaceY, surfaceAngle, rampType: "straight" };
   }
-
-  if (obstacle.type === ObstacleType.CURVED_RAMP) {
-    const curvedT = t * t; // ease-in quadratic — gentle at bottom, steep at lip
-    const surfaceY = rampBaseY - curvedT * obstacle.height;
-    const dydx = (-2 * t * obstacle.height) / obstacle.width;
-    const surfaceAngle = Math.atan2(dydx, 1);
-    return { onRamp: true, surfaceY, surfaceAngle, rampType: "curved" };
+  if (shape === "curved") {
+    const surface = curvedRampSurface(t, obstacle.width, obstacle.height, rampBaseY, SURFACE);
+    return { onRamp: true, surfaceY: surface.y, surfaceAngle: surface.angle, rampType: "curved" };
   }
 
   return NO_RAMP;

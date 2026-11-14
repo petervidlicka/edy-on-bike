@@ -1,6 +1,6 @@
 # Multiplayer Setup Guide
 
-Multiplayer runs on a small **Cloudflare Worker** in `party/` ([PartyServer](https://www.npmjs.com/package/partyserver) on Durable Objects — one instance per room code), separately from the Next.js app on Vercel.
+Multiplayer runs on a small **Cloudflare Worker** in `party/` ([PartyServer](https://www.npmjs.com/package/partyserver) on Durable Objects — one instance per room code, plus one global quick-play matchmaker), separately from the Next.js app on Vercel.
 
 ## Prerequisites
 
@@ -35,14 +35,28 @@ Open `http://localhost:3000/multiplayer` in your browser to play.
 
 ## How It Works
 
+### Quick Play (default)
+
+1. **Quick Play** — enter your name, pick a skin, click "QUICK PLAY". You join a single global queue (`party/matchmaker.ts`).
+2. **Matching** — the first rider in the queue starts a 15-second wait. When it ends, everyone queued (2–4 riders) is sent to a fresh room with a code like `Q7KX2M`; a 4th rider matches immediately.
+3. **Nobody around** — if the wait ends with only you, you're offered Keep waiting / Ride solo / Back. You stay queued; the next rider to arrive gets a 5-second wait for others, then you race.
+4. **Race** — matchmade rooms skip READY: the countdown starts once every matched rider has connected (or after 5 seconds with whoever made it; a lone rider, or a matched rider who connects after that, is quietly re-queued).
+5. **Play Again** searches again rather than reusing the room — strangers rarely all stay for a rematch.
+
+### Rooms with friends
+
 1. **Create a room** — enter your name, pick a skin, click "CREATE ROOM". You get a 4-character room code.
 2. **Share the code** — other players go to `/multiplayer`, enter the code, and click "JOIN".
 3. **Ready up** — each player clicks "READY". The race starts when all players (minimum 2) are ready.
-4. **Race** — everyone sees the same obstacles (seeded RNG, independent of screen size). Other players appear as semi-transparent ghosts.
+4. **Race** — everyone gets a near-identical course: obstacle types and gaps come from a seeded RNG that is independent of screen size, but the obstacle weights and gap floors also depend on wall-clock run time and the speed steps (`Engine.ts` `progressSpeed`, `Obstacle.ts` `createObstacle`/`nextSpawnGap`), so two riders whose clocks drift apart can see slightly different obstacles for the same draw. Other players appear as semi-transparent ghosts, each in its own lane so bikes don't overlap.
 5. **Crash** — when you crash, your ghost fades out for everyone else. The race ends when every player has crashed, left, or gone silent for 10 seconds (e.g. a hidden tab). Rankings are displayed.
 6. **Play Again** — returns you to the same room's lobby; the next race starts once everyone still in the room is ready again.
 
-Clients connect to `wss://<host>/parties/race/<ROOM CODE>` (the path comes from the `Race` Durable Object binding in `party/wrangler.jsonc`).
+### Trick boost
+
+Landing a trick pushes your rider forward across the screen (bigger tricks and combos push further), so the rider on a roll visibly pulls ahead. It caps at 48% of the screen width, holds for 10 seconds after your last trick, then eases back to the start position. It only moves your screen position — world speed is unchanged, so the course stays fair; the cost is less warning before obstacles. Tuning lives in `game/multiplayer/TrickBoost.ts`, ghost lanes in `GhostPlayerRenderer.ts`.
+
+Clients connect to `wss://<host>/parties/race/<ROOM CODE>` for rooms and `wss://<host>/parties/matchmaker/global` for quick play (paths come from the `Race` and `Matchmaker` Durable Object bindings in `party/wrangler.jsonc`).
 
 ## Environment Variables
 
@@ -74,7 +88,7 @@ Set `NEXT_PUBLIC_MULTIPLAYER_HOST` in the Vercel project's environment variables
 
 ### Native apps (Capacitor)
 
-The mobile build is a static export, so pass the host when building:
+The mobile build is a static export, so the host is baked in at build time. Uncomment `NEXT_PUBLIC_MULTIPLAYER_HOST` in `.env.capacitor` (which `build:mobile` loads), or pass it for one build:
 
 ```bash
 NEXT_PUBLIC_MULTIPLAYER_HOST=edy-on-bike-multiplayer.<your-subdomain>.workers.dev npm run build:mobile
@@ -84,6 +98,7 @@ Without it, the native app ships with multiplayer hidden.
 
 ### Changing the Worker
 
+- The room rules live in `party/roomState.ts` (`RoomState`) and the matching rules in `party/queuePolicy.ts` (`QueuePolicy`). Both are pure: they take `now` and return the messages to send and the timers to arm, and `npm test` covers them. `party/server.ts` and `party/matchmaker.ts` are only the socket/timer glue around them, with the shared frame handling in `party/socket.ts`. Put new behaviour in the pure modules and a test next to it.
 - `npm run typecheck` (in `party/`) type-checks the Worker; the root `tsconfig.json` excludes `party/`.
 - After editing `wrangler.jsonc`, run `npm run types` to regenerate `worker-configuration.d.ts`.
 - Renaming, adding or removing a Durable Object class needs a **new** entry in `migrations` — never edit an existing one.
@@ -92,8 +107,20 @@ Without it, the native app ships with multiplayer hidden.
 
 - Max **4 players** per room
 - Racers who send no updates for **10 seconds** are counted as crashed
-- Rooms auto-close after **5 minutes** with no messages from anyone
+- Rooms auto-close after **5 minutes** with no messages from any joined player; sockets that don't join within **10 seconds** are closed
+- If a player leaves during the countdown and only one is left, the room goes back to the lobby and everyone's READY is cleared, so the next race only starts once every remaining player confirms again (quick play re-queues the remaining rider instead)
 - Names are 1–16 characters; scores are sanity-checked server-side (bounded, not fully cheat-proof)
+
+### Known gaps
+
+- **No hibernation, no recovery from eviction.** Room and queue state (players, phase, the countdown/stale-check/deadline timers) lives in memory with `hibernate: false`. If Cloudflare evicts or restarts a Durable Object mid-session (deploys included), every socket in that room drops and each client shows "Lost connection"; the race can't resume. Ids are per socket by design, so there is no reconnect either — players create or join a new room.
+
+### Abuse protection
+
+- Connection ids are always generated by the server: the Worker refuses PartyServer's `?_pk=` id override, and every room handler checks that a message (or close) comes from the exact socket that joined as that player
+- Room codes must have the shape the clients generate (4 characters for friend rooms, `Q` + 5 for quick play); a new room landing on a code already in use is retried with a fresh code
+- Every socket, on rooms and the matchmaker alike, has a message budget (30/s, burst 40) checked before parsing; snapshots are limited to 20/s (burst 6), and a snapshot whose timestamp goes backwards or jumps ahead of the server clock is dropped
+- Matchmaker, per IP: at most 4 open sockets, 2 queued riders and 10 matches per 2 minutes. Matched sockets are closed by the server, and sockets that don't queue within 10 seconds are dropped
 
 ## Troubleshooting
 

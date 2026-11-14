@@ -2,11 +2,19 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { GameState, ObstacleType } from "@/game/types";
-import { getSkinById, SKINS } from "@/game/skins";
+import type { GameEvent } from "@/game/events";
+import { getSkinById } from "@/game/skins";
 import { loadSkinState } from "@/game/storage";
-import StartScreen from "./StartScreen";
-import HUD from "./HUD";
-import GameOverScreen from "./GameOverScreen";
+import { StartScreen } from "./StartScreen";
+import { HUD } from "./HUD";
+import { GameOverScreen } from "./GameOverScreen";
+import { PauseMenu } from "./PauseMenu";
+import { UnlockToast } from "./UnlockToast";
+import { DebugControls } from "./DebugControls";
+import { useHapticFeedback } from "@/hooks/useHapticFeedback";
+import { haptic } from "@/lib/haptics";
+import { startRun } from "@/lib/leaderboardClient";
+import { useUnlockToast } from "@/hooks/useUnlockToast";
 
 import { useCheatCode } from "@/hooks/useCheatCode";
 import { useDebugObstaclesFlag } from "@/hooks/useDebugObstaclesFlag";
@@ -15,18 +23,29 @@ import { useGameEngine } from "@/hooks/useGameEngine";
 import { useEngineInput } from "@/hooks/useEngineInput";
 import { useSavedSkinState, recordBestScore, unlockAllSkins } from "@/hooks/useSavedSkinState";
 
+/**
+ * ?obstacles=debug course: ramps and rideables for grinds, then one of each crash-variant
+ * trigger (trees, a hatchback, a van, a low sports car). Jump a trick and land it badly for the faceplant.
+ */
 const DEBUG_OBSTACLE_SEQUENCE = [
-  ObstacleType.STRAIGHT_RAMP, ObstacleType.STRAIGHT_RAMP,
-  ObstacleType.CURVED_RAMP, ObstacleType.CURVED_RAMP,
-  ObstacleType.SHIPPING_CONTAINER, ObstacleType.SHIPPING_CONTAINER,
-  ObstacleType.CONTAINER_WITH_RAMP, ObstacleType.CONTAINER_WITH_RAMP,
-  ObstacleType.BUS_STOP, ObstacleType.BUS_STOP,
+  ObstacleType.STRAIGHT_RAMP, ObstacleType.CURVED_RAMP,
+  ObstacleType.SHIPPING_CONTAINER, ObstacleType.CONTAINER_WITH_RAMP, ObstacleType.BUS_STOP,
+  ObstacleType.SMALL_TREE, ObstacleType.TALL_TREE, ObstacleType.GIANT_TREE,
+  ObstacleType.CAR, ObstacleType.DELIVERY_VAN, ObstacleType.PORSCHE_911,
 ];
 
-export default function GameCanvas() {
+/**
+ * The single-player game: owns the canvas and engine, and swaps the start, HUD,
+ * pause and game-over overlays as the run moves through its states.
+ * @example
+ * <OrientationGuard><GameCanvas /></OrientationGuard>
+ */
+export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<GameState>(GameState.IDLE);
-  const [newlyUnlockedSkins, setNewlyUnlockedSkins] = useState<string[]>([]);
+  // True while the player (or a hidden tab promoted to one) holds a "user" pause
+  const [userPaused, setUserPaused] = useState(false);
+  const [previousBest, setPreviousBest] = useState(0);
   // ?obstacles=debug flag — off during prerender/hydration, then read from the URL
   const [debugObstacles, toggleDebugObstacles] = useDebugObstaclesFlag();
 
@@ -34,20 +53,47 @@ export default function GameCanvas() {
   const [skinState, chooseSkin] = useSavedSkinState();
   const { bestScore, cheatUnlocked, selectedSkinId } = skinState;
 
-  const { engineRef, score, speed, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
+  const { onGameEvent: hapticsOnGameEvent, vibrationOn, toggleVibration } = useHapticFeedback();
+
+  // Leaderboard ticket for the current run (see startRun); null when the run can't be ranked
+  const [runTicket, setRunTicket] = useState<Promise<string | null> | null>(null);
+
+  const onGameEvent = useCallback((event: GameEvent) => {
+    hapticsOnGameEvent(event);
+    // Debug courses and cheat runs still play, they just never reach the public board.
+    // The engine decides: it also owns the restart paths (pause menu included) that clear a cheat.
+    if (event.type === "runStart") setRunTicket(event.ranked ? startRun() : null);
+  }, [hapticsOnGameEvent]);
+
+  const { engineRef, stats, finalScore, trickFeedback, musicMuted, sfxMuted, toggleMusic, toggleSfx } =
     useGameEngine(canvasRef, {
-      onGameOver: (finalScore) => {
+      onGameOver: (finalScore, engine) => {
         setGameState(GameState.GAME_OVER);
-        // Determine newly unlocked skins before updating best score
-        const previousBest = loadSkinState().bestScore;
-        const unlocked = SKINS.filter(
-          s => finalScore >= s.unlockScore && previousBest < s.unlockScore && s.unlockScore > 0
-        );
-        setNewlyUnlockedSkins(unlocked.map(s => s.name));
+        // Remember the best from before this run so the unlock bar can animate from it
+        const savedBest = loadSkinState().bestScore;
+        setPreviousBest(savedBest);
+        // Same rule as the game-over header's "New personal best!" line
+        if (finalScore > 0 && finalScore >= savedBest) {
+          haptic("success");
+          engine.announce("newBest");
+        }
         recordBestScore(finalScore);
       },
       onStateChange: setGameState,
+      onGameEvent,
+      onPauseChange: (_paused, reasons) => setUserPaused(reasons.includes("user")),
     });
+
+  const unlockToast = useUnlockToast(engineRef, gameState, stats, bestScore, cheatUnlocked);
+
+  // HUD handlers, created once: the HUD and its buttons are memoised on them
+  const handleJump = useCallback(() => engineRef.current?.jump(), [engineRef]);
+  const handlePause = useCallback(() => engineRef.current?.pause("user"), [engineRef]);
+  const handleBackflip = useCallback(() => engineRef.current?.backflip(), [engineRef]);
+  const handleFrontflip = useCallback(() => engineRef.current?.frontflip(), [engineRef]);
+  const handleSuperman = useCallback(() => engineRef.current?.superman(), [engineRef]);
+  const handleNoHander = useCallback(() => engineRef.current?.noHander(), [engineRef]);
+  const handleNextBiome = useCallback(() => engineRef.current?.forceNextBiome(), [engineRef]);
 
   // Sync skin to engine on mount, after hydration swaps in the saved skin, and on selection
   useEffect(() => {
@@ -59,23 +105,34 @@ export default function GameCanvas() {
     engineRef.current?.setDebugObstacles(debugObstacles ? DEBUG_OBSTACLE_SEQUENCE : null, 700);
   }, [engineRef, debugObstacles]);
 
+  // Straight into the next run (same as the pause menu's Restart); Home keeps the start screen reachable
+  // engine.restart() clears an active IDDQD, so the next run is ranked again
   const handleRestart = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.restart();
+    engine.start();
+  }, [engineRef]);
+
+  const handleHome = useCallback(() => {
     engineRef.current?.restart();
   }, [engineRef]);
 
-  useEngineInput(engineRef, canvasRef, { allowIdleStart: true });
+  useEngineInput(engineRef, canvasRef, { allowIdleStart: true, allowPause: true });
 
   // IDKFA cheat code — unlock all skins
   useCheatCode("IDKFA", unlockAllSkins);
 
-  // IDDQD cheat code — guaranteed ambulance resurrection
+  // IDDQD cheat code — guaranteed ambulance resurrection. Typed mid-run it unranks the current
+  // run here; typed before a run, the engine reports the next run as unranked itself.
   const handleIddqd = useCallback(() => {
     engineRef.current?.activateIddqd();
+    setRunTicket(null);
   }, [engineRef]);
   useCheatCode("IDDQD", handleIddqd);
 
-  // Pause when tab is hidden or device is in portrait (mobile)
-  usePauseOnHidden(engineRef);
+  // Pause when tab is hidden or device is in portrait (mobile); a hidden tab leaves the pause menu up
+  usePauseOnHidden(engineRef, { promoteToUserPause: true });
 
   return (
     <>
@@ -98,79 +155,62 @@ export default function GameCanvas() {
           cheatUnlocked={cheatUnlocked}
           selectedSkinId={selectedSkinId}
           onSelectSkin={chooseSkin}
+          onStart={handleJump}
         />
       )}
 
       {gameState === GameState.RUNNING && (
         <HUD
-          score={score}
-          speed={speed}
+          stats={stats}
           trickFeedback={trickFeedback}
           musicMuted={musicMuted}
           sfxMuted={sfxMuted}
           onToggleMusic={toggleMusic}
           onToggleSfx={toggleSfx}
-          onJump={() => engineRef.current?.jump()}
-          onBackflip={() => engineRef.current?.backflip()}
-          onFrontflip={() => engineRef.current?.frontflip()}
-          onSuperman={() => engineRef.current?.superman()}
-          onNoHander={() => engineRef.current?.noHander()}
+          vibrationOn={vibrationOn}
+          onToggleVibration={toggleVibration}
+          onPause={handlePause}
+          onJump={handleJump}
+          onBackflip={handleBackflip}
+          onFrontflip={handleFrontflip}
+          onSuperman={handleSuperman}
+          onNoHander={handleNoHander}
+        />
+      )}
+
+      <UnlockToast message={unlockToast} />
+
+      {userPaused && (
+        <PauseMenu
+          engineRef={engineRef}
+          musicMuted={musicMuted}
+          sfxMuted={sfxMuted}
+          onToggleMusic={toggleMusic}
+          onToggleSfx={toggleSfx}
+          vibrationOn={vibrationOn}
+          onToggleVibration={toggleVibration}
         />
       )}
 
       {gameState === GameState.GAME_OVER && (
         <GameOverScreen
-          score={score}
+          score={finalScore}
           bestScore={bestScore}
           skinName={getSkinById(selectedSkinId).name}
-          newlyUnlockedSkins={newlyUnlockedSkins}
+          previousBest={previousBest}
+          cheatUnlocked={cheatUnlocked}
+          runTicket={runTicket}
           onRestart={handleRestart}
+          onHome={handleHome}
         />
       )}
 
       {process.env.NODE_ENV !== "production" && (
-        <>
-          <button
-            onClick={toggleDebugObstacles}
-            style={{
-              position: "fixed",
-              top: 8,
-              right: 8,
-              padding: "4px 10px",
-              fontSize: "0.7rem",
-              fontFamily: "monospace",
-              background: debugObstacles ? "#d44" : "#555",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              opacity: 0.85,
-              zIndex: 9999,
-            }}
-          >
-            Debug: {debugObstacles ? "ON" : "OFF"}
-          </button>
-          <button
-            onClick={() => engineRef.current?.forceNextBiome()}
-            style={{
-              position: "fixed",
-              top: 8,
-              right: 110,
-              padding: "4px 10px",
-              fontSize: "0.7rem",
-              fontFamily: "monospace",
-              background: "#c87020",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              opacity: 0.85,
-              zIndex: 9999,
-            }}
-          >
-            Next Biome
-          </button>
-        </>
+        <DebugControls
+          debugObstacles={debugObstacles}
+          onToggleDebugObstacles={toggleDebugObstacles}
+          onNextBiome={handleNextBiome}
+        />
       )}
     </>
   );

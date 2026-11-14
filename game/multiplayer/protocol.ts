@@ -16,6 +16,70 @@ export const MAX_PLAYERS = 4;
 /** Longest display name, enforced by the lobby input and re-checked by the server. */
 export const MAX_NAME_LENGTH = 16;
 
+// ── Quick play (matchmaking) ──
+
+/**
+ * How long the first rider in the quick-play queue waits for others before the
+ * matchmaker either starts the race (2+ riders) or asks them whether to keep waiting.
+ */
+export const QUICK_PLAY_WAIT_MS = 15_000;
+
+/**
+ * Once a lone rider has outlasted the wait, the next arrival only holds the match
+ * this long for a third or fourth rider — the first one has waited long enough.
+ */
+export const QUICK_PLAY_GRACE_MS = 5_000;
+
+/**
+ * Quick-play room codes start with this and are longer than the 4-character codes
+ * players type, so matchmade rooms can never collide with a friend's room.
+ */
+export const QUICK_PLAY_CODE_PREFIX = "Q";
+
+// ── Room codes ──
+
+/** Alphabet of every room code: no I/O/0/1, so codes read back unambiguously. */
+export const ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/** Length of the codes friends type to join a room. */
+export const FRIEND_CODE_LENGTH = 4;
+
+/** Random characters after QUICK_PLAY_CODE_PREFIX in a matchmade room code. */
+export const QUICK_PLAY_CODE_RANDOM_LENGTH = 5;
+
+/**
+ * Picks a random room code from ROOM_CODE_CHARS.
+ * @param length - Number of random characters.
+ * @param prefix - Fixed start, e.g. QUICK_PLAY_CODE_PREFIX.
+ * @example randomRoomCode(FRIEND_CODE_LENGTH) // "K7XM"
+ */
+export function randomRoomCode(length: number, prefix = ""): string {
+  let code = prefix;
+  for (let i = 0; i < length; i++) {
+    code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+  }
+  return code;
+}
+
+const ROOM_CODE_CLASS = `[${ROOM_CODE_CHARS}]`;
+const FRIEND_CODE_PATTERN = new RegExp(`^${ROOM_CODE_CLASS}{${FRIEND_CODE_LENGTH}}$`);
+const QUICK_PLAY_CODE_PATTERN = new RegExp(
+  `^${QUICK_PLAY_CODE_PREFIX}${ROOM_CODE_CLASS}{${QUICK_PLAY_CODE_RANDOM_LENGTH}}$`,
+);
+
+/**
+ * Whether a code has the shape of a typed friend-room code. The server only hosts friend
+ * rooms on these, so a matchmade code can never be opened as a friend room (or vice versa).
+ */
+export function isFriendRoomCode(code: string): boolean {
+  return FRIEND_CODE_PATTERN.test(code);
+}
+
+/** Whether a code has the shape the matchmaker hands out (see QUICK_PLAY_CODE_PREFIX). */
+export function isQuickPlayCode(code: string): boolean {
+  return QUICK_PLAY_CODE_PATTERN.test(code);
+}
+
 // ── Ghost snapshot — minimal state sent at ~15 Hz per player ──
 
 export interface GhostSnapshot {
@@ -51,6 +115,11 @@ export interface GhostSnapshot {
   tp: number;
   /** Current score */
   s: number;
+  /**
+   * Rider's x as a fraction of the sender's canvas width (moves with the trick boost).
+   * Optional so older clients without the boost still relay; receivers fall back to PLAYER_X_RATIO.
+   */
+  x?: number;
 }
 
 // ── Room phases ──
@@ -80,9 +149,19 @@ export interface RankingEntry {
 
 // ── Client → Server messages ──
 
+/**
+ * Why a client is joining a room. "create" opens a friend room, "join" enters an existing one
+ * (so a typo'd code is rejected instead of silently opening a room), "quick" enters a
+ * matchmade room: everyone is ready on arrival and the race starts once `expected` riders
+ * (the size of the match) have connected.
+ */
+export type JoinIntent = "create" | "join" | "quick";
+
+/** Every join intent, for validation on the server. */
+export const JOIN_INTENTS: readonly JoinIntent[] = ["create", "join", "quick"];
+
 export type ClientMessage =
-  /** `intent` lets the server reject joins to codes nobody is in, instead of silently creating a room. */
-  | { type: "join"; name: string; skinId: SkinId; intent: "create" | "join" }
+  | { type: "join"; name: string; skinId: SkinId; intent: JoinIntent; expected?: number }
   | { type: "ready" }
   | { type: "player_update"; snapshot: GhostSnapshot }
   | { type: "player_crashed"; score: number }
@@ -100,6 +179,8 @@ export type ServerMessage =
       players: PlayerInfo[];
       phase: RoomPhase;
       seed: number;
+      /** Matchmade room: no code to share, and the first race starts without READY. */
+      quickPlay: boolean;
     }
   | { type: "player_joined"; player: PlayerInfo }
   | { type: "player_left"; playerId: string }
@@ -108,6 +189,8 @@ export type ServerMessage =
       type: "countdown_start";
       seed: number;
     }
+  /** A player left during the countdown and too few remain: back to the lobby with this roster. */
+  | { type: "countdown_cancelled"; players: PlayerInfo[] }
   | { type: "race_start" }
   | {
       type: "ghost_update";
@@ -125,4 +208,23 @@ export type ServerMessage =
     }
   /** Room went back to the lobby for a rematch; everyone is un-ready with scores cleared. */
   | { type: "room_reset"; players: PlayerInfo[] }
-  | { type: "error"; message: string };
+  /** Quick-play room: the match fell through or went ahead without this rider, so the client re-queues. */
+  | { type: "match_failed" }
+  /**
+   * Join refused; `message` is shown to the player. `reason: "room_taken"` means a freshly
+   * generated code was already in use, so the client quietly retries with a new one.
+   */
+  | { type: "error"; message: string; reason?: "room_taken" };
+
+// ── Matchmaker (quick play) — a separate socket from the room ──
+
+/** Client → matchmaker. Connecting alone doesn't queue, so idle sockets never get matched. */
+export type MatchmakerClientMessage = { type: "queue" };
+
+export type MatchmakerServerMessage =
+  /** Sent whenever the queue changes. `msLeft` is null while nobody's wait is counting down. */
+  | { type: "queue_status"; waiting: number; msLeft: number | null }
+  /** The wait ran out with nobody else around; the rider stays queued until they leave. */
+  | { type: "queue_lonely" }
+  /** Join this room now; `expected` is how many riders were matched into it. */
+  | { type: "matched"; roomCode: string; expected: number };

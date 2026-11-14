@@ -1,5 +1,5 @@
 import { AmbulanceState } from "../types";
-import { drawVehicle, roundedPath, type VehicleColors, type VehicleShape } from "./vehicle";
+import { drawVehicle, vehiclePaths, type VehicleColors, type VehicleShape } from "./vehicle";
 
 /** The ambulance looks the same in every biome, so it carries its own glass, tyre and lamp colours. */
 const AMBULANCE_COLORS: VehicleColors = {
@@ -27,6 +27,16 @@ const AMBULANCE_SHAPE: VehicleShape = {
  * that alternate while the siren runs.
  */
 export function drawAmbulance(ctx: CanvasRenderingContext2D, amb: AmbulanceState) {
+  // Authored facing right, but it arrives from the right and leaves to the left, so
+  // mirror it to keep the cab pointing the way it drives.
+  ctx.save();
+  ctx.translate(2 * amb.x + amb.width, 0);
+  ctx.scale(-1, 1);
+  drawAmbulanceArt(ctx, amb);
+  ctx.restore();
+}
+
+function drawAmbulanceArt(ctx: CanvasRenderingContext2D, amb: AmbulanceState) {
   const { x, y, width: w, height: h } = amb;
 
   drawVehicle(ctx, x, y, w, h, AMBULANCE_COLORS, AMBULANCE_SHAPE, {
@@ -37,8 +47,10 @@ export function drawAmbulance(ctx: CanvasRenderingContext2D, amb: AmbulanceState
 
   ctx.save();
 
-  // Battenburg chequer band, clipped to the body.
-  ctx.clip(roundedPath(AMBULANCE_SHAPE.outline.map(([fx, fy]) => ({ x: x + w * fx, y: y + h * fy })), 3));
+  // Battenburg chequer band, clipped to the body (the cached silhouette, moved into place).
+  ctx.translate(x, y);
+  ctx.clip(vehiclePaths(AMBULANCE_SHAPE, w, h).body);
+  ctx.translate(-x, -y);
   const bandTop = y + h * 0.5;
   const cell = h * 0.075;
   for (let row = 0; row < 2; row++) {

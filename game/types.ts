@@ -6,32 +6,6 @@ export enum GameState {
   GAME_OVER = "GAME_OVER",
 }
 
-export interface CrashState {
-  elapsed: number;
-  duration: number;
-
-  shakeIntensity: number;
-  shakeOffsetX: number;
-  shakeOffsetY: number;
-
-  riderX: number;
-  riderY: number;
-  riderVX: number;
-  riderVY: number;
-  riderAngle: number;
-  riderAngularVel: number;
-  riderBounceCount: number;
-
-  bikeX: number;
-  bikeY: number;
-  bikeVX: number;
-  bikeVY: number;
-  bikeAngle: number;
-  bikeAngularVel: number;
-  bikeBounceCount: number;
-  bikeWheelRotation: number;
-}
-
 export enum AmbulancePhase {
   DRIVING_IN = "DRIVING_IN",
   STOPPED = "STOPPED",
@@ -80,6 +54,34 @@ export enum ObstacleType {
   ROLLS_ROYCE_PHANTOM = "ROLLS_ROYCE_PHANTOM",
   PORSCHE_911 = "PORSCHE_911",
   DUBAI_BILLBOARD = "DUBAI_BILLBOARD",
+
+  // Austria biome obstacles
+  SNOWMAN = "SNOWMAN",
+  FROZEN_LAKE = "FROZEN_LAKE",
+  RED_DEER = "RED_DEER",
+  BEER_CRATES = "BEER_CRATES",
+  BEER_CRATE_WALL = "BEER_CRATE_WALL",
+  SNOW_CAT = "SNOW_CAT",
+  SNOW_KICKER = "SNOW_KICKER",
+  FREERIDE_SKIER = "FREERIDE_SKIER",
+  RACE_SKIER = "RACE_SKIER",
+  SNOWBOARDER = "SNOWBOARDER",
+  SNOW_SCOOTER = "SNOW_SCOOTER",
+
+  // Tokyo biome obstacles
+  KEI_CAR = "KEI_CAR",
+  KEI_TRUCK = "KEI_TRUCK",
+  JAPAN_TAXI = "JAPAN_TAXI",
+  SAMURAI = "SAMURAI",
+  SUSHI_ROLLS = "SUSHI_ROLLS",
+  VENDING_MACHINE = "VENDING_MACHINE",
+  SAKE_BARRELS = "SAKE_BARRELS",
+  DELIVERY_SCOOTER = "DELIVERY_SCOOTER",
+  UMBRELLA_CYCLIST = "UMBRELLA_CYCLIST",
+  KAWAII_BARRIER = "KAWAII_BARRIER",
+  MANEKI_NEKO = "MANEKI_NEKO",
+  RAMEN_BOWL = "RAMEN_BOWL",
+  SHIBA_INU = "SHIBA_INU",
 }
 
 export enum TrickType {
@@ -87,6 +89,12 @@ export enum TrickType {
   SUPERMAN = "SUPERMAN",
   NO_HANDER = "NO_HANDER",
 }
+
+/** Profile of a ramp the rider is on or just left: a straight wedge or a curved kicker. */
+export type RampType = "straight" | "curved";
+
+/** Rotation direction of a flip: 1 = backflip (CCW), -1 = frontflip (CW). */
+export type FlipDirection = 1 | -1;
 
 export interface PlayerState {
   x: number;
@@ -111,7 +119,11 @@ export interface PlayerState {
   backflipAngle: number;
   /** Whether a flip trick is in progress. */
   isBackflipping: boolean;
-  /** Rotation direction: 1 = backflip (CCW), -1 = frontflip (CW). */
+  /**
+   * Rotation direction, always a `FlipDirection` (1 = backflip, -1 = frontflip). Typed
+   * `number` only because multiplayer ghost snapshots carry it as a plain number
+   * (`GhostSnapshot.fd`); narrow it together with the protocol.
+   */
   flipDirection: number;
   /** How many flips the player intends to complete. Starts at 1, incremented by additional input. */
   targetFlipCount: number;
@@ -126,7 +138,7 @@ export interface PlayerState {
   /** How many pose trick cycles the player intends to complete. Starts at 1, incremented by additional input. */
   targetTrickCount: number;
   /** Pending ramp boost type. 'straight' = more distance, 'curved' = more height. */
-  rampBoost: "straight" | "curved" | null;
+  rampBoost: RampType | null;
   /** Current ramp surface angle in radians for bike tilt matching. */
   rampSurfaceAngle: number;
 }
@@ -140,6 +152,20 @@ export interface ObstacleInstance {
   rideable: boolean;
   /** True for ramp obstacles — player rides over them, never crashes. */
   ramp: boolean;
+  /** Set for obstacles that travel on their own (skiers, snow scooters); absent for static ones. */
+  motion?: ObstacleMotion;
+}
+
+/**
+ * Self-propulsion of a moving obstacle. Its shift from a static obstacle's position is a
+ * function of distance to the rider, bounded by `offset`; spawn gaps are padded by that
+ * bound, so moving obstacles never bunch up into an unjumpable pair.
+ */
+export interface ObstacleMotion {
+  /** Shift by the time it reaches the rider (px): positive moves with the rider (arrives late), negative comes towards it (arrives early). */
+  offset: number;
+  /** Where the obstacle would be if it were static; scrolls with the world. */
+  staticX: number;
 }
 
 export interface BackgroundLayer {
@@ -180,9 +206,13 @@ export interface SkinUnlockState {
   cheatUnlocked: boolean;
 }
 
-export interface BackgroundElement {
-  /** Element type — extensible per biome (e.g. "house", "skyscraper", "palm_tree") */
-  type: string;
+/**
+ * One piece of a parallax layer. `T` is the biome's element-type union (e.g. "house" |
+ * "deer"), which picks the drawer; layers that mix biomes use the default `string`.
+ */
+export interface BackgroundElement<T extends string = string> {
+  /** Element type — picks the drawer in the biome's `backgroundDrawers` map. */
+  type: T;
   x: number;
   y: number;
   width: number;

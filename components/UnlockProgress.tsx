@@ -1,0 +1,158 @@
+"use client";
+
+/**
+ * "Next unlock" progress strip shared by the start and game-over screens: a mini preview
+ * of the locked bike, the points still missing, and a fill bar. With `animateFrom` it
+ * animates from the previous best to `bestScore`, celebrating each bike it crosses.
+ */
+import { useEffect, useMemo, useState } from "react";
+import type { SkinDefinition } from "@/game/types";
+import { SKINS, getNextUnlock } from "@/game/skins";
+import { SkinPreview } from "./SkinPreview";
+import { color, font, radius } from "./ui/tokens";
+
+interface UnlockProgressProps {
+  /** Score the bar ends at (the saved best). */
+  bestScore: number;
+  cheatUnlocked: boolean;
+  /** When set, animates from this previous best up to `bestScore`. */
+  animateFrom?: number;
+}
+
+const FILL_MS = 800;
+const CELEBRATE_MS = 1100;
+
+/** One bar segment: from `startBest` to `endBest` within one tier (skin null = all unlocked). */
+interface Stage {
+  skin: SkinDefinition | null;
+  startBest: number;
+  endBest: number;
+  startPct: number;
+  endPct: number;
+  /** True when this stage fills the bar completely and unlocks `skin`. */
+  celebrate: boolean;
+}
+
+function pctFor(skin: SkinDefinition, best: number, previousThreshold: number): number {
+  return Math.min(1, Math.max(0, (best - previousThreshold) / (skin.unlockScore - previousThreshold)));
+}
+
+/** Splits a from→to climb into one stage per tier crossed. */
+function buildStages(from: number, to: number): Stage[] {
+  const stages: Stage[] = [];
+  let cur = from;
+  for (let i = 0; i <= SKINS.length; i++) {
+    const next = getNextUnlock(cur, false);
+    if (!next) {
+      stages.push({ skin: null, startBest: cur, endBest: cur, startPct: 1, endPct: 1, celebrate: false });
+      break;
+    }
+    const startPct = next.progress;
+    if (to >= next.skin.unlockScore) {
+      stages.push({ skin: next.skin, startBest: cur, endBest: next.skin.unlockScore, startPct, endPct: 1, celebrate: true });
+      cur = next.skin.unlockScore;
+    } else {
+      stages.push({
+        skin: next.skin, startBest: cur, endBest: to, startPct,
+        endPct: pctFor(next.skin, to, next.previousThreshold), celebrate: false,
+      });
+      break;
+    }
+  }
+  return stages;
+}
+
+/** On-screen size of the locked bike's preview in the strip. */
+const MINI_BIKE_STYLE = { width: 36, height: 40, flexShrink: 0 } as const;
+
+/**
+ * @param props - Best score, cheat state and optional animation start.
+ * @example
+ * <UnlockProgress bestScore={570} cheatUnlocked={false} />
+ * <UnlockProgress bestScore={newBest} cheatUnlocked={false} animateFrom={previousBest} />
+ */
+export function UnlockProgress({ bestScore, cheatUnlocked, animateFrom }: UnlockProgressProps) {
+  const stages = useMemo(
+    () => buildStages(Math.min(animateFrom ?? bestScore, bestScore), bestScore),
+    [animateFrom, bestScore]
+  );
+  const [index, setIndex] = useState(0);
+  const [filled, setFilled] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
+  const stage = stages[Math.min(index, stages.length - 1)];
+
+  // Drive one stage: fill the bar, then (if it completed a tier) celebrate and move on
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    // Next frame, so the bar mounts at its start width first and the transition runs
+    timers.push(setTimeout(() => setFilled(true), 50));
+    if (stage.celebrate) {
+      timers.push(setTimeout(() => setCelebrating(true), 50 + FILL_MS));
+      timers.push(
+        setTimeout(() => {
+          setCelebrating(false);
+          setFilled(false);
+          setIndex((i) => i + 1);
+        }, 50 + FILL_MS + CELEBRATE_MS)
+      );
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [stage]);
+
+  if (cheatUnlocked) return null;
+
+  const glass = {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.6rem",
+    padding: "0.3rem 0.8rem",
+    minWidth: "min(80vw, 320px)",
+    boxSizing: "border-box",
+    background: "rgba(255,255,255,0.6)",
+    border: celebrating ? `1.5px solid ${color.gold}` : "1px solid rgba(30,41,59,0.12)",
+    borderRadius: radius.md,
+    fontFamily: font.ui,
+    transition: "border-color 0.2s",
+  } as const;
+
+  if (!stage.skin) {
+    return (
+      <div style={{ ...glass, justifyContent: "center", color: color.warnInk, fontSize: "0.85rem", fontWeight: 800 }}>
+        All bikes unlocked!
+      </div>
+    );
+  }
+
+  const shownBest = filled ? stage.endBest : stage.startBest;
+  const remaining = stage.skin.unlockScore - shownBest;
+  const pct = (filled ? stage.endPct : stage.startPct) * 100;
+
+  return (
+    <div style={glass}>
+      <div style={{ opacity: celebrating ? 1 : 0.7, transform: celebrating ? "scale(1.25)" : "none", transition: "transform 0.3s" }}>
+        <SkinPreview skin={stage.skin} style={MINI_BIKE_STYLE} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, color: celebrating ? color.warnInk : color.ink, fontSize: "0.78rem", fontWeight: 700, lineHeight: 1.2 }}>
+          {celebrating
+            ? `${stage.skin.name} unlocked!`
+            : remaining > 0
+              ? `${remaining} more point${remaining === 1 ? "" : "s"} to unlock ${stage.skin.name}`
+              : `${stage.skin.name} unlocked!`}
+        </p>
+        <div style={{ height: 6, marginTop: 4, borderRadius: 3, background: "rgba(30,41,59,0.15)", overflow: "hidden" }}>
+          <div
+            key={index}
+            style={{
+              height: "100%",
+              width: `${pct}%`,
+              borderRadius: 3,
+              background: celebrating ? color.gold : color.navy,
+              transition: filled ? `width ${FILL_MS}ms ease-out` : "none",
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
